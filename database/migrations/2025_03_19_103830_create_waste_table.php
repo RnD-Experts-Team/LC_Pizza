@@ -20,7 +20,7 @@ return new class extends Migration {
             $table->string('waste_type')->nullable();
             $table->decimal('item_cost', 8, 4)->nullable();
             $table->integer('quantity')->nullable();
-            $table->integer('age_in_minutes')->nullable();
+            //$table->integer('age_in_minutes')->nullable();
             $table->timestamps();
 
             $table->index(['franchise_store', 'business_date']);

@@ -7,7 +7,6 @@ use GuzzleHttp\Exception\RequestException;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
-
 use App\Models\CashManagement;
 use App\Models\FinancialView;
 use App\Models\SummaryItem;
@@ -15,6 +14,8 @@ use App\Models\SummarySale;
 use App\Models\SummaryTransaction;
 use App\Models\DetailOrder;
 use App\Models\Waste;
+use App\Models\FinalSummary;
+use phpDocumentor\Reflection\Types\Nullable;
 
 class LCReportDataService
 {
@@ -26,7 +27,7 @@ class LCReportDataService
 
         // Step 1: Generate Bearer Token
         try {
-            Log::info('Attempting to generate Bearer Token');
+           // Log::info('Attempting to generate Bearer Token');
 
             $response = $client->post(config('services.lcegateway.portal_server') . '/Token', [
                 'form_params' => [
@@ -41,7 +42,7 @@ class LCReportDataService
             ]);
 
             $body = json_decode($response->getBody(), true);
-            Log::info('Bearer Token response body: ' . json_encode($body));
+           // Log::info('Bearer Token response body: ' . json_encode($body));
 
             $accessToken = $body['access_token'] ?? null;
 
@@ -50,7 +51,7 @@ class LCReportDataService
                 return false;
             }
 
-            Log::info('Successfully obtained access token.');
+           // Log::info('Successfully obtained access token.');
 
         } catch (RequestException $e) {
             Log::error('Error obtaining access token: ' . $e->getMessage());
@@ -59,7 +60,7 @@ class LCReportDataService
 
         // Step 2: Download the Report
         try {
-            Log::info('Preparing to download the report.');
+          //  Log::info('Preparing to download the report.');
 
             // Prepare variables
             $httpMethod = 'GET';
@@ -69,12 +70,12 @@ class LCReportDataService
             // Use the static storeId
             $storeId    = '03795';
 
-            Log::info('Using userName: ' . $userName);
-            Log::info('Using static storeId: ' . $storeId);
+         //   Log::info('Using userName: ' . $userName);
+         //   Log::info('Using static storeId: ' . $storeId);
 
             // Use the selected date
             $fileName = $storeId . '_' . $selectedDate . '.zip';
-            Log::info('Constructed fileName: ' . $fileName);
+         //   Log::info('Constructed fileName: ' . $fileName);
 
             $queryParams = [
                 'userName' => $userName,
@@ -82,18 +83,18 @@ class LCReportDataService
             ];
 
             $requestUrl = config('services.lcegateway.portal_server') . $endpoint . '?' . http_build_query($queryParams);
-            Log::info('Constructed request URL: ' . $requestUrl);
+       //     Log::info('Constructed request URL: ' . $requestUrl);
 
             // Build the URL for the signature
             $encodedRequestUrl = $this->prepareRequestUrlForSignature($requestUrl);
-            Log::info('Encoded request URL for signature: ' . $encodedRequestUrl);
+     //       Log::info('Encoded request URL for signature: ' . $encodedRequestUrl);
 
             // Generate timestamp and nonce
             $requestTimeStamp = time();
             $nonce            = $this->generateNonce();
 
-            Log::info('Generated request timestamp: ' . $requestTimeStamp);
-            Log::info('Generated nonce: ' . $nonce);
+         //   Log::info('Generated request timestamp: ' . $requestTimeStamp);
+          //  Log::info('Generated nonce: ' . $nonce);
 
             // For GET requests, bodyHash is empty
             $bodyHash = '';
@@ -103,22 +104,22 @@ class LCReportDataService
             $apiKey           = config('services.lcegateway.hmac_key');
             $signatureRawData = $appId . $httpMethod . $encodedRequestUrl . $requestTimeStamp . $nonce . $bodyHash;
 
-            Log::info('Signature raw data: ' . $signatureRawData);
+          //  Log::info('Signature raw data: ' . $signatureRawData);
 
             // Compute HMAC SHA256
             $key          = base64_decode($apiKey);
-            Log::info('Decoded API key from Base64.');
+        //    Log::info('Decoded API key from Base64.');
             $hash         = hash_hmac('sha256', $signatureRawData, $key, true);
-            Log::info('Computed HMAC SHA256 hash.');
+       //     Log::info('Computed HMAC SHA256 hash.');
             $hashInBase64 = base64_encode($hash);
-            Log::info('Encoded hash in Base64: ' . $hashInBase64);
+      //      Log::info('Encoded hash in Base64: ' . $hashInBase64);
 
             // Prepare the authorization header
             $authHeader = 'amx ' . $appId . ':' . $hashInBase64 . ':' . $nonce . ':' . $requestTimeStamp;
-            Log::info('Constructed HMacAuthorizationHeader: ' . $authHeader);
+        //    Log::info('Constructed HMacAuthorizationHeader: ' . $authHeader);
 
             // Make the GET request to download the report
-            Log::info('Making GET request to download the report.');
+      //      Log::info('Making GET request to download the report.');
 
             $response = $client->get($requestUrl, [
                 'headers' => [
@@ -129,71 +130,72 @@ class LCReportDataService
                 'stream' => true,
             ]);
 
-            Log::info('Received response from report download request.');
+        //    Log::info('Received response from report download request.');
 
             // Determine the content type
             $contentType = $response->getHeaderLine('Content-Type');
-            Log::info('Response content type: ' . $contentType);
+       //     Log::info('Response content type: ' . $contentType);
 
             // Read the response body as a string
             $bodyString = $response->getBody()->getContents();
-            Log::info('Response body string: ' . $bodyString);
+        //    Log::info('Response body string: ' . $bodyString);
 
             // Decode the response body
             $decodedBodyOnce = json_decode($bodyString, true);
-            Log::info('Decoded body after first json_decode: ' . json_encode($decodedBodyOnce));
+       //     Log::info('Decoded body after first json_decode: ' . json_encode($decodedBodyOnce));
 
             if (is_string($decodedBodyOnce)) {
                 // Decode again
                 $decodedBody = json_decode($decodedBodyOnce, true);
-                Log::info('Decoded body after second json_decode: ' . json_encode($decodedBody));
+               // Log::info('Decoded body after second json_decode: ' . json_encode($decodedBody));
             } else {
                 $decodedBody = $decodedBodyOnce;
             }
 
-            // Check if we have 'ReportBlobUri' in the response
+            $start = microtime(true);
+
             if (isset($decodedBody[0]['ReportBlobUri'])) {
                 $downloadUrl = $decodedBody[0]['ReportBlobUri'];
-                Log::info('Download URL: ' . $downloadUrl);
+             //   Log::info('Download URL: ' . $downloadUrl);
 
-                // Download the file from the provided URL
-                $fileResponse = $client->get($downloadUrl, [
-                    'stream' => true,
-                ]);
+             $timestamp = time();
+             $tempZipPath = storage_path('app') . DIRECTORY_SEPARATOR . "temp_report_{$timestamp}.zip";
+             $extractPath = storage_path('app') . DIRECTORY_SEPARATOR . "temp_report_{$timestamp}";
 
+             $client->get($downloadUrl, [
+                 'sink' => $tempZipPath,
+             ]);
                 Log::info('Successfully downloaded the file from the provided URL.');
+                Log::info('Download took: ' . (microtime(true) - $start) . ' seconds');
 
-                // Ensure the storage/app directory exists
+                $start = microtime(true);
+
                 $storageAppPath = storage_path('app');
                 if (!file_exists($storageAppPath)) {
                     mkdir($storageAppPath, 0775, true);
-                    Log::info('Created directory: ' . $storageAppPath);
+                  //  Log::info('Created directory: ' . $storageAppPath);
                 }
+                Log::info('Creating directory took: ' . (microtime(true) - $start) . ' seconds');
 
-                // Define the temporary zip path
-                $tempZipPath = $storageAppPath . DIRECTORY_SEPARATOR . 'temp_report_' . time() . '.zip';
-
-                // Write the downloaded content to the temporary zip file
-                file_put_contents($tempZipPath, $fileResponse->getBody()->getContents());
-                Log::info('Saved zip file to: ' . $tempZipPath);
-
-                // Extract the zip file
+             //   Log::info('Saved zip file to: ' . $tempZipPath);
+             $start = microtime(true);
                 $zip = new \ZipArchive();
                 if ($zip->open($tempZipPath) === true) {
-                    $extractPath = $storageAppPath . DIRECTORY_SEPARATOR . 'temp_report_' . time();
+
                     $zip->extractTo($extractPath);
                     $zip->close();
-                    Log::info('Extracted zip file to: ' . $extractPath);
-
+                //    Log::info('Extracted zip file to: ' . $extractPath);
+                Log::info('Extraction took: ' . (microtime(true) - $start) . ' seconds');
                     // Process the CSV files
-                    $this->processCsvFiles($extractPath, $selectedDate);
+                    $data = $this->processCsvFiles($extractPath, $selectedDate);
+                    $this->buildFinalSummaryFromData($data, $selectedDate);
 
                     // Delete temporary files
                     unlink($tempZipPath);
                     // Optionally delete extracted files
                     $this->deleteDirectory($extractPath);
 
-                    Log::info('Successfully processed CSV files.');
+                //    Log::info('Successfully processed CSV files.');
 
                     return true;
                 } else {
@@ -213,9 +215,8 @@ class LCReportDataService
 
     private function processCsvFiles($extractPath, $selectedDate)
     {
-        Log::info('Starting to process CSV files.');
+       // Log::info('Starting to process CSV files.');
 
-        // Define the CSV files and their corresponding processors
         $csvFiles = [
             'Cash-Management' => 'processCashManagement',
             'SalesEntryForm-FinancialView' => 'processFinancialView',
@@ -223,8 +224,10 @@ class LCReportDataService
             'Summary-Sales' => 'processSummarySales',
             'Summary-Transactions' => 'processSummaryTransactions',
             'Detail-Orders' => 'processDetailOrders',
-            'Waste-Report'=>'processWaste'
+            'Waste-Report' => 'processWaste'
         ];
+
+        $allData = []; // Collecting all processed data
 
         foreach ($csvFiles as $filePrefix => $processorMethod) {
             $fileNamePattern = $filePrefix . '-*_' . $selectedDate . '.csv';
@@ -232,21 +235,198 @@ class LCReportDataService
 
             foreach ($files as $filePath) {
                 Log::info('Processing file: ' . $filePath);
-                $this->$processorMethod($filePath);
+                $processed = $this->$processorMethod($filePath);
+                $allData[$processorMethod] = array_merge($allData[$processorMethod] ?? [], $processed);
             }
         }
+
+        return $allData; // Return all the data for summary building
     }
+
+
+    private function buildFinalSummaryFromData($data, $selectedDate)
+    {
+      //  Log::info('Building final summary from in-memory data.');
+
+        $detailOrder = collect($data['processDetailOrders'] ?? []); // Flatten data
+        $financialView     = collect($data['processFinancialView'] ?? []);
+        $wasteData    = collect($data['processWaste'] ?? []);
+
+        $allFranchiseStores = collect([
+            ...$detailOrder->pluck('franchise_store'),
+            ...$financialView->pluck('franchise_store'),
+            ...$wasteData->pluck('franchise_store')
+        ])->unique();
+
+        foreach ($allFranchiseStores as $store) {
+
+            $OrderRows      = $detailOrder->where('franchise_store', $store);
+            $financeRows    = $financialView->where('franchise_store', $store);
+            $wasteRows  = $wasteData->where('franchise_store', $store);
+
+            // detail_orders (OrderRows)
+            $totalSales     = $OrderRows->sum('royalty_obligation');
+
+            $modifiedOrderQty  = $OrderRows
+            ->whereNotNull('override_approval_employee')->count();
+
+            $RefundedOrderQty  = $OrderRows
+            ->where('refunded','Yes')
+            ->count();
+
+            $customerCount  = $OrderRows->sum('customer_count');
+
+            $phoneSales     = $OrderRows
+            ->where('order_placed_method','Phone')
+            ->sum('royalty_obligation');
+
+            $callCenterAgent     = $OrderRows
+            ->where('order_placed_method','SoundHoundAgent')
+            ->sum('royalty_obligation');
+
+            $driveThruSales     = $OrderRows
+            ->where('order_placed_method','Drive Thru')
+            ->sum('royalty_obligation');
+
+            $websiteSales     = $OrderRows
+            ->where('order_placed_method','Website')
+            ->sum('royalty_obligation');
+
+            $mobileSales     = $OrderRows
+            ->where('order_placed_method','Mobile')
+            ->sum('royalty_obligation');
+
+            $doordashSales     = $OrderRows
+            ->where('order_placed_method','DoorDash')
+            ->sum('royalty_obligation');
+
+            $grubHubSales     = $OrderRows
+            ->where('order_placed_method','Grubhub')
+            ->sum('royalty_obligation');
+
+            $uberEatsSales     = $OrderRows
+            ->where('order_placed_method','UberEats')
+            ->sum('royalty_obligation');
+
+            $deliverySales = $doordashSales + $grubHubSales + $uberEatsSales;
+
+            $digitalSales = $totalSales > 0
+            ? ($deliverySales / $totalSales) * 100
+            : 0;
+
+            $portalTransaction = $OrderRows
+            ->where('portal_eligible','Yes')
+            ->count();
+
+            $putIntoPortal = $OrderRows
+            ->where('portal_used','Yes')
+            ->count();
+
+            $portalPercentage = $portalTransaction > 0
+            ? ($putIntoPortal / $portalTransaction) * 100
+            : 0;
+
+            $portalOnTime = $OrderRows
+            ->where('put_into_portal_before_promise_time','Yes')
+            ->count();
+
+            $inPortalPercentage = $portalTransaction > 0
+            ? ($portalOnTime / $portalTransaction) * 100
+            : 0;
+
+            // detail_orders (OrderRows) end
+
+            $deliveryTips = $financeRows
+            ->where('sub_account','Delivery-Tips')
+            ->sum('amount');
+            $prePaidDeliveryTips = $financeRows
+            ->where('sub_account','Prepaid-Delivery-Tips')
+            ->sum('amount');
+            $inStoreTipAmount = $financeRows
+            ->where('sub_account','InStoreTipAmount')
+            ->sum('amount');
+            $prePaidInStoreTipAmount = $financeRows
+            ->where('sub_account','Prepaid-InStoreTipAmount')
+            ->sum('amount');
+
+            $totalTips = $deliveryTips+$prePaidDeliveryTips+$inStoreTipAmount+$prePaidInStoreTipAmount;
+
+            $overShort = $financeRows
+            ->where('sub_account','Over-Short')
+            ->sum('amount');
+
+            $cashSales = $financeRows
+            ->where('sub_account','Total Cash Sales')
+            ->sum('amount');
+
+            $totalWasteCost = $wasteRows->sum(function ($row) {
+                return $row['item_cost'] * $row['quantity'];
+            });
+
+
+
+
+            $totalCash      = $financeRows->sum('verified');
+
+
+            FinalSummary::updateOrCreate(
+                ['franchise_store' => $store, 'business_date' => $selectedDate],
+                [
+                    'total_sales'            => $totalSales,
+                    'modified_order_qty'     => $modifiedOrderQty,
+                    'refunded_order_qty'     => $RefundedOrderQty,
+                    'customer_count'         => $customerCount,
+
+                    'phone_sales'            => $phoneSales,
+                    'call_center_sales'      => $callCenterAgent,
+                    'drive_thru_sales'       => $driveThruSales,
+                    'website_sales'          => $websiteSales,
+                    'mobile_sales'           => $mobileSales,
+
+                    'doordash_sales'         => $doordashSales,
+                    'grubhub_sales'          => $grubHubSales,
+                    'ubereats_sales'         => $uberEatsSales,
+                    'delivery_sales'         => $deliverySales,
+                    'digital_sales_percent'  => round($digitalSales, 2),
+
+                    'portal_transactions'    => $portalTransaction,
+                    'put_into_portal'        => $putIntoPortal,
+                    'portal_used_percent'    => round($portalPercentage, 2),
+                    'put_in_portal_on_time'  => $portalOnTime,
+                    'in_portal_on_time_percent' => round($inPortalPercentage, 2),
+
+                    'delivery_tips'          => $deliveryTips,
+                    'prepaid_delivery_tips'  => $prePaidDeliveryTips,
+                    'in_store_tip_amount'    => $inStoreTipAmount,
+                    'prepaid_instore_tip_amount' => $prePaidInStoreTipAmount,
+                    'total_tips'             => $totalTips,
+
+                    'over_short'             => $overShort,
+                    'cash_sales'             => $cashSales,
+                    'total_cash'             => $totalCash,
+
+                    'total_waste_cost'       => $totalWasteCost,
+                ]
+            );
+        }
+
+        Log::info('Final summary from in-memory data completed.');
+    }
+
+
 
     private function processCashManagement($filePath)
     {
-        Log::info('Processing Cash Management CSV file.');
+       // Log::info('Processing Cash Management CSV file.');
         $data = $this->readCsv($filePath);
+        $rows = [];
+
         foreach ($data as $row) {
-            // Parse the datetime strings
+
             $createDatetime = $this->parseDateTime($row['CreateDatetime']);
             $verifiedDatetime = $this->parseDateTime($row['VerifiedDatetime']);
 
-            CashManagement::create([
+            $rows[] = [
                 'franchise_store'   => $row['FranchiseStore'],
                 'business_date'     => $row['BusinessDate'],
                 'create_datetime'   => $createDatetime,
@@ -258,21 +438,25 @@ class LCReportDataService
                 'variance'          => $row['Variance'],
                 'created_by'        => $row['CreatedBy'],
                 'verified_by'       => $row['VerifiedBy']
-            ]);
+            ];
         }
+        foreach (array_chunk($rows, 500) as $batch) {
+            CashManagement::insert($batch);
+        }
+        return $rows;
     }
 
     private function processWaste($filePath)
 {
-    Log::info('Processing Waste CSV file.');
+   // Log::info('Processing Waste CSV file.');
     $data = $this->readCsv($filePath);
-
+    $rows = [];
     foreach ($data as $row) {
-        // Parse the datetime strings
+
         $wasteDateTime = $this->parseDateTime($row['WasteDateTime']);
         $produceDateTime = $this->parseDateTime($row['ProduceDateTime']);
 
-        waste::create([
+        $rows[] = [
             'business_date'    => $row['BusinessDate'],
             'franchise_store'  => $row['FranchiseStore'],
             'cv_item_id'       => $row['CVItemId'],
@@ -285,33 +469,47 @@ class LCReportDataService
             'waste_type'       => $row['WasteType'],
             'item_cost'        => $row['ItemCost'],
             'quantity'         => $row['Quantity'],
-            'age_in_minutes'   => $row['AgeInMinutes'],
-        ]);
+            //'age_in_minutes'   => $row['AgeInMinutes'],
+        ];
     }
+
+    foreach (array_chunk($rows, 500) as $batch) {
+        Waste::insert($batch);
+    }
+
+
+    return $rows;
 }
 
 
     private function processFinancialView($filePath)
     {
-        Log::info('Processing Financial View CSV file.');
+      //  Log::info('Processing Financial View CSV file.');
         $data = $this->readCsv($filePath);
+        $rows = [];
         foreach ($data as $row) {
-            FinancialView::create([
+            $rows[] =[
                 'franchise_store' => $row['FranchiseStore'],
                 'business_date'   => $row['BusinessDate'],
                 'area'            => $row['Area'],
                 'sub_account'     => $row['SubAccount'],
                 'amount'          => $row['Amount']
-            ]);
+            ];
         }
+
+        foreach (array_chunk($rows, 500) as $batch) {
+            FinancialView::insert($batch);
+        }
+        return $rows;
     }
 
     private function processSummaryItems($filePath)
     {
-        Log::info('Processing Summary Items CSV file.');
+     //   Log::info('Processing Summary Items CSV file.');
         $data = $this->readCsv($filePath);
+        $rows = [];
         foreach ($data as $row) {
-            SummaryItem::create([
+            $rows[] = [
                 'franchise_store'    => $row['FranchiseStore'],
                 'business_date'      => $row['BusinessDate'],
                 'menu_item_name'     => $row['MenuItemName'],
@@ -324,16 +522,22 @@ class LCReportDataService
                 'tax_exempt_amount'  => $row['TaxExemptAmount'],
                 'non_royalty_amount' => $row['NonRoyaltyAmount'],
                 'tax_included_amount'=> $row['TaxIncludedAmount']
-            ]);
+            ];
+
         }
+        foreach (array_chunk($rows, 500) as $batch) {
+            SummaryItem::insert($batch);
+        }
+        return $rows;
     }
 
     private function processSummarySales($filePath)
     {
-        Log::info('Processing Summary Sales CSV file.');
+      //  Log::info('Processing Summary Sales CSV file.');
         $data = $this->readCsv($filePath);
+        $rows = [];
         foreach ($data as $row) {
-            SummarySale::create([
+            $rows[] = [
                 'franchise_store'            => $row['FranchiseStore'],
                 'business_date'              => $row['BusinessDate'],
                 'royalty_obligation'         => $row['RoyaltyObligation'],
@@ -361,16 +565,21 @@ class LCReportDataService
                 'previous_day_refunds'       => $row['PreviousDayRefunds'],
                 'saf'                        =>$row['SAF'],
                 'manager_notes'              =>$row['ManagerNotes']
-            ]);
+            ];
         }
+        foreach (array_chunk($rows, 500) as $batch) {
+            SummarySale::insert($batch);
+        }
+        return $rows;
     }
 
     private function processSummaryTransactions($filePath)
     {
-        Log::info('Processing Summary Transactions CSV file.');
+      //  Log::info('Processing Summary Transactions CSV file.');
         $data = $this->readCsv($filePath);
+        $rows = [];
         foreach ($data as $row) {
-            SummaryTransaction::create([
+            $rows[] = [
                 'franchise_store'    => $row['franchisestore'],
                 'business_date'      => $row['businessdate'],
                 'payment_method'     => $row['paymentmethod'],
@@ -378,21 +587,26 @@ class LCReportDataService
                 'total_amount'       => $row['TotalAmount'],
                 'saf_qty'            => $row['SAFQty'],
                 'saf_total'          => $row['SAFTotal']
-            ]);
+            ];
         }
+        foreach (array_chunk($rows, 500) as $batch) {
+            SummaryTransaction::insert($batch);
+        }
+        return $rows;
     }
 
     private function processDetailOrders($filePath)
     {
-        Log::info('Processing Detail Orders CSV file.');
+      //  Log::info('Processing Detail Orders CSV file.');
         $data = $this->readCsv($filePath);
+        $rows = [];
         foreach ($data as $row) {
             // Parse datetime fields
             $dateTimePlaced    = $this->parseDateTime($row['DateTimePlaced']);
             $dateTimeFulfilled = $this->parseDateTime($row['DateTimeFulfilled']);
             $promiseDate       = $this->parseDateTime($row['PromiseDate']);
 
-            DetailOrder::create([
+            $rows[] = [
                 'franchise_store'             => $row['FranchiseStore'],
                 'business_date'               => $row['BusinessDate'],
                 'date_time_placed'            => $dateTimePlaced,
@@ -436,8 +650,13 @@ class LCReportDataService
                 'portal_used'                 => $row['PortalUsed'],
                 'put_into_portal_before_promise_time' => $row['Put into Portal before PromiseTime'],
                 'portal_compartments_used'    => $row['Portal Compartments Used']
-            ]);
+            ];
         }
+
+        foreach (array_chunk($rows, 500) as $batch) {
+            DetailOrder::insert($batch);
+        }
+        return $rows;
     }
 
     private function readCsv($filePath)
@@ -459,7 +678,7 @@ class LCReportDataService
     {
         // Replicating the GetNonce() function in the Postman script
         $nonce = strtolower(bin2hex(random_bytes(16)));
-        Log::info('Generated nonce: ' . $nonce);
+       // Log::info('Generated nonce: ' . $nonce);
         return $nonce;
     }
 
@@ -472,7 +691,7 @@ class LCReportDataService
 
         // Encode and lowercase the URL
         $encodedUrl = strtolower(rawurlencode($requestUrl));
-        Log::info('Encoded request URL: ' . $encodedUrl);
+      //  Log::info('Encoded request URL: ' . $encodedUrl);
         return $encodedUrl;
     }
 

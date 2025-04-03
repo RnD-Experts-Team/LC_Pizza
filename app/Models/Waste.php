@@ -24,7 +24,7 @@ class Waste extends Model
         'waste_type',
         'item_cost',
         'quantity',
-        'age_in_minutes',
+        //'age_in_minutes',
     ];
 
 
