@@ -16,8 +16,9 @@ Artisan::command('inspire', function () {
 Artisan::command('lc:import-report-data', function () {
     $this->info('Starting the import of LC Report Data.');
 
-    // Get yesterday's date (adjust as needed)
-    $date = Carbon::yesterday()->format('Y-m-d');
+
+$date = Carbon::yesterday()->format('Y-m-d');
+ //   $date = '2025-04-01';
 
     $this->info('Importing data for date: ' . $date);
 

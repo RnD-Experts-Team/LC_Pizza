@@ -44,7 +44,7 @@ class CreateFinalSummariesTable extends Migration
 
             $table->decimal('over_short', 12, 2)->default(0);
             $table->decimal('cash_sales', 12, 2)->default(0);
-            $table->decimal('total_cash', 12, 2)->default(0);
+
 
             $table->decimal('total_waste_cost', 12, 2)->default(0);
 

@@ -45,7 +45,7 @@ class FinalSummary extends Model
 
         'over_short',
         'cash_sales',
-        'total_cash',
+
 
         'total_waste_cost',
     ];

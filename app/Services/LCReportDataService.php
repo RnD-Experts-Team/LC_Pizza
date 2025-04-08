@@ -15,7 +15,7 @@ use App\Models\SummaryTransaction;
 use App\Models\DetailOrder;
 use App\Models\Waste;
 use App\Models\FinalSummary;
-use phpDocumentor\Reflection\Types\Nullable;
+
 
 class LCReportDataService
 {
@@ -243,12 +243,11 @@ class LCReportDataService
         return $allData; // Return all the data for summary building
     }
 
-
     private function buildFinalSummaryFromData($data, $selectedDate)
     {
       //  Log::info('Building final summary from in-memory data.');
 
-        $detailOrder = collect($data['processDetailOrders'] ?? []); // Flatten data
+        $detailOrder = collect($data['processDetailOrders'] ?? []);
         $financialView     = collect($data['processFinancialView'] ?? []);
         $wasteData    = collect($data['processWaste'] ?? []);
 
@@ -267,11 +266,12 @@ class LCReportDataService
             // detail_orders (OrderRows)
             $totalSales     = $OrderRows->sum('royalty_obligation');
 
-            $modifiedOrderQty  = $OrderRows
-            ->whereNotNull('override_approval_employee')->count();
+            $modifiedOrderQty = $OrderRows->filter(function ($row) {
+                return !empty(trim($row['override_approval_employee']));
+            })->count();
 
             $RefundedOrderQty  = $OrderRows
-            ->where('refunded','Yes')
+            ->where('refunded',"Yes")
             ->count();
 
             $customerCount  = $OrderRows->sum('customer_count');
@@ -308,7 +308,7 @@ class LCReportDataService
             ->where('order_placed_method','UberEats')
             ->sum('royalty_obligation');
 
-            $deliverySales = $doordashSales + $grubHubSales + $uberEatsSales;
+            $deliverySales = $doordashSales + $grubHubSales + $uberEatsSales + $mobileSales +  $websiteSales;
 
             $digitalSales = $totalSales > 0
             ? ($deliverySales / $totalSales) * 100
@@ -366,7 +366,7 @@ class LCReportDataService
 
 
 
-            $totalCash      = $financeRows->sum('verified');
+
 
 
             FinalSummary::updateOrCreate(
@@ -403,7 +403,7 @@ class LCReportDataService
 
                     'over_short'             => $overShort,
                     'cash_sales'             => $cashSales,
-                    'total_cash'             => $totalCash,
+
 
                     'total_waste_cost'       => $totalWasteCost,
                 ]
@@ -412,8 +412,6 @@ class LCReportDataService
 
         Log::info('Final summary from in-memory data completed.');
     }
-
-
 
     private function processCashManagement($filePath)
     {
@@ -477,10 +475,8 @@ class LCReportDataService
         Waste::insert($batch);
     }
 
-
     return $rows;
 }
-
 
     private function processFinancialView($filePath)
     {
