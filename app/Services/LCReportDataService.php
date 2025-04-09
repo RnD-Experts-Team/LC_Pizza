@@ -227,7 +227,7 @@ class LCReportDataService
             'Waste-Report' => 'processWaste'
         ];
 
-        $allData = []; // Collecting all processed data
+        $allData = [];
 
         foreach ($csvFiles as $filePrefix => $processorMethod) {
             $fileNamePattern = $filePrefix . '-*_' . $selectedDate . '.csv';
@@ -240,7 +240,7 @@ class LCReportDataService
             }
         }
 
-        return $allData; // Return all the data for summary building
+        return $allData; // data for summary building
     }
 
     private function buildFinalSummaryFromData($data, $selectedDate)
