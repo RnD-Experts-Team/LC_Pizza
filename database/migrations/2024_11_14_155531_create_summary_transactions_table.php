@@ -8,6 +8,7 @@ class CreateSummaryTransactionsTable extends Migration
 {
     public function up()
     {
+
         Schema::create('summary_transactions', function (Blueprint $table) {
             $table->id();
             $table->string('franchise_store',20)->index();
@@ -21,10 +22,13 @@ class CreateSummaryTransactionsTable extends Migration
 
             $table->index(['franchise_store', 'business_date']);
         });
+
     }
 
     public function down()
     {
+
         Schema::dropIfExists('summary_transactions');
+        
     }
 }

@@ -10,6 +10,7 @@ class SummaryItem extends Model
     use HasFactory;
 
     protected $fillable = [
+
         'franchise_store',
         'business_date',
         'menu_item_name',
@@ -22,5 +23,6 @@ class SummaryItem extends Model
         'tax_exempt_amount',
         'non_royalty_amount',
         'tax_included_amount',
+
     ];
 }

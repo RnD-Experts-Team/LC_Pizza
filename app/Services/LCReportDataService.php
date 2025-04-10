@@ -245,6 +245,7 @@ class LCReportDataService
 
     private function buildFinalSummaryFromData($data, $selectedDate)
     {
+        
       //  Log::info('Building final summary from in-memory data.');
 
         $detailOrder = collect($data['processDetailOrders'] ?? []);
@@ -335,6 +336,9 @@ class LCReportDataService
             : 0;
 
             // detail_orders (OrderRows) end
+
+
+
 
             $deliveryTips = $financeRows
             ->where('sub_account','Delivery-Tips')

@@ -9,6 +9,8 @@ class CreateSummarySalesTable extends Migration
     public function up()
     {
         Schema::create('summary_sales', function (Blueprint $table) {
+
+
             $table->id();
             $table->string('franchise_store',20)->index();
             $table->date('business_date')->index();
@@ -38,13 +40,15 @@ class CreateSummarySalesTable extends Migration
             $table->string('saf')->nullable();
             $table->string('manager_notes')->nullable();
             $table->timestamps();
-
             $table->index(['franchise_store', 'business_date']);
+
         });
     }
 
     public function down()
     {
+
         Schema::dropIfExists('summary_sales');
+
     }
 }

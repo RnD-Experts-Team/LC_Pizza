@@ -18,7 +18,7 @@ Artisan::command('lc:import-report-data', function () {
 
 
 $date = Carbon::yesterday()->format('Y-m-d');
- //   $date = '2025-04-01';
+//  $date = '2025-04-08';
 
     $this->info('Importing data for date: ' . $date);
 
@@ -35,8 +35,9 @@ $date = Carbon::yesterday()->format('Y-m-d');
         $this->error('Failed to import report data.');
         Log::error('Failed to import report data for date: ' . $date);
     }
+
 })->purpose('Import LC Report Data')
-  ->dailyAt('9:15')
+  ->dailyAt('09:15')
   ->timezone('America/New_York')
   ->withoutOverlapping()
   ->onOneServer()

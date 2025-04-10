@@ -54,10 +54,14 @@ class ImportFinalSummaryCommand extends Command
             );
         }
 
+
+
         // Make the combinations unique by a composite key.
         $combinations = $combinations->unique(function ($item) {
             return $item->franchise_store . '_' . $item->business_date;
         });
+
+
 
         // Iterate through each (franchise_store, business_date) combination.
         foreach ($combinations as $combo) {
@@ -80,7 +84,7 @@ class ImportFinalSummaryCommand extends Command
                                 ->get();
 
             // --------------------------
-            // Build Aggregates (using logic similar to your in-memory function)
+            // Build Aggregates (using logic similar to the in-memory function)
             // --------------------------
             // detail_orders (OrderRows) calculations
             $totalSales = $orderRows->sum('royalty_obligation');
@@ -134,6 +138,7 @@ class ImportFinalSummaryCommand extends Command
                 [
                     'franchise_store' => $store,
                     'business_date'   => $date,
+
                 ],
                 [
                     'total_sales'            => $totalSales,

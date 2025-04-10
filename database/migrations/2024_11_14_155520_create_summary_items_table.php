@@ -9,6 +9,7 @@ class CreateSummaryItemsTable extends Migration
     public function up()
     {
         Schema::create('summary_items', function (Blueprint $table) {
+
             $table->id();
             $table->string('franchise_store',20)->index();
             $table->date('business_date')->index();
@@ -25,11 +26,14 @@ class CreateSummaryItemsTable extends Migration
             $table->timestamps();
 
             $table->index(['franchise_store', 'business_date']);
+
         });
     }
 
     public function down()
     {
+
         Schema::dropIfExists('summary_items');
+        
     }
 }

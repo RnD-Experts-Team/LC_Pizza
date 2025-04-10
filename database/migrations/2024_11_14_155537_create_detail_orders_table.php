@@ -9,8 +9,11 @@ class CreateDetailOrdersTable extends Migration
     public function up()
     {
         Schema::create('detail_orders', function (Blueprint $table) {
+
             $table->id();
+
             $table->string('franchise_store',20)->index();
+
             $table->date('business_date')->index();
             $table->dateTime('date_time_placed')->nullable();
             $table->dateTime('date_time_fulfilled')->nullable();
@@ -62,6 +65,8 @@ class CreateDetailOrdersTable extends Migration
 
     public function down()
     {
+
         Schema::dropIfExists('detail_orders');
+
     }
 }

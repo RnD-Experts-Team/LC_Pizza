@@ -16,8 +16,9 @@ class CreateFinalSummariesTable extends Migration
             $table->decimal('total_sales', 12, 2)->default(0);
             $table->integer('modified_order_qty')->default(0);
             $table->integer('refunded_order_qty')->default(0);
-            $table->integer('customer_count')->default(0);
 
+            $table->integer('customer_count')->default(0);
+            
             $table->decimal('phone_sales', 12, 2)->default(0);
             $table->decimal('call_center_sales', 12, 2)->default(0);
             $table->decimal('drive_thru_sales', 12, 2)->default(0);
@@ -27,6 +28,7 @@ class CreateFinalSummariesTable extends Migration
             $table->decimal('doordash_sales', 12, 2)->default(0);
             $table->decimal('grubhub_sales', 12, 2)->default(0);
             $table->decimal('ubereats_sales', 12, 2)->default(0);
+
             $table->decimal('delivery_sales', 12, 2)->default(0);
             $table->decimal('digital_sales_percent', 5, 2)->default(0);
 
