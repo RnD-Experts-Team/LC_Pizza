@@ -37,7 +37,7 @@ $date = Carbon::yesterday()->format('Y-m-d');
     }
 
 })->purpose('Import LC Report Data')
-  ->dailyAt('09:15')
+  ->dailyAt('09:20')
   ->timezone('America/New_York')
   ->withoutOverlapping()
   ->onOneServer()
