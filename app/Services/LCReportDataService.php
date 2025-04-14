@@ -245,7 +245,7 @@ class LCReportDataService
 
     private function buildFinalSummaryFromData($data, $selectedDate)
     {
-        
+
       //  Log::info('Building final summary from in-memory data.');
 
         $detailOrder = collect($data['processDetailOrders'] ?? []);
@@ -312,7 +312,7 @@ class LCReportDataService
             $deliverySales = $doordashSales + $grubHubSales + $uberEatsSales + $mobileSales +  $websiteSales;
 
             $digitalSales = $totalSales > 0
-            ? ($deliverySales / $totalSales) * 100
+            ? ($deliverySales / $totalSales)
             : 0;
 
             $portalTransaction = $OrderRows
@@ -324,7 +324,7 @@ class LCReportDataService
             ->count();
 
             $portalPercentage = $portalTransaction > 0
-            ? ($putIntoPortal / $portalTransaction) * 100
+            ? ($putIntoPortal / $portalTransaction)
             : 0;
 
             $portalOnTime = $OrderRows
@@ -332,7 +332,7 @@ class LCReportDataService
             ->count();
 
             $inPortalPercentage = $portalTransaction > 0
-            ? ($portalOnTime / $portalTransaction) * 100
+            ? ($portalOnTime / $portalTransaction)
             : 0;
 
             // detail_orders (OrderRows) end

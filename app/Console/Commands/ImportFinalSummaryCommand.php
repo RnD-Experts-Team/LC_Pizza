@@ -107,13 +107,13 @@ class ImportFinalSummaryCommand extends Command
             $uberEatsSales    = $orderRows->where('order_placed_method', 'UberEats')->sum('royalty_obligation');
 
             $deliverySales    = $doordashSales + $grubHubSales + $uberEatsSales + $mobileSales + $websiteSales;
-            $digitalSales     = $totalSales > 0 ? ($deliverySales / $totalSales) * 100 : 0;
+            $digitalSales     = $totalSales > 0 ? ($deliverySales / $totalSales)  : 0;
 
             $portalTransactions   = $orderRows->where('portal_eligible', 'Yes')->count();
             $putIntoPortal        = $orderRows->where('portal_used', 'Yes')->count();
-            $portalUsedPercent    = $portalTransactions > 0 ? ($putIntoPortal / $portalTransactions) * 100 : 0;
+            $portalUsedPercent    = $portalTransactions > 0 ? ($putIntoPortal / $portalTransactions)  : 0;
             $portalOnTime         = $orderRows->where('put_into_portal_before_promise_time', 'Yes')->count();
-            $inPortalOnTimePercent = $portalTransactions > 0 ? ($portalOnTime / $portalTransactions) * 100 : 0;
+            $inPortalOnTimePercent = $portalTransactions > 0 ? ($portalOnTime / $portalTransactions) : 0;
 
             // financial view (FinanceRows) calculations
             $deliveryTips          = $financeRows->where('sub_account', 'Delivery-Tips')->sum('amount');
