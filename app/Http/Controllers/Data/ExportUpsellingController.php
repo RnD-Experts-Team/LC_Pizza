@@ -19,7 +19,30 @@ class ExportUpsellingController extends Controller
         // Get parameters from either URL segments or query parameters
         $startDate = $startDateParam ?? $request->query('start_date');
         $endDate = $endDateParam ?? $request->query('end_date');
-        $franchiseStore = $franchiseStoreParam ?? $request->query('franchise_store');
+
+        // Handle franchise store as a comma-separated list
+        $franchiseStores = [];
+
+        // First check if it was passed as a route parameter
+        if (!empty($franchiseStoreParam)) {
+            $franchiseStores = array_map('trim', explode(',', $franchiseStoreParam));
+        } else {
+            // Try franchise_store parameter from query
+            $franchiseStoreString = $request->query('franchise_store');
+            if (!empty($franchiseStoreString)) {
+                // Check if it's a comma-separated string
+                if (strpos($franchiseStoreString, ',') !== false) {
+                    $franchiseStores = array_map('trim', explode(',', $franchiseStoreString));
+                } else {
+                    $franchiseStores = [$franchiseStoreString];
+                }
+            }
+        }
+
+        // Filter out empty values
+        $franchiseStores = array_filter($franchiseStores, function($value) {
+            return !empty($value) && $value !== 'null' && $value !== 'undefined';
+        });
 
         // Get menu items as a comma-separated string and convert to array
         $menuItemNames = [];
@@ -60,7 +83,7 @@ class ExportUpsellingController extends Controller
         Log::debug('Export parameters', [
             'start_date' => $startDate,
             'end_date' => $endDate,
-            'franchise_store' => $franchiseStore,
+            'franchise_stores' => $franchiseStores,
             'menu_item_names' => $menuItemNames,
             'raw_query' => $request->getQueryString()
         ]);
@@ -74,8 +97,8 @@ class ExportUpsellingController extends Controller
         }
 
         // Filter by franchise_store if provided
-        if ($franchiseStore) {
-            $query->where('franchise_store', $franchiseStore);
+        if (!empty($franchiseStores)) {
+            $query->whereIn('franchise_store', $franchiseStores);
         }
 
         // Filter by menu_item_name if provided
@@ -91,7 +114,7 @@ class ExportUpsellingController extends Controller
             Log::info('Upselling Summary data retrieved successfully', [
                 'record_count' => $recordCount,
                 'date_range' => $startDate && $endDate ? "$startDate to $endDate" : 'all dates',
-                'franchise_store' => $franchiseStore ?: 'all stores',
+                'franchise_stores' => !empty($franchiseStores) ? implode(', ', $franchiseStores) : 'all stores',
                 'menu_items' => !empty($menuItemNames) ? implode(', ', $menuItemNames) : 'all items'
             ]);
 
@@ -139,8 +162,8 @@ class ExportUpsellingController extends Controller
             } else {
                 $filename .= 'all_dates';
             }
-            if ($franchiseStore) {
-                $filename .= '_' . str_replace(' ', '_', $franchiseStore);
+            if (!empty($franchiseStores)) {
+                $filename .= '_stores_' . count($franchiseStores);
             }
             if (!empty($menuItemNames)) {
                 $filename .= '_items_' . count($menuItemNames);
@@ -169,7 +192,7 @@ class ExportUpsellingController extends Controller
         }
     }
 
-    public function getFinalSummaryJson(Request $request, $startDateParam = null, $endDateParam = null, $franchiseStoreParam = null)
+    public function getFinalSummaryJson(Request $request, $startDateParam = null, $endDateParam = null, $franchiseStoreParam = null, $menuItemsParam = null)
     {
         Log::info('Upselling Summary JSON data requested', [
             'ip' => $request->ip(),
@@ -179,17 +202,64 @@ class ExportUpsellingController extends Controller
         // Get parameters from either URL segments or query parameters
         $startDate = $startDateParam ?? $request->query('start_date');
         $endDate = $endDateParam ?? $request->query('end_date');
-        $franchiseStore = $franchiseStoreParam ?? $request->query('franchise_store');
 
-        // Get all menu_item_name parameters
-        $menuItemNames = $request->query('menu_item_name');
+        // Handle franchise store as a comma-separated list
+        $franchiseStores = [];
 
-        // Handle different ways the parameter might be passed
-        if (is_null($menuItemNames)) {
-            $menuItemNames = [];
-        } elseif (is_string($menuItemNames)) {
-            // Single value
-            $menuItemNames = [$menuItemNames];
+        // First check if it was passed as a route parameter
+        if (!empty($franchiseStoreParam)) {
+            $franchiseStores = array_map('trim', explode(',', $franchiseStoreParam));
+        } else {
+            // Try franchise_store parameter from query
+            $franchiseStoreString = $request->query('franchise_store');
+            if (!empty($franchiseStoreString)) {
+                // Check if it's a comma-separated string
+                if (strpos($franchiseStoreString, ',') !== false) {
+                    $franchiseStores = array_map('trim', explode(',', $franchiseStoreString));
+                } else {
+                    $franchiseStores = [$franchiseStoreString];
+                }
+            }
+        }
+
+        // Filter out empty values
+        $franchiseStores = array_filter($franchiseStores, function($value) {
+            return !empty($value) && $value !== 'null' && $value !== 'undefined';
+        });
+
+        Log::debug('Final franchise stores after filtering', [
+            'franchise_stores' => $franchiseStores
+        ]);
+
+        // Get menu items as a comma-separated string and convert to array
+        $menuItemNames = [];
+
+        // First check if it was passed as a route parameter
+        if (!empty($menuItemsParam)) {
+            $menuItemNames = array_map('trim', explode(',', $menuItemsParam));
+        } else {
+            // Try menu_items parameter (from Power Query)
+            $menuItemsString = $request->query('menu_items');
+            if (!empty($menuItemsString)) {
+                $menuItemNames = array_map('trim', explode(',', $menuItemsString));
+            }
+
+            // If that didn't work, try menu_item_name as fallback
+            if (empty($menuItemNames)) {
+                $menuItemParam = $request->query('menu_item_name');
+                if (!empty($menuItemParam)) {
+                    if (is_array($menuItemParam)) {
+                        $menuItemNames = $menuItemParam;
+                    } else {
+                        // Check if it's a comma-separated string
+                        if (strpos($menuItemParam, ',') !== false) {
+                            $menuItemNames = array_map('trim', explode(',', $menuItemParam));
+                        } else {
+                            $menuItemNames = [$menuItemParam];
+                        }
+                    }
+                }
+            }
         }
 
         // Filter out empty values
@@ -200,7 +270,7 @@ class ExportUpsellingController extends Controller
         Log::debug('JSON request parameters', [
             'start_date' => $startDate,
             'end_date' => $endDate,
-            'franchise_store' => $franchiseStore,
+            'franchise_stores' => $franchiseStores,
             'menu_item_names' => $menuItemNames,
             'raw_query' => $request->getQueryString()
         ]);
@@ -214,8 +284,8 @@ class ExportUpsellingController extends Controller
         }
 
         // Filter by franchise_store if provided
-        if ($franchiseStore) {
-            $query->where('franchise_store', $franchiseStore);
+        if (!empty($franchiseStores)) {
+            $query->whereIn('franchise_store', $franchiseStores);
         }
 
         // Filter by menu_item_name if provided
@@ -231,7 +301,7 @@ class ExportUpsellingController extends Controller
             Log::info('Upselling Summary JSON data retrieved successfully', [
                 'record_count' => $recordCount,
                 'date_range' => $startDate && $endDate ? "$startDate to $endDate" : 'all dates',
-                'franchise_store' => $franchiseStore ?: 'all stores',
+                'franchise_stores' => !empty($franchiseStores) ? implode(', ', $franchiseStores) : 'all stores',
                 'menu_items' => !empty($menuItemNames) ? implode(', ', $menuItemNames) : 'all items'
             ]);
 
@@ -253,7 +323,7 @@ class ExportUpsellingController extends Controller
         }
     }
 
-    public function exportFinalSummaryCsv(Request $request, $startDateParam = null, $endDateParam = null, $franchiseStoreParam = null)
+    public function exportFinalSummaryCsv(Request $request, $startDateParam = null, $endDateParam = null, $franchiseStoreParam = null, $menuItemsParam = null)
     {
         Log::info('Upselling Summary CSV export requested', [
             'ip'         => $request->ip(),
@@ -261,31 +331,59 @@ class ExportUpsellingController extends Controller
         ]);
 
         // 1) Read route segments OR query string
-        $startDate      = $startDateParam    ?? $request->query('start_date');
-        $endDate        = $endDateParam      ?? $request->query('end_date');
-        $franchiseStore = $franchiseStoreParam ?? $request->query('franchise_store');
+        $startDate = $startDateParam ?? $request->query('start_date');
+        $endDate = $endDateParam ?? $request->query('end_date');
+
+        // Handle franchise store as a comma-separated list
+        $franchiseStores = [];
+
+        // First check if it was passed as a route parameter
+        if (!empty($franchiseStoreParam)) {
+            $franchiseStores = array_map('trim', explode(',', $franchiseStoreParam));
+        } else {
+            // Try franchise_store parameter from query
+            $franchiseStoreString = $request->query('franchise_store');
+            if (!empty($franchiseStoreString)) {
+                // Check if it's a comma-separated string
+                if (strpos($franchiseStoreString, ',') !== false) {
+                    $franchiseStores = array_map('trim', explode(',', $franchiseStoreString));
+                } else {
+                    $franchiseStores = [$franchiseStoreString];
+                }
+            }
+        }
+
+        // Filter out empty values
+        $franchiseStores = array_filter($franchiseStores, function($value) {
+            return !empty($value) && $value !== 'null' && $value !== 'undefined';
+        });
 
         // 2) Get menu items as a comma-separated string and convert to array
         $menuItemNames = [];
 
-        // Try menu_items parameter (from Power Query)
-        $menuItemsString = $request->query('menu_items');
-        if (!empty($menuItemsString)) {
-            $menuItemNames = array_map('trim', explode(',', $menuItemsString));
-        }
+        // First check if it was passed as a route parameter
+        if (!empty($menuItemsParam)) {
+            $menuItemNames = array_map('trim', explode(',', $menuItemsParam));
+        } else {
+            // Try menu_items parameter (from Power Query)
+            $menuItemsString = $request->query('menu_items');
+            if (!empty($menuItemsString)) {
+                $menuItemNames = array_map('trim', explode(',', $menuItemsString));
+            }
 
-        // If that didn't work, try menu_item_name as fallback
-        if (empty($menuItemNames)) {
-            $menuItemParam = $request->query('menu_item_name');
-            if (!empty($menuItemParam)) {
-                if (is_array($menuItemParam)) {
-                    $menuItemNames = $menuItemParam;
-                } else {
-                    // Check if it's a comma-separated string
-                    if (strpos($menuItemParam, ',') !== false) {
-                        $menuItemNames = array_map('trim', explode(',', $menuItemParam));
+            // If that didn't work, try menu_item_name as fallback
+            if (empty($menuItemNames)) {
+                $menuItemParam = $request->query('menu_item_name');
+                if (!empty($menuItemParam)) {
+                    if (is_array($menuItemParam)) {
+                        $menuItemNames = $menuItemParam;
                     } else {
-                        $menuItemNames = [$menuItemParam];
+                        // Check if it's a comma-separated string
+                        if (strpos($menuItemParam, ',') !== false) {
+                            $menuItemNames = array_map('trim', explode(',', $menuItemParam));
+                        } else {
+                            $menuItemNames = [$menuItemParam];
+                        }
                     }
                 }
             }
@@ -299,7 +397,7 @@ class ExportUpsellingController extends Controller
         Log::debug('CSV Export parameters', [
             'start_date'      => $startDate,
             'end_date'        => $endDate,
-            'franchise_store' => $franchiseStore,
+            'franchise_stores' => $franchiseStores,
             'menu_item_names' => $menuItemNames,
             'raw_query'       => $request->getQueryString(),
             'request_all'     => $request->all(),
@@ -311,8 +409,10 @@ class ExportUpsellingController extends Controller
         if ($startDate && $endDate) {
             $query->whereBetween('business_date', [$startDate, $endDate]);
         }
-        if ($franchiseStore) {
-            $query->where('franchise_store', $franchiseStore);
+
+        // Filter by franchise_store if provided
+        if (!empty($franchiseStores)) {
+            $query->whereIn('franchise_store', $franchiseStores);
         }
 
         // Only apply menu item filter if items were specified
@@ -327,7 +427,7 @@ class ExportUpsellingController extends Controller
             Log::info('Upselling Summary CSV data retrieved successfully', [
                 'record_count' => $recordCount,
                 'date_range'   => $startDate && $endDate ? "$startDate to $endDate" : 'all dates',
-                'franchise_store' => $franchiseStore ?: 'all stores',
+                'franchise_stores' => !empty($franchiseStores) ? implode(', ', $franchiseStores) : 'all stores',
                 'menu_items'   => $menuItemNames ? implode(', ', $menuItemNames) : 'all items',
             ]);
 
@@ -369,7 +469,7 @@ class ExportUpsellingController extends Controller
                     ? "{$startDate}_to_{$endDate}"
                     : 'all_dates'
                 )
-                . ($franchiseStore ? "_{$franchiseStore}" : '')
+                . (!empty($franchiseStores) ? "_stores_" . count($franchiseStores) : '')
                 . (!empty($menuItemNames) ? '_items_' . count($menuItemNames) : '')
                 . '.csv';
 
