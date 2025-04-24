@@ -10,8 +10,11 @@ Route::get('/final-summary-csv/{start_date?}/{end_date?}/{franchise_store?}', [E
 
 
 
-// Routes for ExportUpsellingController
-use App\Http\Controllers\Data\ExportUpsellingController;
-Route::get('/upselling-summary/{start_date?}/{end_date?}/{franchise_store?}/{menu_items?}', [ExportUpsellingController::class, 'exportFinalSummary']);
-Route::get('/upselling-summary-json/{start_date?}/{end_date?}/{franchise_store?}/{menu_items?}', [ExportUpsellingController::class, 'getFinalSummaryJson']);
-Route::get('/upselling-summary-csv/{start_date?}/{end_date?}/{franchise_store?}/{menu_items?}', [ExportUpsellingController::class, 'exportFinalSummaryCsv']);
+// Routes for ExportHourlySalesController
+use App\Http\Controllers\Data\ExportHourlySalesController;
+Route::get('/hourly-sales/{start_date?}/{end_date?}/{franchise_store?}', [ExportHourlySalesController::class, 'exportHourlySales']);
+Route::get('/hourly-sales-json/{start_date?}/{end_date?}/{franchise_store?}', [ExportHourlySalesController::class, 'getHourlySalesJson']);
+Route::get('/hourly-sales-csv/{start_date?}/{end_date?}/{franchise_store?}', [ExportHourlySalesController::class, 'exportHourlySalesCsv']);
+
+
+
