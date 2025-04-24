@@ -15,6 +15,7 @@ use App\Models\SummaryTransaction;
 use App\Models\DetailOrder;
 use App\Models\Waste;
 use App\Models\FinalSummary;
+use App\Models\HourlySales;
 
 
 class LCReportDataService
@@ -412,10 +413,34 @@ class LCReportDataService
                     'total_waste_cost'       => $totalWasteCost,
                 ]
             );
-        }
 
-        Log::info('Final summary from in-memory data completed.');
+        // Save hourly sales
+        $ordersByHour = $OrderRows->groupBy(function ($order) {
+            return Carbon::parse($order['date_time_placed'])->format('H');
+        });
+
+        foreach ($ordersByHour as $hour => $hourOrders) {
+            HourlySales::updateOrCreate(
+                [
+                    'franchise_store' => $store,
+                    'business_date'   => $selectedDate,
+                    'hour'            => (int) $hour,
+                ],
+                [
+                    'total_sales'        => $hourOrders->sum('royalty_obligation'),
+                    'phone_sales'        => $hourOrders->where('order_placed_method', 'Phone')->sum('royalty_obligation'),
+                    'call_center_sales'  => $hourOrders->where('order_placed_method', 'SoundHoundAgent')->sum('royalty_obligation'),
+                    'drive_thru_sales'   => $hourOrders->where('order_placed_method', 'Drive Thru')->sum('royalty_obligation'),
+                    'website_sales'      => $hourOrders->where('order_placed_method', 'Website')->sum('royalty_obligation'),
+                    'mobile_sales'       => $hourOrders->where('order_placed_method', 'Mobile')->sum('royalty_obligation'),
+                    'order_count'        => $hourOrders->count(),
+                ]
+            );
+        }
     }
+
+    Log::info('Final summary from in-memory data completed.');
+}
 
     private function processCashManagement($filePath)
     {
