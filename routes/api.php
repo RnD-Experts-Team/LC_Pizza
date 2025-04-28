@@ -1,5 +1,6 @@
 <?php
 
+
 use Illuminate\Support\Facades\Route;
 
 
@@ -17,4 +18,10 @@ Route::get('/hourly-sales-json/{start_date?}/{end_date?}/{franchise_store?}', [E
 Route::get('/hourly-sales-csv/{start_date?}/{end_date?}/{franchise_store?}', [ExportHourlySalesController::class, 'exportHourlySalesCsv']);
 
 
+//upselling
+
+use App\Http\Controllers\Data\ExportUpsellingController;
+Route::get('/export-upselling-summary/{start_date?}/{end_date?}/{franchise_store?}', [ExportUpsellingController::class, 'exportUpselling']);
+Route::get('/upselling-summary-json/{start_date?}/{end_date?}/{franchise_store?}', [ExportUpsellingController::class, 'getUpsellingJson']);
+Route::get('/upselling-summary-csv/{start_date?}/{end_date?}/{franchise_store?}', [ExportUpsellingController::class, 'exportUpsellingCsv']);
 
