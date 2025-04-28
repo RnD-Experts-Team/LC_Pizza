@@ -95,7 +95,7 @@ class ImportHourlySales extends Command
 
                 // Group orders by hour
                 $ordersByHour = $storeOrders->groupBy(function ($order) {
-                    return Carbon::parse($order->date_time_placed)->format('H');
+                    return Carbon::parse($order->promise_date)->format('H');
                 });
 
                 $hourlyRecordsProcessed = 0;
