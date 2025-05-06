@@ -416,7 +416,7 @@ class LCReportDataService
 
         // Save hourly sales
         $ordersByHour = $OrderRows->groupBy(function ($order) {
-            return Carbon::parse($order['date_time_placed'])->format('H');
+            return Carbon::parse($order['promise_date'])->format('H');
         });
 
         foreach ($ordersByHour as $hour => $hourOrders) {

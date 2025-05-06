@@ -9,7 +9,7 @@ use App\Http\Controllers\Controller;
 
 class ExportUpsellingController extends Controller
 {
-    public function exportFinalSummary(Request $request, $startDateParam = null, $endDateParam = null, $franchiseStoreParam = null, $menuItemsParam = null)
+    public function exportUpselling(Request $request, $startDateParam = null, $endDateParam = null, $franchiseStoreParam = null, $menuItemsParam = null)
     {
         Log::info('Upselling Final Summary export requested', [
             'ip' => $request->ip(),
@@ -192,7 +192,7 @@ class ExportUpsellingController extends Controller
         }
     }
 
-    public function getFinalSummaryJson(Request $request, $startDateParam = null, $endDateParam = null, $franchiseStoreParam = null, $menuItemsParam = null)
+    public function getUpsellingJson(Request $request, $startDateParam = null, $endDateParam = null, $franchiseStoreParam = null, $menuItemsParam = null)
     {
         Log::info('Upselling Summary JSON data requested', [
             'ip' => $request->ip(),
@@ -323,7 +323,7 @@ class ExportUpsellingController extends Controller
         }
     }
 
-    public function exportFinalSummaryCsv(Request $request, $startDateParam = null, $endDateParam = null, $franchiseStoreParam = null, $menuItemsParam = null)
+    public function exportUpsellingCsv(Request $request, $startDateParam = null, $endDateParam = null, $franchiseStoreParam = null, $menuItemsParam = null)
     {
         Log::info('Upselling Summary CSV export requested', [
             'ip'         => $request->ip(),
