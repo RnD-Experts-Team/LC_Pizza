@@ -13,7 +13,7 @@ use App\Http\Controllers\Data\ExportHourlySalesController;
 Route::get('/hourly-sales-json/{start_date?}/{end_date?}/{franchise_store?}', [ExportHourlySalesController::class, 'getHourlySalesJson']);
 Route::get('/hourly-sales-csv/{start_date?}/{end_date?}/{franchise_store?}', [ExportHourlySalesController::class, 'exportHourlySalesCsv']);
 
-//upselling
+//Upselling
 use App\Http\Controllers\Data\ExportUpsellingController;
 Route::get('/upselling-summary-json/{start_date?}/{end_date?}/{franchise_store?}', [ExportUpsellingController::class, 'getUpsellingJson']);
 Route::get('/upselling-summary-csv/{start_date?}/{end_date?}/{franchise_store?}', [ExportUpsellingController::class, 'exportUpsellingCsv']);

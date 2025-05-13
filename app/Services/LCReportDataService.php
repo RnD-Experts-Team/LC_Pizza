@@ -16,6 +16,7 @@ use App\Models\DetailOrder;
 use App\Models\Waste;
 use App\Models\FinalSummary;
 use App\Models\HourlySales;
+use App\Models\FinanceData;
 
 
 class LCReportDataService
@@ -252,6 +253,7 @@ class LCReportDataService
         $detailOrder = collect($data['processDetailOrders'] ?? []);
         $financialView     = collect($data['processFinancialView'] ?? []);
         $wasteData    = collect($data['processWaste'] ?? []);
+       // $summarySales    = collect($data['processSummarySales'] ?? []);
 
         $allFranchiseStores = collect([
             ...$detailOrder->pluck('franchise_store'),
@@ -259,11 +261,198 @@ class LCReportDataService
             ...$wasteData->pluck('franchise_store')
         ])->unique();
 
-        foreach ($allFranchiseStores as $store) {
+       foreach ($allFranchiseStores as $store) {
 
             $OrderRows      = $detailOrder->where('franchise_store', $store);
             $financeRows    = $financialView->where('franchise_store', $store);
             $wasteRows  = $wasteData->where('franchise_store', $store);
+
+            //******* For finance data table *********//
+
+            $Pizza_Carryout = $financeRows
+            ->where('sub_account','Pizza - Carryout')
+            ->sum('amount');
+
+            $HNR_Carryout = $financeRows
+            ->where('sub_account','HNR - Carryout')
+            ->sum('amount');
+
+            $Bread_Carryout = $financeRows
+            ->where('sub_account','Bread - Carryout')
+            ->sum('amount');
+
+            $Wings_Carryout = $financeRows
+            ->where('sub_account','Wings - Carryout')
+            ->sum('amount');
+
+            $Beverages_Carryout = $financeRows
+            ->where('sub_account','Beverages - Carryout')
+            ->sum('amount');
+
+            $Other_Foods_Carryout = $financeRows
+            ->where('sub_account','Other Foods - Carryout')
+            ->sum('amount');
+
+            $Side_Items_Carryout = $financeRows
+            ->where('sub_account','Side Items - Carryout')
+            ->sum('amount');
+
+            $Side_Items_Carryout = $financeRows
+            ->where('sub_account','Side Items - Carryout')
+            ->sum('amount');
+
+            $Pizza_Delivery = $financeRows
+            ->where('sub_account','Pizza - Delivery')
+            ->sum('amount');
+
+            $HNR_Delivery = $financeRows
+            ->where('sub_account','HNR - Delivery')
+            ->sum('amount');
+
+            $Bread_Delivery = $financeRows
+            ->where('sub_account','Bread - Delivery')
+            ->sum('amount');
+
+            $Wings_Delivery = $financeRows
+            ->where('sub_account','Wings - Delivery')
+            ->sum('amount');
+
+            $Beverages_Delivery = $financeRows
+            ->where('sub_account','Beverages - Delivery')
+            ->sum('amount');
+
+            $Other_Foods_Delivery = $financeRows
+            ->where('sub_account','Other Foods - Delivery')
+            ->sum('amount');
+
+            $Side_Items_Delivery = $financeRows
+            ->where('sub_account','Side Items - Delivery')
+            ->sum('amount');
+
+            $Delivery_Charges = $financeRows
+            ->where('sub_account','Delivery-Fees')
+            ->sum('amount');
+
+            $TOTAL_Net_Sales = $Pizza_Carryout+$HNR_Carryout+$Bread_Carryout+$Wings_Carryout+$Beverages_Carryout+$Other_Foods_Carryout+$Side_Items_Carryout+$Pizza_Delivery+$HNR_Delivery+$Bread_Delivery+$Wings_Delivery+$Beverages_Delivery+$Other_Foods_Delivery+$Side_Items_Delivery+$Delivery_Charges;
+
+            //customer count calculated below
+
+            $Gift_Card_Non_Royalty = $financeRows
+            ->where('sub_account','Gift Card')
+            ->sum('amount');
+            $Total_Non_Royalty_Sales = $financeRows
+            ->where('sub_account','Non-Royalty')
+            ->sum('amount');
+            $Total_Non_Delivery_Tips = $financeRows
+            ->whereIn('sub_account', ['ONLO-Store-Tips-Non-Royalty', 'In-Store-Cash-Tips-Non-Royalty', 'In-Store-Card-Tips-Non-Royalty'])
+            ->sum('amount');
+            $TOTAL_Sales_TaxQuantity =$financeRows
+            ->where('sub_account','Sales-Tax')
+            ->sum('amount');
+            $DELIVERY_Quantity =$OrderRows
+            ->where('delivery_fee','<>', 0)
+            ->count();
+            $Delivery_Fee =$OrderRows ->sum('delivery_fee');
+            $Delivery_Service_Fee=$OrderRows ->sum('delivery_service_fee');
+            $Delivery_Small_Order_Fee=$OrderRows ->sum('delivery_small_order_fee');
+            $TOTAL_Native_App_Delivery_Fees=$financeRows
+            ->where('sub_account','Delivery-Fees')
+            ->sum('amount');
+            $Delivery_Late_to_Portal_Fee = $TOTAL_Native_App_Delivery_Fees-($Delivery_Fee + $Delivery_Service_Fee + $Delivery_Small_Order_Fee);
+            $Delivery_Tips = $financeRows
+            ->whereIn('sub_account', ['Delivery-Tips' , 'Prepaid-Delivery-Tips'])
+            ->sum('amount');
+
+            $DoorDash_Quantity = $OrderRows
+            ->where('order_placed_method','DoorDash')
+            ->count();
+            $DoorDash_Order_Total =$OrderRows
+            ->where('order_placed_method','DoorDash')
+            ->sum('royalty_obligation');
+
+            $Grubhub_Quantity = $OrderRows
+            ->where('order_placed_method','Grubhub')
+            ->count();
+            $Grubhub_Order_Total =$OrderRows
+            ->where('order_placed_method','Grubhub')
+            ->sum('royalty_obligation');
+
+            $Uber_Eats_Quantity = $OrderRows
+            ->where('order_placed_method','UberEats')
+            ->count();
+            $Uber_Eats_Order_Total =$OrderRows
+            ->where('order_placed_method','UberEats')
+            ->sum('royalty_obligation');
+
+            $ONLINE_ORDERING_Mobile_Order_Quantity =$OrderRows
+            ->where('order_placed_method','Mobile')
+            ->Count();
+            $ONLINE_ORDERING_Online_Order_Quantity =$OrderRows
+            ->where('order_placed_method','Website')
+            ->Count();
+            // not found yet ONLINE_ORDERING_Pay_In_Store
+            /*
+              Agent_Pre_Paid
+              Agent_Pay_InStore
+              AI_Pre_Paid
+              AI_Pay_InStore
+            */
+            $PrePaid_Cash_Orders=$financeRows
+            ->where('sub_account','PrePaidCash-Orders')
+            ->sum('amount');
+            $PrePaid_Non_Cash_Orders=$financeRows
+            ->where('sub_account','PrePaidNonCash-Orders')
+            ->sum('amount');
+            $PrePaid_Sales=$financeRows
+            ->where('sub_account','PrePaid-Sales')
+            ->sum('amount');
+            $Prepaid_Delivery_Tips=$financeRows
+            ->where('sub_account','Prepaid-Delivery-Tips')
+            ->sum('amount');
+            $Prepaid_InStore_Tips=$financeRows
+            ->where('sub_account','Prepaid-InStoreTipAmount')
+            ->sum('amount');
+
+            $Marketplace_from_Non_Cash_Payments_box= $financeRows
+            ->whereIn('sub_account', ['Marketplace - DoorDash' , 'Marketplace - UberEats','Marketplace - Grubhub'])
+            ->sum('amount');
+
+            $AMEX= $financeRows
+            ->whereIn('sub_account', ['Credit Card - AMEX','EPay - AMEX'])
+            ->sum('amount');
+
+            //Total_Non_Cash_Payments
+            $credit_card_Cash_Payments= $financeRows
+            ->whereIn('sub_account', ['Credit Card - Discover','Credit Card - AMEX','Credit Card - Visa/MC'])
+            ->sum('amount');
+            $Debit_Cash_Payments= $financeRows
+            ->where('sub_account', 'Debit')
+            ->sum('amount');
+            $epay_Cash_Payments= $financeRows
+            ->whereIn('sub_account', ['EPay - Visa/MC' , 'EPay - AMEX' , 'EPay - Discover'])
+            ->sum('amount');
+
+            $Total_Non_Cash_Payments =$Marketplace_from_Non_Cash_Payments_box+
+                                          $credit_card_Cash_Payments+
+                                          $Debit_Cash_Payments+
+                                          $epay_Cash_Payments+
+                                          $Gift_Card_Non_Royalty
+                                          ;
+            //
+            $Non_Cash_Payments=$Total_Non_Cash_Payments-$AMEX-$Marketplace_from_Non_Cash_Payments_box-$Gift_Card_Non_Royalty;
+            $Cash_Sales= $financeRows
+            ->where('sub_account', 'Total Cash Sales')
+            ->sum('amount');
+            $Cash_Drop_Total=$financeRows
+            ->where('sub_account', 'Cash Drop Total')
+            ->sum('amount');
+            $Over_Short =$financeRows
+            ->where('sub_account', 'Over-Short')
+            ->sum('amount') ;
+            $Payouts =$financeRows
+            ->where('sub_account', 'Payouts')
+            ->sum('amount') ;
+            //****************//
 
             // detail_orders (OrderRows)
             $totalSales     = $OrderRows->sum('royalty_obligation');
@@ -361,7 +550,7 @@ class LCReportDataService
             ->sum('amount');
 
             $cashSales = $financeRows
-            ->where('sub_account','Total Cash Sales')
+            ->where('sub_account','Deposit Prep Total')
             ->sum('amount');
 
             $totalWasteCost = $wasteRows->sum(function ($row) {
@@ -370,8 +559,68 @@ class LCReportDataService
 
 
 
-
-
+            FinanceData::updateOrCreate(
+                ['franchise_store' => $store, 'business_date' => $selectedDate],
+                [
+                    'Pizza_Carryout'=> $Pizza_Carryout,
+                    'HNR_Carryout'=> $HNR_Carryout,
+                    'Bread_Carryout'=> $Bread_Carryout,
+                    'Wings_Carryout'=> $Wings_Carryout,
+                    'Beverages_Carryout'=> $Beverages_Carryout,
+                    'Other_Foods_Carryout'=> $Other_Foods_Carryout,
+                    'Side_Items_Carryout'=> $Side_Items_Carryout,
+                    'Pizza_Delivery'=> $Pizza_Delivery,
+                    'HNR_Delivery'=> $HNR_Delivery,
+                    'Bread_Delivery'=> $Bread_Delivery,
+                    'Wings_Delivery'=> $Wings_Delivery,
+                    'Beverages_Delivery'=> $Beverages_Delivery,
+                    'Other_Foods_Delivery'=> $Other_Foods_Delivery,
+                    'Side_Items_Delivery'=> $Side_Items_Delivery,
+                    'Delivery_Charges'=> $Delivery_Charges,
+                    'TOTAL_Net_Sales'=> $TOTAL_Net_Sales,
+                    'Customer_Count'=> $customerCount,
+                    'Gift_Card_Non_Royalty'=> $Gift_Card_Non_Royalty,
+                    'Total_Non_Royalty_Sales'=> $Total_Non_Royalty_Sales,
+                    'Total_Non_Delivery_Tips'=> $Total_Non_Delivery_Tips,
+                    'TOTAL_Sales_TaxQuantity'=> $TOTAL_Sales_TaxQuantity,
+                    'DELIVERY_Quantity'=> $DELIVERY_Quantity,
+                    'Delivery_Fee'=> $Delivery_Fee,
+                    'Delivery_Service_Fee'=> $Delivery_Service_Fee,
+                    'Delivery_Small_Order_Fee'=> $Delivery_Small_Order_Fee,
+                    'Delivery_Late_to_Portal_Fee'=> $Delivery_Late_to_Portal_Fee,
+                    'TOTAL_Native_App_Delivery_Fees'=> $TOTAL_Native_App_Delivery_Fees,
+                    'Delivery_Tips'=> $Delivery_Tips,
+                    'DoorDash_Quantity'=> $DoorDash_Quantity,
+                    'DoorDash_Order_Total'=> $DoorDash_Order_Total,
+                    'Grubhub_Quantity'=> $Grubhub_Quantity,
+                    'Grubhub_Order_Total'=> $Grubhub_Order_Total,
+                    'Uber_Eats_Quantity'=> $Uber_Eats_Quantity,
+                    'Uber_Eats_Order_Total'=> $Uber_Eats_Order_Total,
+                    'ONLINE_ORDERING_Mobile_Order_Quantity'=> $ONLINE_ORDERING_Mobile_Order_Quantity,
+                    'ONLINE_ORDERING_Online_Order_Quantity'=> $ONLINE_ORDERING_Online_Order_Quantity,
+                    'ONLINE_ORDERING_Pay_In_Store'=> null,
+                    'Agent_Pre_Paid'=> null,
+                    'Agent_Pay_InStore'=> null,
+                    'AI_Pre_Paid'=> null,
+                    'AI_Pay_InStore'=> null,
+                    'PrePaid_Cash_Orders'=> $PrePaid_Cash_Orders,
+                    'PrePaid_Non_Cash_Orders'=> $PrePaid_Non_Cash_Orders,
+                    'PrePaid_Sales'=> $PrePaid_Sales,
+                    'Prepaid_Delivery_Tips'=> $Prepaid_Delivery_Tips,
+                    'Prepaid_InStore_Tips'=> $Prepaid_InStore_Tips,
+                    'Marketplace_from_Non_Cash_Payments_box'=> $Marketplace_from_Non_Cash_Payments_box,
+                    'AMEX'=> $AMEX,
+                    'Total_Non_Cash_Payments'=> $Total_Non_Cash_Payments,
+                    'credit_card_Cash_Payments'=> $credit_card_Cash_Payments,
+                    'Debit_Cash_Payments'=> $Debit_Cash_Payments,
+                    'epay_Cash_Payments'=> $epay_Cash_Payments,
+                    'Non_Cash_Payments'=> $Non_Cash_Payments,
+                    'Cash_Sales'=> $Cash_Sales,
+                    'Cash_Drop_Total'=> $Cash_Drop_Total,
+                    'Over_Short'=> $Over_Short,
+                    'Payouts'=> $Payouts,
+                ]
+            );
 
 
             FinalSummary::updateOrCreate(
@@ -414,6 +663,8 @@ class LCReportDataService
                 ]
             );
 
+
+
         // Save hourly sales
         $ordersByHour = $OrderRows->groupBy(function ($order) {
             return Carbon::parse($order['promise_date'])->format('H');
@@ -437,6 +688,7 @@ class LCReportDataService
                 ]
             );
         }
+
     }
 
     Log::info('Final summary from in-memory data completed.');
