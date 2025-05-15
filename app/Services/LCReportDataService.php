@@ -552,7 +552,7 @@ class LCReportDataService
             ->sum('amount');
 
             $cashSales = $financeRows
-            ->where('sub_account','$Cash_Sales')
+            ->where('sub_account','Total Cash Sales')
             ->sum('amount');
 
             $totalWasteCost = $wasteRows->sum(function ($row) {
