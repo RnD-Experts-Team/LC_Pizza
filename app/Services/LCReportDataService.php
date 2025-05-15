@@ -440,6 +440,8 @@ class LCReportDataService
                                           ;
             //
             $Non_Cash_Payments=$Total_Non_Cash_Payments-$AMEX-$Marketplace_from_Non_Cash_Payments_box-$Gift_Card_Non_Royalty;
+
+
             $Cash_Sales= $financeRows
             ->where('sub_account', 'Total Cash Sales')
             ->sum('amount');
@@ -550,7 +552,7 @@ class LCReportDataService
             ->sum('amount');
 
             $cashSales = $financeRows
-            ->where('sub_account','Deposit Prep Total')
+            ->where('sub_account','$Cash_Sales')
             ->sum('amount');
 
             $totalWasteCost = $wasteRows->sum(function ($row) {
