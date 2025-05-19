@@ -156,11 +156,19 @@ class FinanceDataImporter extends Command
                 ->where('sub_account', 'Gift Card')
                 ->sum('amount');
             $Total_Non_Royalty_Sales = $financialViews
-                ->where('sub_account', 'Non-Royalty')
-                ->sum('amount');
+            ->where('sub_account', 'Non-Royalty')
+            ->sum('amount');
             $Total_Non_Delivery_Tips = $financialViews
-                ->whereIn('sub_account', ['ONLO-Store-Tips-Non-Royalty', 'In-Store-Cash-Tips-Non-Royalty', 'In-Store-Card-Tips-Non-Royalty'])
-                ->sum('amount');
+            ->where('area','Store Tips')
+            ->sum('amount');
+
+            $Sales_Tax_Food_Beverage = $detailOrders
+            ->where('order_fulfilled_method', 'Register')
+            ->sum('sales_tax');
+            $Sales_Tax_Delivery = $detailOrders
+            ->where('order_fulfilled_method', 'Delivery')
+            ->sum('sales_tax');
+
             $TOTAL_Sales_TaxQuantity = $financialViews
                 ->where('sub_account', 'Sales-Tax')
                 ->sum('amount');
@@ -173,8 +181,17 @@ class FinanceDataImporter extends Command
             $TOTAL_Native_App_Delivery_Fees = $financialViews
                 ->where('sub_account', 'Delivery-Fees')
                 ->sum('amount');
-            $Delivery_Late_to_Portal_Fee = $TOTAL_Native_App_Delivery_Fees -
-                ($Delivery_Fee + $Delivery_Service_Fee + $Delivery_Small_Order_Fee);
+
+
+            $Delivery_Late_to_Portal_Fee_Count =$detailOrders
+            ->where('delivery_fee','<>', 0)
+            ->where('put_into_portal_before_promise_time','No')
+            ->where('portal_eligible','Yes')
+            ->count();
+
+            $Delivery_Late_to_Portal_Fee = $Delivery_Late_to_Portal_Fee_Count * 0.5;
+
+
             $Delivery_Tips = $financialViews
                 ->whereIn('sub_account', ['Delivery-Tips', 'Prepaid-Delivery-Tips'])
                 ->sum('amount');
@@ -195,10 +212,10 @@ class FinanceDataImporter extends Command
 
             $Uber_Eats_Quantity = $detailOrders
                 ->where('order_placed_method', 'UberEats')
-                ->sum('quantity');
+                ->count();
             $Uber_Eats_Order_Total = $detailOrders
                 ->where('order_placed_method', 'UberEats')
-                ->count();
+                ->sum('royalty_obligation');
 
             $ONLINE_ORDERING_Mobile_Order_Quantity = $detailOrders
                 ->where('order_placed_method', 'Mobile')
@@ -248,19 +265,19 @@ class FinanceDataImporter extends Command
                 ->whereIn('sub_account', ['EPay - Visa/MC', 'EPay - AMEX', 'EPay - Discover'])
                 ->sum('amount');
 
-            $Total_Non_Cash_Payments = $Marketplace_from_Non_Cash_Payments_box +
-                $credit_card_Cash_Payments +
-                $Debit_Cash_Payments +
-                $Gift_Card_Non_Royalty+
-                $epay_Cash_Payments;
+            $Total_Non_Cash_Payments = $financialViews
+            ->where('sub_account', 'Non-Cash-Payments')
+            ->sum('amount');
 
             $Non_Cash_Payments = $Total_Non_Cash_Payments -
                 $AMEX -
                 $Marketplace_from_Non_Cash_Payments_box -
                 $Gift_Card_Non_Royalty;
 
+
+            //check this
             $Cash_Sales = $financialViews
-                ->where('sub_account', 'Deposit Prep Total')
+                ->where('sub_account', 'Cash-Check-Deposit')
                 ->sum('amount');
             $Cash_Drop_Total = $financialViews
                 ->where('sub_account', 'Cash Drop Total')
@@ -293,7 +310,11 @@ class FinanceDataImporter extends Command
             $data['Gift_Card_Non_Royalty'] = $Gift_Card_Non_Royalty;
             $data['Total_Non_Royalty_Sales'] = $Total_Non_Royalty_Sales;
             $data['Total_Non_Delivery_Tips'] = $Total_Non_Delivery_Tips;
+
+            $data['Sales_Tax_Food_Beverage'] = $Sales_Tax_Food_Beverage;
+            $data['Sales_Tax_Delivery'] = $Sales_Tax_Delivery;
             $data['TOTAL_Sales_TaxQuantity'] = $TOTAL_Sales_TaxQuantity;
+
             $data['DELIVERY_Quantity'] = $DELIVERY_Quantity;
             $data['Delivery_Fee'] = $Delivery_Fee;
             $data['Delivery_Service_Fee'] = $Delivery_Service_Fee;

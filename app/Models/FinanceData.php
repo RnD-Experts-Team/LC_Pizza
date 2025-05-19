@@ -24,6 +24,7 @@ class FinanceData extends Model
     protected $fillable = [
         'franchise_store',
         'business_date',
+
         'Pizza_Carryout',
         'HNR_Carryout',
         'Bread_Carryout',
@@ -31,6 +32,7 @@ class FinanceData extends Model
         'Beverages_Carryout',
         'Other_Foods_Carryout',
         'Side_Items_Carryout',
+
         'Pizza_Delivery',
         'HNR_Delivery',
         'Bread_Delivery',
@@ -38,13 +40,19 @@ class FinanceData extends Model
         'Beverages_Delivery',
         'Other_Foods_Delivery',
         'Side_Items_Delivery',
+
         'Delivery_Charges',
+
         'TOTAL_Net_Sales',
         'Customer_Count',
         'Gift_Card_Non_Royalty',
         'Total_Non_Royalty_Sales',
         'Total_Non_Delivery_Tips',
+
+        'Sales_Tax_Food_Beverage',
+        'Sales_Tax_Delivery',
         'TOTAL_Sales_TaxQuantity',
+
         'DELIVERY_Quantity',
         'Delivery_Fee',
         'Delivery_Service_Fee',

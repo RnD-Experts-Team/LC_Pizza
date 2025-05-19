@@ -13,8 +13,9 @@ return new class extends Migration
     {
         Schema::create('finance_data', function (Blueprint $table) {
             $table->id();
-            $table->String('franchise_store')->nullable();
-            $table->Date('business_date')->nullable();
+            $table->String('franchise_store',20)->index();
+            $table->Date('business_date')->index();
+
             $table->decimal('Pizza_Carryout', 15, 2)->nullable();
             $table->decimal('HNR_Carryout', 15, 2)->nullable();
             $table->decimal('Bread_Carryout', 15, 2)->nullable();
@@ -35,7 +36,11 @@ return new class extends Migration
             $table->decimal('Gift_Card_Non_Royalty', 15, 2)->nullable();
             $table->decimal('Total_Non_Royalty_Sales', 15, 2)->nullable();
             $table->decimal('Total_Non_Delivery_Tips', 15, 2)->nullable();
+
+            $table->decimal('Sales_Tax_Food_Beverage', 15, 2)->nullable();
+            $table->decimal('Sales_Tax_Delivery', 15, 2)->nullable();
             $table->decimal('TOTAL_Sales_TaxQuantity', 15, 2)->nullable();
+
             $table->integer('DELIVERY_Quantity')->nullable();
             $table->decimal('Delivery_Fee', 15, 2)->nullable();
             $table->decimal('Delivery_Service_Fee', 15, 2)->nullable();

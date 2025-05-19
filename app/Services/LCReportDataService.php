@@ -343,12 +343,25 @@ class LCReportDataService
             $Total_Non_Royalty_Sales = $financeRows
             ->where('sub_account','Non-Royalty')
             ->sum('amount');
+
             $Total_Non_Delivery_Tips = $financeRows
-            ->whereIn('sub_account', ['ONLO-Store-Tips-Non-Royalty', 'In-Store-Cash-Tips-Non-Royalty', 'In-Store-Card-Tips-Non-Royalty'])
+            ->where('area','Store Tips')
             ->sum('amount');
+
+
+            $Sales_Tax_Food_Beverage = $OrderRows
+            ->where('order_fulfilled_method', 'Register')
+            ->sum('sales_tax');
+            $Sales_Tax_Delivery = $OrderRows
+            ->where('order_fulfilled_method', 'Delivery')
+            ->sum('sales_tax');
+
+
             $TOTAL_Sales_TaxQuantity =$financeRows
             ->where('sub_account','Sales-Tax')
             ->sum('amount');
+
+
             $DELIVERY_Quantity =$OrderRows
             ->where('delivery_fee','<>', 0)
             ->count();
@@ -358,7 +371,15 @@ class LCReportDataService
             $TOTAL_Native_App_Delivery_Fees=$financeRows
             ->where('sub_account','Delivery-Fees')
             ->sum('amount');
-            $Delivery_Late_to_Portal_Fee = $TOTAL_Native_App_Delivery_Fees-($Delivery_Fee + $Delivery_Service_Fee + $Delivery_Small_Order_Fee);
+
+            $Delivery_Late_to_Portal_Fee_Count =$OrderRows
+            ->where('delivery_fee','<>', 0)
+            ->where('put_into_portal_before_promise_time','No')
+            ->where('portal_eligible','Yes')
+            ->count();
+
+            $Delivery_Late_to_Portal_Fee = $Delivery_Late_to_Portal_Fee_Count * 0.5;
+
             $Delivery_Tips = $financeRows
             ->whereIn('sub_account', ['Delivery-Tips' , 'Prepaid-Delivery-Tips'])
             ->sum('amount');
@@ -432,19 +453,22 @@ class LCReportDataService
             ->whereIn('sub_account', ['EPay - Visa/MC' , 'EPay - AMEX' , 'EPay - Discover'])
             ->sum('amount');
 
-            $Total_Non_Cash_Payments =$Marketplace_from_Non_Cash_Payments_box+
-                                          $credit_card_Cash_Payments+
-                                          $Debit_Cash_Payments+
-                                          $epay_Cash_Payments+
-                                          $Gift_Card_Non_Royalty
-                                          ;
+            $Total_Non_Cash_Payments = $financeRows
+            ->where('sub_account', 'Non-Cash-Payments')
+            ->sum('amount');
             //
-            $Non_Cash_Payments=$Total_Non_Cash_Payments-$AMEX-$Marketplace_from_Non_Cash_Payments_box-$Gift_Card_Non_Royalty;
+            $Non_Cash_Payments = $Total_Non_Cash_Payments -
+                $AMEX -
+                $Marketplace_from_Non_Cash_Payments_box -
+                $Gift_Card_Non_Royalty;
 
+
+                //finance sheet
 
             $Cash_Sales= $financeRows
-            ->where('sub_account', 'Total Cash Sales')
+            ->where('sub_account', 'Cash-Check-Deposit')
             ->sum('amount');
+
             $Cash_Drop_Total=$financeRows
             ->where('sub_account', 'Cash Drop Total')
             ->sum('amount');
@@ -454,6 +478,7 @@ class LCReportDataService
             $Payouts =$financeRows
             ->where('sub_account', 'Payouts')
             ->sum('amount') ;
+
             //****************//
 
             // detail_orders (OrderRows)
@@ -526,11 +551,7 @@ class LCReportDataService
             $inPortalPercentage = $portalTransaction > 0
             ? ($portalOnTime / $portalTransaction)
             : 0;
-
             // detail_orders (OrderRows) end
-
-
-
 
             $deliveryTips = $financeRows
             ->where('sub_account','Delivery-Tips')
@@ -551,6 +572,8 @@ class LCReportDataService
             ->where('sub_account','Over-Short')
             ->sum('amount');
 
+
+            //final sum
             $cashSales = $financeRows
             ->where('sub_account','Total Cash Sales')
             ->sum('amount');
@@ -584,6 +607,8 @@ class LCReportDataService
                     'Gift_Card_Non_Royalty'=> $Gift_Card_Non_Royalty,
                     'Total_Non_Royalty_Sales'=> $Total_Non_Royalty_Sales,
                     'Total_Non_Delivery_Tips'=> $Total_Non_Delivery_Tips,
+                    'Sales_Tax_Food_Beverage' => $Sales_Tax_Food_Beverage,
+                    'Sales_Tax_Delivery' => $Sales_Tax_Delivery,
                     'TOTAL_Sales_TaxQuantity'=> $TOTAL_Sales_TaxQuantity,
                     'DELIVERY_Quantity'=> $DELIVERY_Quantity,
                     'Delivery_Fee'=> $Delivery_Fee,

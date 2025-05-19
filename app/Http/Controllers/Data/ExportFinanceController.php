@@ -100,7 +100,11 @@ class ExportFinanceController extends Controller
                 'Gift_Card_Non_Royalty',
                 'Total_Non_Royalty_Sales',
                 'Total_Non_Delivery_Tips',
+
+                'Sales_Tax_Food_Beverage',
+                'Sales_Tax_Delivery',
                 'TOTAL_Sales_TaxQuantity',
+
                 'DELIVERY_Quantity',
                 'Delivery_Fee',
                 'Delivery_Service_Fee',
@@ -367,7 +371,11 @@ class ExportFinanceController extends Controller
                 'Gift_Card_Non_Royalty',
                 'Total_Non_Royalty_Sales',
                 'Total_Non_Delivery_Tips',
+
+                'Sales_Tax_Food_Beverage',
+                'Sales_Tax_Delivery',
                 'TOTAL_Sales_TaxQuantity',
+
                 'DELIVERY_Quantity',
                 'Delivery_Fee',
                 'Delivery_Service_Fee',
