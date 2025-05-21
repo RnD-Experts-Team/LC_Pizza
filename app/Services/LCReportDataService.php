@@ -17,7 +17,9 @@ use App\Models\Waste;
 use App\Models\FinalSummary;
 use App\Models\HourlySales;
 use App\Models\FinanceData;
-
+use App\Models\OnlineDiscountProgram;
+use App\Models\DeliveryOrderSummary;
+use App\Models\ThirdPartyMarketplaceOrder;
 
 class LCReportDataService
 {
@@ -267,8 +269,129 @@ class LCReportDataService
             $financeRows    = $financialView->where('franchise_store', $store);
             $wasteRows  = $wasteData->where('franchise_store', $store);
 
-            //******* For finance data table *********//
+            //******* Online Discount Program *********//
+            $Order_ID = $OrderRows
+            ->where('employee',"")
+            ->where('modification_reason','<>',"")
+            ->value('order_id');
 
+            $Pay_Type = $OrderRows
+            ->where('employee',"")
+            ->where('modification_reason','<>',"")
+            ->value('payment_methods');
+            //not found
+            $Original_Subtotal =0;
+            //
+            $Modified_Subtotal = $OrderRows
+            ->where('employee',"")
+            ->where('modification_reason','<>',"")
+            ->value('royalty_obligation');
+
+            $Promo_Code_V = $OrderRows
+            ->where('employee',"")
+            ->where('modification_reason','<>',"")
+            ->value('modification_reason');
+
+            $Promo_Code = trim(explode(':', $Promo_Code_V)[1] ?? '');
+            //******* End Of Online Discount Program *********//
+
+            //******* Delivery Order Summary *********//
+            $Oreders_count = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile' , 'Website'])
+            ->where('order_fulfilled_method','Delivery')
+            ->Count();
+
+            $product_cost =0;
+            $tax=0;
+            $occupational_tax = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile' , 'Website'])
+            ->where('order_fulfilled_method','Delivery')
+            ->Sum('occupational_tax');
+
+            $delivery_charges = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile' , 'Website'])
+            ->where('order_fulfilled_method','Delivery')
+            ->Sum('delivery_fee');
+
+            $delivery_charges_Taxes = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile' , 'Website'])
+            ->where('order_fulfilled_method','Delivery')
+            ->Sum('delivery_fee_tax');
+
+            $delivery_Service_charges = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile' , 'Website'])
+            ->where('order_fulfilled_method','Delivery')
+            ->Sum('delivery_service_fee');
+
+            $delivery_Service_charges_Tax = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile' , 'Website'])
+            ->where('order_fulfilled_method','Delivery')
+            ->Sum('delivery_service_fee_tax');
+
+            $delivery_small_order_charge = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile' , 'Website'])
+            ->where('order_fulfilled_method','Delivery')
+            ->Sum('delivery_small_order_fee');
+
+            $delivery_small_order_charge_Tax = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile' , 'Website'])
+            ->where('order_fulfilled_method','Delivery')
+            ->Sum('delivery_small_order_fee_tax');
+
+            $delivery_late_charge=0;
+
+            $Delivery_Tip_Summary = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile' , 'Website'])
+            ->where('order_fulfilled_method','Delivery')
+            ->Sum('delivery_tip');
+
+            $Delivery_Tip_Tax_Summary = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile' , 'Website'])
+            ->where('order_fulfilled_method','Delivery')
+            ->Sum('delivery_tip_tax');
+
+            $total_taxes = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile' , 'Website'])
+            ->where('order_fulfilled_method','Delivery')
+            ->Sum('sales_tax');
+
+            $order_total =0;
+            //******* End Of Delivery Order Summary *********//
+
+            //*******3rd Party Marketplace Orders*********//
+            $doordash_product_costs_Marketplace = $OrderRows
+            ->where('order_placed_method', 'DoorDash')
+            ->Sum('royalty_obligation');
+            $ubereats_product_costs_Marketplace = $OrderRows
+            ->where('order_placed_method', 'UberEats')
+            ->Sum('royalty_obligation');
+            $grubhub_product_costs_Marketplace = $OrderRows
+            ->where('order_placed_method', 'Grubhub')
+            ->Sum('royalty_obligation');
+
+            $doordash_tax_Marketplace = $OrderRows
+            ->where('order_placed_method', 'DoorDash')
+            ->Sum('sales_tax');
+            $ubereats_tax_Marketplace = $OrderRows
+            ->where('order_placed_method', 'UberEats')
+            ->Sum('sales_tax');
+            $grubhub_tax_Marketplace = $OrderRows
+            ->where('order_placed_method', 'Grubhub')
+            ->Sum('sales_tax');
+
+            $doordash_order_total_Marketplace= $OrderRows
+            ->where('order_placed_method', 'DoorDash')
+            ->Sum('gross_sales');
+            $uberEats_order_total_Marketplace= $OrderRows
+            ->where('order_placed_method', 'UberEats')
+            ->Sum('gross_sales');
+            $grubhub_order_total_Marketplace= $OrderRows
+            ->where('order_placed_method', 'Grubhub')
+            ->Sum('gross_sales');
+
+            //******* End Of 3rd Party Marketplace Orders *********//
+
+            //******* For finance data table *********//
             $Pizza_Carryout = $financeRows
             ->where('sub_account','Pizza - Carryout')
             ->sum('amount');
@@ -357,7 +480,7 @@ class LCReportDataService
             ->sum('sales_tax');
 
 
-            $TOTAL_Sales_TaxQuantity =$financeRows
+            $TOTAL_Sales_TaxQuantity = $financeRows
             ->where('sub_account','Sales-Tax')
             ->sum('amount');
 
@@ -365,10 +488,10 @@ class LCReportDataService
             $DELIVERY_Quantity =$OrderRows
             ->where('delivery_fee','<>', 0)
             ->count();
-            $Delivery_Fee =$OrderRows ->sum('delivery_fee');
-            $Delivery_Service_Fee=$OrderRows ->sum('delivery_service_fee');
-            $Delivery_Small_Order_Fee=$OrderRows ->sum('delivery_small_order_fee');
-            $TOTAL_Native_App_Delivery_Fees=$financeRows
+            $Delivery_Fee = $OrderRows ->sum('delivery_fee');
+            $Delivery_Service_Fee = $OrderRows ->sum('delivery_service_fee');
+            $Delivery_Small_Order_Fee = $OrderRows ->sum('delivery_small_order_fee');
+            $TOTAL_Native_App_Delivery_Fees = $financeRows
             ->where('sub_account','Delivery-Fees')
             ->sum('amount');
 
@@ -394,21 +517,21 @@ class LCReportDataService
             $Grubhub_Quantity = $OrderRows
             ->where('order_placed_method','Grubhub')
             ->count();
-            $Grubhub_Order_Total =$OrderRows
+            $Grubhub_Order_Total = $OrderRows
             ->where('order_placed_method','Grubhub')
             ->sum('royalty_obligation');
 
             $Uber_Eats_Quantity = $OrderRows
             ->where('order_placed_method','UberEats')
             ->count();
-            $Uber_Eats_Order_Total =$OrderRows
+            $Uber_Eats_Order_Total = $OrderRows
             ->where('order_placed_method','UberEats')
             ->sum('royalty_obligation');
 
-            $ONLINE_ORDERING_Mobile_Order_Quantity =$OrderRows
+            $ONLINE_ORDERING_Mobile_Order_Quantity = $OrderRows
             ->where('order_placed_method','Mobile')
             ->Count();
-            $ONLINE_ORDERING_Online_Order_Quantity =$OrderRows
+            $ONLINE_ORDERING_Online_Order_Quantity = $OrderRows
             ->where('order_placed_method','Website')
             ->Count();
             // not found yet ONLINE_ORDERING_Pay_In_Store
@@ -418,23 +541,42 @@ class LCReportDataService
               AI_Pre_Paid
               AI_Pay_InStore
             */
-            $PrePaid_Cash_Orders=$financeRows
+            $ONLINE_ORDERING_Pay_In_Store =$OrderRows
+            ->whereIn('order_placed_method', ['Mobile' , 'Website'])
+            ->whereIn('order_fulfilled_method',['Register','Drive-Thru'])
+            ->Count();
+
+            $Agent_Pre_Paid = $OrderRows
+            ->where('order_placed_method', 'SoundHoundAgent')
+            ->where('order_fulfilled_method','Delivery')
+            ->Count();
+
+            $Agent_Pay_In_Store = $OrderRows
+            ->where('order_placed_method', 'SoundHoundAgent')
+            ->whereIn('order_fulfilled_method',['Register','Drive-Thru'])
+            ->Count();
+
+            $PrePaid_Cash_Orders = $financeRows
             ->where('sub_account','PrePaidCash-Orders')
             ->sum('amount');
-            $PrePaid_Non_Cash_Orders=$financeRows
+
+            $PrePaid_Non_Cash_Orders = $financeRows
             ->where('sub_account','PrePaidNonCash-Orders')
             ->sum('amount');
-            $PrePaid_Sales=$financeRows
+
+            $PrePaid_Sales = $financeRows
             ->where('sub_account','PrePaid-Sales')
             ->sum('amount');
-            $Prepaid_Delivery_Tips=$financeRows
+
+            $Prepaid_Delivery_Tips = $financeRows
             ->where('sub_account','Prepaid-Delivery-Tips')
             ->sum('amount');
-            $Prepaid_InStore_Tips=$financeRows
+
+            $Prepaid_InStore_Tips = $financeRows
             ->where('sub_account','Prepaid-InStoreTipAmount')
             ->sum('amount');
 
-            $Marketplace_from_Non_Cash_Payments_box= $financeRows
+            $Marketplace_from_Non_Cash_Payments_box = $financeRows
             ->whereIn('sub_account', ['Marketplace - DoorDash' , 'Marketplace - UberEats','Marketplace - Grubhub'])
             ->sum('amount');
 
@@ -443,13 +585,15 @@ class LCReportDataService
             ->sum('amount');
 
             //Total_Non_Cash_Payments
-            $credit_card_Cash_Payments= $financeRows
+            $credit_card_Cash_Payments = $financeRows
             ->whereIn('sub_account', ['Credit Card - Discover','Credit Card - AMEX','Credit Card - Visa/MC'])
             ->sum('amount');
-            $Debit_Cash_Payments= $financeRows
+
+            $Debit_Cash_Payments = $financeRows
             ->where('sub_account', 'Debit')
             ->sum('amount');
-            $epay_Cash_Payments= $financeRows
+
+            $epay_Cash_Payments = $financeRows
             ->whereIn('sub_account', ['EPay - Visa/MC' , 'EPay - AMEX' , 'EPay - Discover'])
             ->sum('amount');
 
@@ -465,21 +609,23 @@ class LCReportDataService
 
                 //finance sheet
 
-            $Cash_Sales= $financeRows
+            $Cash_Sales = $financeRows
             ->where('sub_account', 'Cash-Check-Deposit')
             ->sum('amount');
 
-            $Cash_Drop_Total=$financeRows
+            $Cash_Drop_Total = $financeRows
             ->where('sub_account', 'Cash Drop Total')
             ->sum('amount');
-            $Over_Short =$financeRows
+
+            $Over_Short = $financeRows
             ->where('sub_account', 'Over-Short')
             ->sum('amount') ;
-            $Payouts =$financeRows
+
+            $Payouts = $financeRows
             ->where('sub_account', 'Payouts')
             ->sum('amount') ;
 
-            //****************//
+            //********  ********//
 
             // detail_orders (OrderRows)
             $totalSales     = $OrderRows->sum('royalty_obligation');
@@ -498,11 +644,11 @@ class LCReportDataService
             ->where('order_placed_method','Phone')
             ->sum('royalty_obligation');
 
-            $callCenterAgent     = $OrderRows
+            $callCenterAgent  = $OrderRows
             ->where('order_placed_method','SoundHoundAgent')
             ->sum('royalty_obligation');
 
-            $driveThruSales     = $OrderRows
+            $driveThruSales   = $OrderRows
             ->where('order_placed_method','Drive Thru')
             ->sum('royalty_obligation');
 
@@ -510,11 +656,11 @@ class LCReportDataService
             ->where('order_placed_method','Website')
             ->sum('royalty_obligation');
 
-            $mobileSales     = $OrderRows
+            $mobileSales      = $OrderRows
             ->where('order_placed_method','Mobile')
             ->sum('royalty_obligation');
 
-            $doordashSales     = $OrderRows
+            $doordashSales    = $OrderRows
             ->where('order_placed_method','DoorDash')
             ->sum('royalty_obligation');
 
@@ -522,7 +668,7 @@ class LCReportDataService
             ->where('order_placed_method','Grubhub')
             ->sum('royalty_obligation');
 
-            $uberEatsSales     = $OrderRows
+            $uberEatsSales    = $OrderRows
             ->where('order_placed_method','UberEats')
             ->sum('royalty_obligation');
 
@@ -556,12 +702,15 @@ class LCReportDataService
             $deliveryTips = $financeRows
             ->where('sub_account','Delivery-Tips')
             ->sum('amount');
+
             $prePaidDeliveryTips = $financeRows
             ->where('sub_account','Prepaid-Delivery-Tips')
             ->sum('amount');
+
             $inStoreTipAmount = $financeRows
             ->where('sub_account','InStoreTipAmount')
             ->sum('amount');
+
             $prePaidInStoreTipAmount = $financeRows
             ->where('sub_account','Prepaid-InStoreTipAmount')
             ->sum('amount');
@@ -572,7 +721,6 @@ class LCReportDataService
             ->where('sub_account','Over-Short')
             ->sum('amount');
 
-
             //final sum
             $cashSales = $financeRows
             ->where('sub_account','Total Cash Sales')
@@ -582,7 +730,50 @@ class LCReportDataService
                 return $row['item_cost'] * $row['quantity'];
             });
 
+            DeliveryOrderSummary::updateOrCreate(
+                ['franchise_store' => $store, 'date' => $selectedDate],
+                [
+                    'orders_count'=> $Oreders_count,
+                    'product_cost'=> $product_cost,
+                    'tax'=> $tax,
+                    'occupational_tax'=>$occupational_tax,
+                    'delivery_charges'=>$delivery_charges,
+                    'delivery_charges_taxes'=>$delivery_charges_Taxes,
+                    'service_charges'=>$delivery_Service_charges,
+                    'service_charges_taxes'=>$delivery_Service_charges_Tax,
+                    'small_order_charge'=>$delivery_small_order_charge,
+                    'small_order_charge_taxes' => $delivery_small_order_charge_Tax,
+                    'delivery_late_charge' =>$delivery_late_charge,
+                    'tip'=>$Delivery_Tip_Summary,
+                    'tip_tax'=>$Delivery_Tip_Tax_Summary,
+                    'total_taxes'=>$total_taxes,
+                    'order_total'=>$order_total
 
+                ]);
+            ThirdPartyMarketplaceOrder::updateOrCreate(
+                ['franchise_store' => $store, 'date' => $selectedDate],
+                [
+                    'doordash_product_costs_Marketplace'=> $doordash_product_costs_Marketplace,
+                    'doordash_tax_Marketplace'=> $doordash_tax_Marketplace,
+                    'doordash_order_total_Marketplace'=> $doordash_order_total_Marketplace,
+                    'ubereats_product_costs_Marketplace'=> $ubereats_product_costs_Marketplace,
+                    'ubereats_tax_Marketplace'=> $ubereats_tax_Marketplace,
+                    'uberEats_order_total_Marketplace'=> $uberEats_order_total_Marketplace,
+                    'grubhub_product_costs_Marketplace'=> $grubhub_product_costs_Marketplace,
+                    'grubhub_tax_Marketplace'=> $grubhub_tax_Marketplace,
+                    'grubhub_order_total_Marketplace'=> $grubhub_order_total_Marketplace,
+                ]);
+
+            OnlineDiscountProgram::updateOrCreate(
+                ['franchise_store' => $store, 'date' => $selectedDate],
+                [
+                    'order_id'=> $Order_ID,
+                    'pay_type'=> $Pay_Type,
+                    'original_subtotal'=> $Original_Subtotal,
+                    'modified_subtotal'=> $Modified_Subtotal,
+                    'promo_code'=> $Promo_Code
+                ]
+            );
 
             FinanceData::updateOrCreate(
                 ['franchise_store' => $store, 'business_date' => $selectedDate],
@@ -625,9 +816,9 @@ class LCReportDataService
                     'Uber_Eats_Order_Total'=> $Uber_Eats_Order_Total,
                     'ONLINE_ORDERING_Mobile_Order_Quantity'=> $ONLINE_ORDERING_Mobile_Order_Quantity,
                     'ONLINE_ORDERING_Online_Order_Quantity'=> $ONLINE_ORDERING_Online_Order_Quantity,
-                    'ONLINE_ORDERING_Pay_In_Store'=> null,
-                    'Agent_Pre_Paid'=> null,
-                    'Agent_Pay_InStore'=> null,
+                    'ONLINE_ORDERING_Pay_In_Store'=> $ONLINE_ORDERING_Pay_In_Store,
+                    'Agent_Pre_Paid'=> $Agent_Pre_Paid,
+                    'Agent_Pay_InStore'=> $Agent_Pay_In_Store,
                     'AI_Pre_Paid'=> null,
                     'AI_Pay_InStore'=> null,
                     'PrePaid_Cash_Orders'=> $PrePaid_Cash_Orders,
