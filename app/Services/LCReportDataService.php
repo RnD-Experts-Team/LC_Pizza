@@ -13,6 +13,7 @@ use App\Models\SummaryItem;
 use App\Models\SummarySale;
 use App\Models\SummaryTransaction;
 use App\Models\DetailOrder;
+use App\Models\OrderLine;
 use App\Models\Waste;
 use App\Models\FinalSummary;
 use App\Models\HourlySales;
@@ -101,6 +102,7 @@ class LCReportDataService
           //  Log::info('Generated nonce: ' . $nonce);
 
             // For GET requests, bodyHash is empty
+
             $bodyHash = '';
 
             // Prepare signature raw data
@@ -228,7 +230,9 @@ class LCReportDataService
             'Summary-Sales' => 'processSummarySales',
             'Summary-Transactions' => 'processSummaryTransactions',
             'Detail-Orders' => 'processDetailOrders',
-            'Waste-Report' => 'processWaste'
+            'Waste-Report' => 'processWaste',
+            'Detail-OrderLines' =>'processOrderLine'
+
         ];
 
         $allData = [];
@@ -1153,6 +1157,53 @@ class LCReportDataService
         }
         return $rows;
     }
+
+
+
+     private function processOrderLine($filePath)
+{
+    $data = $this->readCsv($filePath);
+    $rows = [];
+
+    foreach ($data as $row) {
+        // Parse datetime fields
+        $dateTimePlaced    = $this->parseDateTime($row['DateTimePlaced']);
+        $dateTimeFulfilled = $this->parseDateTime($row['DateTimeFulfilled']);
+
+        $rows[] = [
+            'franchise_store'            => $row['FranchiseStore'],
+            'business_date'              => $row['BusinessDate'],
+            'date_time_placed'           => $dateTimePlaced,
+            'date_time_fulfilled'        => $dateTimeFulfilled,
+            'net_amount'                 => $row['NetAmount'],
+            'quantity'                   => $row['Quantity'],
+            'royalty_item'              => $row['RoyaltyItem'],
+            'taxable_item'              => $row['TaxableItem'],
+            'order_id'                   => $row['OrderId'],
+            'item_id'                    => $row['ItemId'],
+            'menu_item_name'            => $row['MenuItemName'],
+            'menu_item_account'         => $row['MenuItemAccount'],
+            'bundle_name'               => $row['BundleName'],
+            'employee'                   => $row['Employee'],
+            'override_approval_employee'=> $row['OverrideApprovalEmployee'],
+            'order_placed_method'        => $row['OrderPlacedMethod'],
+            'order_fulfilled_method'     => $row['OrderFulfilledMethod'],
+            'modified_order_amount'      => $row['ModifiedOrderAmount'],
+            'modification_reason'        => $row['ModificationReason'],
+            'payment_methods'            => $row['PaymentMethods'],
+            'refunded'                   => $row['Refunded'],
+            'tax_included_amount'        => $row['TaxIncludedAmount'],
+        ];
+    }
+
+    foreach (array_chunk($rows, 500) as $batch) {
+        OrderLine::insert($batch);
+    }
+
+    return $rows;
+}
+
+
 
     private function readCsv($filePath)
     {
