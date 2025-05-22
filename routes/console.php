@@ -17,13 +17,12 @@ Artisan::command('lc:import-report-data', function () {
     $this->info('Starting the import of LC Report Data.');
 
 
-<<<<<<< HEAD
+
  $date = Carbon::yesterday()->format('Y-m-d');
 //$date = '2025-05-20';
-=======
- //$date = Carbon::yesterday()->format('Y-m-d');
-$date = '2025-05-20';
->>>>>>> 34dcd957f690e2e80d198c38098ae4a7036b044a
+
+
+
 
     $this->info('Importing data for date: ' . $date);
 
