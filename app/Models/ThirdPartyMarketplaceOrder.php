@@ -8,7 +8,7 @@ class ThirdPartyMarketplaceOrder extends Model
 {
     /**
      * The table associated with the model.
-     *
+     *ubereats_product_costs_Marketplace
      * @var string
      */
     protected $table = 'third_party_marketplace_orders';

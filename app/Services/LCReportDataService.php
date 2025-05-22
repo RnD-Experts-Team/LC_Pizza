@@ -270,29 +270,25 @@ class LCReportDataService
             $wasteRows  = $wasteData->where('franchise_store', $store);
 
             //******* Online Discount Program *********//
-            $Order_ID = $OrderRows
-            ->where('employee',"")
-            ->where('modification_reason','<>',"")
-            ->value('order_id');
+            $discountOrders = $OrderRows
+                ->where('employee', '')
+                ->where('modification_reason', '<>', '');
 
-            $Pay_Type = $OrderRows
-            ->where('employee',"")
-            ->where('modification_reason','<>',"")
-            ->value('payment_methods');
-            //not found
-            $Original_Subtotal =0;
-            //
-            $Modified_Subtotal = $OrderRows
-            ->where('employee',"")
-            ->where('modification_reason','<>',"")
-            ->value('royalty_obligation');
-
-            $Promo_Code_V = $OrderRows
-            ->where('employee',"")
-            ->where('modification_reason','<>',"")
-            ->value('modification_reason');
-
-            $Promo_Code = trim(explode(':', $Promo_Code_V)[1] ?? '');
+            foreach ($discountOrders as $discountOrder) {
+                OnlineDiscountProgram::updateOrCreate(
+                    [
+                        'franchise_store' => $store,
+                        'date' => $selectedDate,
+                        'order_id' => $discountOrder['order_id']
+                    ],
+                    [
+                        'pay_type' => $discountOrder['payment_methods'],
+                        'original_subtotal' => 0,
+                        'modified_subtotal' => $discountOrder['royalty_obligation'],
+                        'promo_code' => trim(explode(':', $discountOrder['modification_reason'])[1] ?? '')
+                    ]
+                );
+            }
             //******* End Of Online Discount Program *********//
 
             //******* Delivery Order Summary *********//
@@ -764,16 +760,16 @@ class LCReportDataService
                     'grubhub_order_total_Marketplace'=> $grubhub_order_total_Marketplace,
                 ]);
 
-            OnlineDiscountProgram::updateOrCreate(
-                ['franchise_store' => $store, 'date' => $selectedDate],
-                [
-                    'order_id'=> $Order_ID,
-                    'pay_type'=> $Pay_Type,
-                    'original_subtotal'=> $Original_Subtotal,
-                    'modified_subtotal'=> $Modified_Subtotal,
-                    'promo_code'=> $Promo_Code
-                ]
-            );
+            // OnlineDiscountProgram::updateOrCreate(
+            //     ['franchise_store' => $store, 'date' => $selectedDate],
+            //     [
+            //         'order_id'=> $Order_ID,
+            //         'pay_type'=> $Pay_Type,
+            //         'original_subtotal'=> $Original_Subtotal,
+            //         'modified_subtotal'=> $Modified_Subtotal,
+            //         'promo_code'=> $Promo_Code
+            //     ]
+            // );
 
             FinanceData::updateOrCreate(
                 ['franchise_store' => $store, 'business_date' => $selectedDate],
