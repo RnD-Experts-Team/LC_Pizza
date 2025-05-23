@@ -259,7 +259,7 @@ class LCReportDataService
         $detailOrder = collect($data['processDetailOrders'] ?? []);
         $financialView     = collect($data['processFinancialView'] ?? []);
         $wasteData    = collect($data['processWaste'] ?? []);
-       // $summarySales    = collect($data['processSummarySales'] ?? []);
+        $orderLine    = collect($data['processOrderLine'] ?? []);
 
         $allFranchiseStores = collect([
             ...$detailOrder->pluck('franchise_store'),
@@ -271,7 +271,8 @@ class LCReportDataService
 
             $OrderRows      = $detailOrder->where('franchise_store', $store);
             $financeRows    = $financialView->where('franchise_store', $store);
-            $wasteRows  = $wasteData->where('franchise_store', $store);
+            $wasteRows      = $wasteData->where('franchise_store', $store);
+            $orderLine      = $orderLine->where('franchise_store', $store);
 
             //******* Online Discount Program *********//
             $discountOrders = $OrderRows
