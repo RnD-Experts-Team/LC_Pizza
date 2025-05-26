@@ -21,6 +21,7 @@ use App\Models\FinanceData;
 use App\Models\OnlineDiscountProgram;
 use App\Models\DeliveryOrderSummary;
 use App\Models\ThirdPartyMarketplaceOrder;
+use App\Models\BreadBoostModel;
 
 class LCReportDataService
 {
@@ -272,7 +273,59 @@ class LCReportDataService
             $OrderRows      = $detailOrder->where('franchise_store', $store);
             $financeRows    = $financialView->where('franchise_store', $store);
             $wasteRows      = $wasteData->where('franchise_store', $store);
-            $orderLine      = $orderLine->where('franchise_store', $store);
+            $storeOrderLines      = $orderLine->where('franchise_store', $store);
+
+
+            //
+//******* Bread Boost Summary *********//
+
+$classicOrders = $storeOrderLines
+    ->whereIn('menu_item_name', ['Classic Pepperoni', 'Classic Cheese'])
+    ->whereIn('order_fulfilled_method', ['Register', 'Drive-Thru'])
+    ->whereIn('order_placed_method', ['Phone', 'Register', 'Drive Thru'])
+    ->pluck('order_id')
+    ->unique();
+
+$classicOrdersCount = $classicOrders->count();
+
+$classicWithBreadCount = $storeOrderLines
+    ->whereIn('order_id', $classicOrders)
+    ->where('menu_item_name', 'Crazy Bread')
+    ->pluck('order_id')
+    ->unique()
+    ->count();
+
+    $OtherPizzaOrder = $storeOrderLines
+    ->whereNotIn('item_id', ['-1',
+    '6',
+    '7',
+    '8',
+    '9',
+    '101001',
+    '101002',
+    '101288',
+    '103044',
+    '202901',
+    '101289',
+    '204100',
+    '204200'
+    ])
+    ->whereIn('order_fulfilled_method', ['Register','Drive-Thru'])
+    ->whereIn('order_placed_method', ['Phone','Register','Drive Thru'])
+    ->pluck('order_id')
+    ->unique();
+
+    $OtherPizzaOrderCount = $OtherPizzaOrder->count();
+
+    $OtherPizzaWithBreadCount =$storeOrderLines
+        ->whereIn('order_id', $OtherPizzaOrder)
+        ->where('menu_item_name', 'Crazy Bread')
+        ->pluck('order_id')
+        ->unique()
+        ->count();
+
+            //******* End Of Bread_Boost *********//
+
 
             //******* Online Discount Program *********//
             $discountOrders = $OrderRows
@@ -294,6 +347,7 @@ class LCReportDataService
                     ]
                 );
             }
+            
             //******* End Of Online Discount Program *********//
 
             //******* Delivery Order Summary *********//
@@ -731,6 +785,17 @@ class LCReportDataService
                 return $row['item_cost'] * $row['quantity'];
             });
 
+            BreadBoostModel::updateOrCreate(
+
+                ['franchise_store' => $store, 'date' => $selectedDate],
+                [
+                    'classic_order' => $classicOrdersCount,
+                    'classic_with_bread' => $classicWithBreadCount,
+                    'other_pizza_order' => $OtherPizzaOrderCount,
+                    'other_pizza_with_bread' => $OtherPizzaWithBreadCount,
+                ]
+                );
+
             DeliveryOrderSummary::updateOrCreate(
                 ['franchise_store' => $store, 'date' => $selectedDate],
                 [
@@ -751,6 +816,7 @@ class LCReportDataService
                     'order_total'=>$order_total
 
                 ]);
+
             ThirdPartyMarketplaceOrder::updateOrCreate(
                 ['franchise_store' => $store, 'date' => $selectedDate],
                 [
