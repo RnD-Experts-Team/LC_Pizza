@@ -91,8 +91,12 @@ class DeliveryAndDiscountImporter extends Command
                 ->where('order_fulfilled_method', 'Delivery');
 
             $Oreders_count = $deliveryOrders->count();
+
+            $RO = $deliveryOrders->Sum('royalty_obligation');
+
+
             $product_cost = 0;
-            $tax = 0;
+
             $occupational_tax = $deliveryOrders->sum('occupational_tax');
             $delivery_charges = $deliveryOrders->sum('delivery_fee');
             $delivery_charges_Taxes = $deliveryOrders->sum('delivery_fee_tax');
@@ -100,11 +104,26 @@ class DeliveryAndDiscountImporter extends Command
             $delivery_Service_charges_Tax = $deliveryOrders->sum('delivery_service_fee_tax');
             $delivery_small_order_charge = $deliveryOrders->sum('delivery_small_order_fee');
             $delivery_small_order_charge_Tax = $deliveryOrders->sum('delivery_small_order_fee_tax');
+
+             $Delivery_Late_Fee_Count =$deliveryOrders
+            ->where('delivery_fee','<>', 0)
+            ->where('put_into_portal_before_promise_time','No')
+            ->where('portal_eligible','Yes')
+
+            ->count();
+
+            $delivery_late_charge= $Delivery_Late_Fee_Count * 0.5;
             $delivery_late_charge = 0;
             $Delivery_Tip_Summary = $deliveryOrders->sum('delivery_tip');
             $Delivery_Tip_Tax_Summary = $deliveryOrders->sum('delivery_tip_tax');
             $total_taxes = $deliveryOrders->sum('sales_tax');
-            $order_total = 0;
+
+
+            $product_cost =$RO - ($delivery_Service_charges + $delivery_charges + $delivery_small_order_charge );
+
+            $order_total =$RO + $total_taxes + $Delivery_Tip_Summary;
+
+            $tax= $total_taxes - $delivery_Service_charges_Tax - $delivery_charges_Taxes - $delivery_small_order_charge_Tax ;
 
             // Third Party Marketplace calculations
             $doordash_product_costs_Marketplace = $OrderRows->where('order_placed_method', 'DoorDash')->sum('royalty_obligation');

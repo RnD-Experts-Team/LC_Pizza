@@ -347,7 +347,7 @@ $classicWithBreadCount = $storeOrderLines
                     ]
                 );
             }
-            
+
             //******* End Of Online Discount Program *********//
 
             //******* Delivery Order Summary *********//
@@ -356,8 +356,14 @@ $classicWithBreadCount = $storeOrderLines
             ->where('order_fulfilled_method','Delivery')
             ->Count();
 
-            $product_cost =0;
-            $tax=0;
+            $RO = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile' , 'Website'])
+            ->where('order_fulfilled_method','Delivery')
+            ->Sum('royalty_obligation');
+
+
+
+
             $occupational_tax = $OrderRows
             ->whereIn('order_placed_method', ['Mobile' , 'Website'])
             ->where('order_fulfilled_method','Delivery')
@@ -393,7 +399,17 @@ $classicWithBreadCount = $storeOrderLines
             ->where('order_fulfilled_method','Delivery')
             ->Sum('delivery_small_order_fee_tax');
 
-            $delivery_late_charge=0;
+            $Delivery_Late_Fee_Count =$OrderRows
+            ->where('delivery_fee','<>', 0)
+            ->where('put_into_portal_before_promise_time','No')
+            ->where('portal_eligible','Yes')
+            ->whereIn('order_placed_method', ['Mobile' , 'Website'])
+            ->where('order_fulfilled_method','Delivery')
+            ->count();
+
+            $delivery_late_charge= $Delivery_Late_Fee_Count * 0.5;
+
+
 
             $Delivery_Tip_Summary = $OrderRows
             ->whereIn('order_placed_method', ['Mobile' , 'Website'])
@@ -409,8 +425,17 @@ $classicWithBreadCount = $storeOrderLines
             ->whereIn('order_placed_method', ['Mobile' , 'Website'])
             ->where('order_fulfilled_method','Delivery')
             ->Sum('sales_tax');
+                // sales tax       delivery_service_fee_tax 4.57    -  delivery_fee_tax 0.9     0.48
+            $tax= $total_taxes - $delivery_Service_charges_Tax - $delivery_charges_Taxes - $delivery_small_order_charge_Tax ;
 
-            $order_total =0;
+            $product_cost =$RO - ($delivery_Service_charges + $delivery_charges + $delivery_small_order_charge );
+
+            $order_total =$RO + $total_taxes + $Delivery_Tip_Summary;
+
+
+
+           // $tax = $total_taxes - $delivery_Service_charges_Tax;
+
             //******* End Of Delivery Order Summary *********//
 
             //*******3rd Party Marketplace Orders*********//
