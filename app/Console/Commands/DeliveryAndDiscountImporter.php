@@ -95,7 +95,7 @@ class DeliveryAndDiscountImporter extends Command
             $RO = $deliveryOrders->Sum('royalty_obligation');
 
 
-            $product_cost = 0;
+            //$product_cost = 0;
 
             $occupational_tax = $deliveryOrders->sum('occupational_tax');
             $delivery_charges = $deliveryOrders->sum('delivery_fee');
@@ -113,7 +113,7 @@ class DeliveryAndDiscountImporter extends Command
             ->count();
 
             $delivery_late_charge= $Delivery_Late_Fee_Count * 0.5;
-            $delivery_late_charge = 0;
+
             $Delivery_Tip_Summary = $deliveryOrders->sum('delivery_tip');
             $Delivery_Tip_Tax_Summary = $deliveryOrders->sum('delivery_tip_tax');
             $total_taxes = $deliveryOrders->sum('sales_tax');
