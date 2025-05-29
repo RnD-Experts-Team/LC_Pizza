@@ -22,6 +22,7 @@ use App\Models\OnlineDiscountProgram;
 use App\Models\DeliveryOrderSummary;
 use App\Models\ThirdPartyMarketplaceOrder;
 use App\Models\BreadBoostModel;
+use App\Models\ChannelData;
 
 class LCReportDataService
 {
@@ -268,63 +269,145 @@ class LCReportDataService
             ...$wasteData->pluck('franchise_store')
         ])->unique();
 
-       foreach ($allFranchiseStores as $store) {
+        //this array for the channel data
+        $metrics = [
+            'Sales' => [
+                '-' => ['column' => 'royalty_obligation', 'type' => 'sum'],
+            ],
+            'Gross_Sales' => [
+                '-' => ['column' => 'gross_sales', 'type' => 'sum'],
+            ],
+            'Order_Count' => [
+                '-' => ['column' => 'order_id', 'type' => 'count'], // count distinct order IDs
+            ],
+            'Tips' => [
+                'DeliveryTip' => ['column' => 'delivery_tip', 'type' => 'sum'],
+                'DeliveryTipTax' => ['column' => 'delivery_tip_tax', 'type' => 'sum'],
+                'StoreTipAmount' => ['column' => 'store_tip_amount', 'type' => 'sum'],
+            ],
+            'Tax' => [
+                'TaxableAmount' => ['column' => 'taxable_amount', 'type' => 'sum'],
+                'NonTaxableAmount' => ['column' => 'non_taxable_amount', 'type' => 'sum'],
+                'TaxExemptAmount' => ['column' => 'tax_exempt_amount', 'type' => 'sum'],
+                'SalesTax' => ['column' => 'sales_tax', 'type' => 'sum'],
+                'OccupationalTax' => ['column' => 'occupational_tax', 'type' => 'sum'],
+            ],
+            'Fee' => [
+                'DeliveryFee' => ['column' => 'delivery_fee', 'type' => 'sum'],
+                'DeliveryFeeTax' => ['column' => 'delivery_fee_tax', 'type' => 'sum'],
+                'DeliveryServiceFee' => ['column' => 'delivery_service_fee', 'type' => 'sum'],
+                'DeliveryServiceFeeTax' => ['column' => 'delivery_service_fee_tax', 'type' => 'sum'],
+                'DeliverySmallOrderFee' => ['column' => 'delivery_small_order_fee', 'type' => 'sum'],
+                'DeliverySmallOrderFeeTax' => ['column' => 'delivery_small_order_fee_tax', 'type' => 'sum'],
+            ],
+            'HNR' => [
+                'HNROrdersCount' => ['column' => 'hnrOrder', 'type' => 'sum'],
+            ],
+            'portal' => [
+                'PutInPortalOrdersCount' => ['column' => 'portal_used', 'type' => 'sum'],
+                'PutInPortalOnTimeOrdersCount' => ['column' => 'put_into_portal_before_promise_time', 'type' => 'sum'],
+            ],
+        ];
+
+
+        $summaryRows = [];
+        $summaryDate = $selectedDate ?? now(); // or use your actual date
+
+       foreach ($allFranchiseStores as $store){
 
             $OrderRows      = $detailOrder->where('franchise_store', $store);
             $financeRows    = $financialView->where('franchise_store', $store);
             $wasteRows      = $wasteData->where('franchise_store', $store);
             $storeOrderLines      = $orderLine->where('franchise_store', $store);
 
+        // ChannelData
 
-            //
-//******* Bread Boost Summary *********//
+            $groupedCombos = $OrderRows->groupBy(function($row) {
+                return $row['order_placed_method'].'|'.$row['order_fulfilled_method'];
+            });
 
-$classicOrders = $storeOrderLines
-    ->whereIn('menu_item_name', ['Classic Pepperoni', 'Classic Cheese'])
-    ->whereIn('order_fulfilled_method', ['Register', 'Drive-Thru'])
-    ->whereIn('order_placed_method', ['Phone', 'Register', 'Drive Thru'])
-    ->pluck('order_id')
-    ->unique();
+            foreach ($groupedCombos as $comboKey => $methodOrders) {
+                [$placedMethod, $fulfilledMethod] = explode('|', $comboKey);
 
-$classicOrdersCount = $classicOrders->count();
+                foreach ($metrics as $category => $subcats) {
+                    foreach ($subcats as $subcat => $info) {
+                        if ($info['type'] === 'sum') {
+                            $amount = $methodOrders->sum(function ($row) use ($info) {
+                                return floatval($row[$info['column']] ?? 0);
+                            });
+                        } elseif ($info['type'] === 'count') {
+                            $amount = $methodOrders->unique('order_id')->count();
+                        }
+                        if ($amount != 0) {
+                            $summaryRows[] = [
+                                'store'                  => $store,
+                                'date'                   => $summaryDate,
+                                'category'               => $category,
+                                'sub_category'           => $subcat,
+                                'order_placed_method'    => $placedMethod,
+                                'order_fulfilled_method' => $fulfilledMethod,
+                                'amount'                 => $amount,
+                            ];
+                        }
+                    }
+                }
+            }
+            // if (count($summaryRows) > 0) {
+            //     foreach (array_chunk($summaryRows, 1000) as $batch) {
+            //         ChannelData::insert($batch);
+            //     }
+            // }
+        // end of channel data
 
-$classicWithBreadCount = $storeOrderLines
-    ->whereIn('order_id', $classicOrders)
-    ->where('menu_item_name', 'Crazy Bread')
-    ->pluck('order_id')
-    ->unique()
-    ->count();
 
-    $OtherPizzaOrder = $storeOrderLines
-    ->whereNotIn('item_id', ['-1',
-    '6',
-    '7',
-    '8',
-    '9',
-    '101001',
-    '101002',
-    '101288',
-    '103044',
-    '202901',
-    '101289',
-    '204100',
-    '204200'
-    ])
-    ->whereIn('order_fulfilled_method', ['Register','Drive-Thru'])
-    ->whereIn('order_placed_method', ['Phone','Register','Drive Thru'])
-    ->pluck('order_id')
-    ->unique();
+        //******* Bread Boost Summary *********//
 
-    $OtherPizzaOrderCount = $OtherPizzaOrder->count();
+        $classicOrders = $storeOrderLines
+            ->whereIn('menu_item_name', ['Classic Pepperoni', 'Classic Cheese'])
+            ->whereIn('order_fulfilled_method', ['Register', 'Drive-Thru'])
+            ->whereIn('order_placed_method', ['Phone', 'Register', 'Drive Thru'])
+            ->pluck('order_id')
+            ->unique();
 
-    $OtherPizzaWithBreadCount =$storeOrderLines
-        ->whereIn('order_id', $OtherPizzaOrder)
-        ->where('menu_item_name', 'Crazy Bread')
-        ->pluck('order_id')
-        ->unique()
-        ->count();
+        $classicOrdersCount = $classicOrders->count();
 
-            //******* End Of Bread_Boost *********//
+        $classicWithBreadCount = $storeOrderLines
+            ->whereIn('order_id', $classicOrders)
+            ->where('menu_item_name', 'Crazy Bread')
+            ->pluck('order_id')
+            ->unique()
+            ->count();
+
+            $OtherPizzaOrder = $storeOrderLines
+            ->whereNotIn('item_id', ['-1',
+            '6',
+            '7',
+            '8',
+            '9',
+            '101001',
+            '101002',
+            '101288',
+            '103044',
+            '202901',
+            '101289',
+            '204100',
+            '204200'
+            ])
+            ->whereIn('order_fulfilled_method', ['Register','Drive-Thru'])
+            ->whereIn('order_placed_method', ['Phone','Register','Drive Thru'])
+            ->pluck('order_id')
+            ->unique();
+
+            $OtherPizzaOrderCount = $OtherPizzaOrder->count();
+
+            $OtherPizzaWithBreadCount =$storeOrderLines
+                ->whereIn('order_id', $OtherPizzaOrder)
+                ->where('menu_item_name', 'Crazy Bread')
+                ->pluck('order_id')
+                ->unique()
+                ->count();
+
+                    //******* End Of Bread_Boost *********//
 
 
             //******* Online Discount Program *********//
@@ -616,8 +699,7 @@ $classicWithBreadCount = $storeOrderLines
             ->Count();
             // not found yet ONLINE_ORDERING_Pay_In_Store
             /*
-              Agent_Pre_Paid
-              Agent_Pay_InStore
+
               AI_Pre_Paid
               AI_Pay_InStore
             */
@@ -1000,9 +1082,14 @@ $classicWithBreadCount = $storeOrderLines
         }
 
     }
+    if (! empty($summaryRows)) {
+        foreach (array_chunk($summaryRows, 1000) as $batch) {
+            ChannelData::insert($batch);
+        }
+    }
 
-    Log::info('Final summary from in-memory data completed.');
-}
+        Log::info('Final summary from in-memory data completed.');
+    }
 
     private function processCashManagement($filePath)
     {
@@ -1249,47 +1336,47 @@ $classicWithBreadCount = $storeOrderLines
 
 
      private function processOrderLine($filePath)
-{
-    $data = $this->readCsv($filePath);
-    $rows = [];
+    {
+        $data = $this->readCsv($filePath);
+        $rows = [];
 
-    foreach ($data as $row) {
-        // Parse datetime fields
-        $dateTimePlaced    = $this->parseDateTime($row['DateTimePlaced']);
-        $dateTimeFulfilled = $this->parseDateTime($row['DateTimeFulfilled']);
+        foreach ($data as $row) {
+            // Parse datetime fields
+            $dateTimePlaced    = $this->parseDateTime($row['DateTimePlaced']);
+            $dateTimeFulfilled = $this->parseDateTime($row['DateTimeFulfilled']);
 
-        $rows[] = [
-            'franchise_store'            => $row['FranchiseStore'],
-            'business_date'              => $row['BusinessDate'],
-            'date_time_placed'           => $dateTimePlaced,
-            'date_time_fulfilled'        => $dateTimeFulfilled,
-            'net_amount'                 => $row['NetAmount'],
-            'quantity'                   => $row['Quantity'],
-            'royalty_item'              => $row['RoyaltyItem'],
-            'taxable_item'              => $row['TaxableItem'],
-            'order_id'                   => $row['OrderId'],
-            'item_id'                    => $row['ItemId'],
-            'menu_item_name'            => $row['MenuItemName'],
-            'menu_item_account'         => $row['MenuItemAccount'],
-            'bundle_name'               => $row['BundleName'],
-            'employee'                   => $row['Employee'],
-            'override_approval_employee'=> $row['OverrideApprovalEmployee'],
-            'order_placed_method'        => $row['OrderPlacedMethod'],
-            'order_fulfilled_method'     => $row['OrderFulfilledMethod'],
-            'modified_order_amount'      => $row['ModifiedOrderAmount'],
-            'modification_reason'        => $row['ModificationReason'],
-            'payment_methods'            => $row['PaymentMethods'],
-            'refunded'                   => $row['Refunded'],
-            'tax_included_amount'        => $row['TaxIncludedAmount'],
-        ];
+            $rows[] = [
+                'franchise_store'            => $row['FranchiseStore'],
+                'business_date'              => $row['BusinessDate'],
+                'date_time_placed'           => $dateTimePlaced,
+                'date_time_fulfilled'        => $dateTimeFulfilled,
+                'net_amount'                 => $row['NetAmount'],
+                'quantity'                   => $row['Quantity'],
+                'royalty_item'              => $row['RoyaltyItem'],
+                'taxable_item'              => $row['TaxableItem'],
+                'order_id'                   => $row['OrderId'],
+                'item_id'                    => $row['ItemId'],
+                'menu_item_name'            => $row['MenuItemName'],
+                'menu_item_account'         => $row['MenuItemAccount'],
+                'bundle_name'               => $row['BundleName'],
+                'employee'                   => $row['Employee'],
+                'override_approval_employee'=> $row['OverrideApprovalEmployee'],
+                'order_placed_method'        => $row['OrderPlacedMethod'],
+                'order_fulfilled_method'     => $row['OrderFulfilledMethod'],
+                'modified_order_amount'      => $row['ModifiedOrderAmount'],
+                'modification_reason'        => $row['ModificationReason'],
+                'payment_methods'            => $row['PaymentMethods'],
+                'refunded'                   => $row['Refunded'],
+                'tax_included_amount'        => $row['TaxIncludedAmount'],
+            ];
+        }
+
+        foreach (array_chunk($rows, 500) as $batch) {
+            OrderLine::insert($batch);
+        }
+
+        return $rows;
     }
-
-    foreach (array_chunk($rows, 500) as $batch) {
-        OrderLine::insert($batch);
-    }
-
-    return $rows;
-}
 
 
 
