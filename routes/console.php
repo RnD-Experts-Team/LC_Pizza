@@ -18,7 +18,7 @@ Artisan::command('lc:import-report-data', function () {
 
 
      $date = Carbon::yesterday()->format('Y-m-d');
- //  $date = '2025-05-26';
+   //$date = '2025-05-26';
 
     $this->info('Importing data for date: ' . $date);
 
@@ -35,6 +35,26 @@ Artisan::command('lc:import-report-data', function () {
         $this->error('Failed to import report data.');
         Log::error('Failed to import report data for date: ' . $date);
     }
+
+    $yesterdayDate = Carbon::parse($date)->subDay()->format('Y-m-d');
+
+
+    $this->info('Updating data for date: ' . $yesterdayDate);
+
+    // Resolve the service from the container
+    $lcReportDataService = app(LCReportDataService::class);
+
+    // Call the service to import the report data
+    $result = $lcReportDataService->importReportData($yesterdayDate);
+
+    if ($result) {
+        $this->info('Report data updated successfully.');
+        Log::info('Report data updated successfully for date: ' . $yesterdayDate);
+    } else {
+        $this->error('Failed to update report data.');
+        Log::error('Failed to update report data for date: ' . $yesterdayDate);
+    }
+
 
 })->purpose('Import LC Report Data')
   ->dailyAt('09:20')

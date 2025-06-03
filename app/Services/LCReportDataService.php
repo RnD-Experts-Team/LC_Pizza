@@ -1156,26 +1156,29 @@ class LCReportDataService
     return $rows;
 }
 
-    private function processFinancialView($filePath)
-    {
-      //  Log::info('Processing Financial View CSV file.');
-        $data = $this->readCsv($filePath);
-        $rows = [];
-        foreach ($data as $row) {
-            $rows[] =[
-                'franchise_store' => $row['FranchiseStore'],
-                'business_date'   => $row['BusinessDate'],
-                'area'            => $row['Area'],
-                'sub_account'     => $row['SubAccount'],
-                'amount'          => $row['Amount']
-            ];
-        }
-
-        foreach (array_chunk($rows, 500) as $batch) {
-            FinancialView::insert($batch);
-        }
-        return $rows;
+private function processFinancialView($filePath)
+{
+    $data = $this->readCsv($filePath);
+    $rows = [];
+    foreach ($data as $row) {
+        $rows[] = [
+            'franchise_store' => $row['FranchiseStore'],
+            'business_date'   => $row['BusinessDate'],
+            'area'            => $row['Area'],
+            'sub_account'     => $row['SubAccount'],
+            'amount'          => $row['Amount']
+        ];
     }
+
+    foreach (array_chunk($rows, 500) as $batch) {
+        FinancialView::upsert(
+            $batch,
+            ['franchise_store', 'business_date', 'sub_account','area'],
+            [ 'amount']
+        );
+    }
+    return $rows;
+}
 
     private function processSummaryItems($filePath)
     {
@@ -1200,184 +1203,308 @@ class LCReportDataService
 
         }
         foreach (array_chunk($rows, 500) as $batch) {
-            SummaryItem::insert($batch);
-        }
+ SummaryItem::upsert(
+        $batch,
+        ['franchise_store', 'business_date', 'menu_item_name', 'item_id'],
+        [
+            'menu_item_account',
+            'item_quantity',
+            'royalty_obligation',
+            'taxable_amount',
+            'non_taxable_amount',
+            'tax_exempt_amount',
+            'non_royalty_amount',
+            'tax_included_amount'
+        ]
+    );
+}
         return $rows;
     }
 
     private function processSummarySales($filePath)
-    {
-      //  Log::info('Processing Summary Sales CSV file.');
-        $data = $this->readCsv($filePath);
-        $rows = [];
-        foreach ($data as $row) {
-            $rows[] = [
-                'franchise_store'            => $row['FranchiseStore'],
-                'business_date'              => $row['BusinessDate'],
-                'royalty_obligation'         => $row['RoyaltyObligation'],
-                'customer_count'             => $row['CustomerCount'],
-                'taxable_amount'             => $row['TaxableAmount'],
-                'non_taxable_amount'         => $row['NonTaxableAmount'],
-                'tax_exempt_amount'          => $row['TaxExemptAmount'],
-                'non_royalty_amount'         => $row['NonRoyaltyAmount'],
-                'refund_amount'              => $row['RefundAmount'],
-                'sales_tax'                  => $row['SalesTax'],
-                'gross_sales'                => $row['GrossSales'],
-                'occupational_tax'           => $row['OccupationalTax'],
-                'delivery_tip'               => $row['DeliveryTip'],
-                'delivery_fee'               => $row['DeliveryFee'],
-                'delivery_service_fee'       => $row['DeliveryServiceFee'],
-                'delivery_small_order_fee'   => $row['DeliverySmallOrderFee'],
-                'modified_order_amount'      => $row['ModifiedOrderAmount'],
-                'store_tip_amount'           => $row['StoreTipAmount'],
-                'prepaid_cash_orders'        => $row['PrepaidCashOrders'],
-                'prepaid_non_cash_orders'    => $row['PrepaidNonCashOrders'],
-                'prepaid_sales'              => $row['PrepaidSales'],
-                'prepaid_delivery_tip'       => $row['PrepaidDeliveryTip'],
-                'prepaid_in_store_tip_amount'=> $row['PrepaidInStoreTipAmount'],
-                'over_short'                 => $row['OverShort'],
-                'previous_day_refunds'       => $row['PreviousDayRefunds'],
-                'saf'                        =>$row['SAF'],
-                'manager_notes'              =>$row['ManagerNotes']
-            ];
-        }
-        foreach (array_chunk($rows, 500) as $batch) {
-            SummarySale::insert($batch);
-        }
-        return $rows;
+{
+    $data = $this->readCsv($filePath);
+    $rows = [];
+
+    foreach ($data as $row) {
+        $rows[] = [
+            'franchise_store'            => $row['FranchiseStore'],
+            'business_date'              => $row['BusinessDate'],
+            'royalty_obligation'         => $row['RoyaltyObligation'],
+            'customer_count'             => $row['CustomerCount'],
+            'taxable_amount'             => $row['TaxableAmount'],
+            'non_taxable_amount'         => $row['NonTaxableAmount'],
+            'tax_exempt_amount'          => $row['TaxExemptAmount'],
+            'non_royalty_amount'         => $row['NonRoyaltyAmount'],
+            'refund_amount'              => $row['RefundAmount'],
+            'sales_tax'                  => $row['SalesTax'],
+            'gross_sales'                => $row['GrossSales'],
+            'occupational_tax'           => $row['OccupationalTax'],
+            'delivery_tip'               => $row['DeliveryTip'],
+            'delivery_fee'               => $row['DeliveryFee'],
+            'delivery_service_fee'       => $row['DeliveryServiceFee'],
+            'delivery_small_order_fee'   => $row['DeliverySmallOrderFee'],
+            'modified_order_amount'      => $row['ModifiedOrderAmount'],
+            'store_tip_amount'           => $row['StoreTipAmount'],
+            'prepaid_cash_orders'        => $row['PrepaidCashOrders'],
+            'prepaid_non_cash_orders'    => $row['PrepaidNonCashOrders'],
+            'prepaid_sales'              => $row['PrepaidSales'],
+            'prepaid_delivery_tip'       => $row['PrepaidDeliveryTip'],
+            'prepaid_in_store_tip_amount'=> $row['PrepaidInStoreTipAmount'],
+            'over_short'                 => $row['OverShort'],
+            'previous_day_refunds'       => $row['PreviousDayRefunds'],
+            'saf'                        => $row['SAF'],
+            'manager_notes'              => $row['ManagerNotes']
+        ];
     }
+
+    foreach (array_chunk($rows, 500) as $batch) {
+        SummarySale::upsert(
+            $batch,
+            ['franchise_store', 'business_date'],
+            [
+                'royalty_obligation',
+                'customer_count',
+                'taxable_amount',
+                'non_taxable_amount',
+                'tax_exempt_amount',
+                'non_royalty_amount',
+                'refund_amount',
+                'sales_tax',
+                'gross_sales',
+                'occupational_tax',
+                'delivery_tip',
+                'delivery_fee',
+                'delivery_service_fee',
+                'delivery_small_order_fee',
+                'modified_order_amount',
+                'store_tip_amount',
+                'prepaid_cash_orders',
+                'prepaid_non_cash_orders',
+                'prepaid_sales',
+                'prepaid_delivery_tip',
+                'prepaid_in_store_tip_amount',
+                'over_short',
+                'previous_day_refunds',
+                'saf',
+                'manager_notes'
+            ]
+        );
+    }
+
+    return $rows;
+}
 
     private function processSummaryTransactions($filePath)
-    {
-      //  Log::info('Processing Summary Transactions CSV file.');
-        $data = $this->readCsv($filePath);
-        $rows = [];
-        foreach ($data as $row) {
-            $rows[] = [
-                'franchise_store'    => $row['franchisestore'],
-                'business_date'      => $row['businessdate'],
-                'payment_method'     => $row['paymentmethod'],
-                'sub_payment_method' => $row['SubPaymentMethod'],
-                'total_amount'       => $row['TotalAmount'],
-                'saf_qty'            => $row['SAFQty'],
-                'saf_total'          => $row['SAFTotal']
-            ];
-        }
-        foreach (array_chunk($rows, 500) as $batch) {
-            SummaryTransaction::insert($batch);
-        }
-        return $rows;
+{
+    $data = $this->readCsv($filePath);
+    $rows = [];
+
+    foreach ($data as $row) {
+        $rows[] = [
+            'franchise_store'    => $row['franchisestore'],
+            'business_date'      => $row['businessdate'],
+            'payment_method'     => $row['paymentmethod'],
+            'sub_payment_method' => $row['SubPaymentMethod'],
+            'total_amount'       => $row['TotalAmount'],
+            'saf_qty'            => $row['SAFQty'],
+            'saf_total'          => $row['SAFTotal']
+        ];
     }
 
-    private function processDetailOrders($filePath)
-    {
-      //  Log::info('Processing Detail Orders CSV file.');
-        $data = $this->readCsv($filePath);
-        $rows = [];
-        foreach ($data as $row) {
-            // Parse datetime fields
-            $dateTimePlaced    = $this->parseDateTime($row['DateTimePlaced']);
-            $dateTimeFulfilled = $this->parseDateTime($row['DateTimeFulfilled']);
-            $promiseDate       = $this->parseDateTime($row['PromiseDate']);
-
-            $rows[] = [
-                'franchise_store'             => $row['FranchiseStore'],
-                'business_date'               => $row['BusinessDate'],
-                'date_time_placed'            => $dateTimePlaced,
-                'date_time_fulfilled'         => $dateTimeFulfilled,
-                'royalty_obligation'          => $row['RoyaltyObligation'],
-                'quantity'                    => $row['Quantity'],
-                'customer_count'              => $row['CustomerCount'],
-                'order_id'                    => $row['OrderId'],
-                'taxable_amount'              => $row['TaxableAmount'],
-                'non_taxable_amount'          => $row['NonTaxableAmount'],
-                'tax_exempt_amount'           => $row['TaxExemptAmount'],
-                'non_royalty_amount'          => $row['NonRoyaltyAmount'],
-                'sales_tax'                   => $row['SalesTax'],
-                'employee'                    => $row['Employee'],
-                'gross_sales'                 => $row['GrossSales'],
-                'occupational_tax'            => $row['OccupationalTax'],
-                'override_approval_employee'  => $row['OverrideApprovalEmployee'],
-                'order_placed_method'         => $row['OrderPlacedMethod'],
-                'delivery_tip'                => $row['DeliveryTip'],
-                'delivery_tip_tax'            => $row['DeliveryTipTax'],
-                'order_fulfilled_method'      => $row['OrderFulfilledMethod'],
-                'delivery_fee'                => $row['DeliveryFee'],
-                'modified_order_amount'       => $row['ModifiedOrderAmount'],
-                'delivery_fee_tax'            => $row['DeliveryFeeTax'],
-                'modification_reason'         => $row['ModificationReason'],
-                'payment_methods'             => $row['PaymentMethods'],
-                'delivery_service_fee'        => $row['DeliveryServiceFee'],
-                'delivery_service_fee_tax'    => $row['DeliveryServiceFeeTax'],
-                'refunded'                    => $row['Refunded'],
-                'delivery_small_order_fee'    => $row['DeliverySmallOrderFee'],
-                'delivery_small_order_fee_tax'=> $row['DeliverySmallOrderFeeTax'],
-                'transaction_type'            => $row['TransactionType'],
-                'store_tip_amount'            => $row['StoreTipAmount'],
-                'promise_date'                => $promiseDate,
-                'tax_exemption_id'            => $row['TaxExemptionId'],
-                'tax_exemption_entity_name'   => $row['TaxExemptionEntityName'],
-                'user_id'                     => $row['UserId'],
-                'hnrOrder'                    => $row['hnrOrder'],
-                'broken_promise'              => $row['Broken Promise'],
-                'portal_eligible'             => $row['PortalEligible'],
-                'portal_used'                 => $row['PortalUsed'],
-                'put_into_portal_before_promise_time' => $row['Put into Portal before PromiseTime'],
-                'portal_compartments_used'    => $row['Portal Compartments Used']
-            ];
-        }
-
-        foreach (array_chunk($rows, 500) as $batch) {
-            DetailOrder::insert($batch);
-        }
-        return $rows;
+    foreach (array_chunk($rows, 500) as $batch) {
+        SummaryTransaction::upsert(
+            $batch,
+            ['franchise_store', 'business_date', 'payment_method', 'sub_payment_method'],
+            [
+                'total_amount',
+                'saf_qty',
+                'saf_total'
+            ]
+        );
     }
 
+    return $rows;
+}
 
+ private function processDetailOrders($filePath)
+{
+    $data = $this->readCsv($filePath);
+    $rows = [];
 
-     private function processOrderLine($filePath)
-    {
-        $data = $this->readCsv($filePath);
-        $rows = [];
+    foreach ($data as $row) {
+        // Parse datetime fields
+        $dateTimePlaced    = $this->parseDateTime($row['DateTimePlaced']);
+        $dateTimeFulfilled = $this->parseDateTime($row['DateTimeFulfilled']);
+        $promiseDate       = $this->parseDateTime($row['PromiseDate']);
 
-        foreach ($data as $row) {
-            // Parse datetime fields
-            $dateTimePlaced    = $this->parseDateTime($row['DateTimePlaced']);
-            $dateTimeFulfilled = $this->parseDateTime($row['DateTimeFulfilled']);
-
-            $rows[] = [
-                'franchise_store'            => $row['FranchiseStore'],
-                'business_date'              => $row['BusinessDate'],
-                'date_time_placed'           => $dateTimePlaced,
-                'date_time_fulfilled'        => $dateTimeFulfilled,
-                'net_amount'                 => $row['NetAmount'],
-                'quantity'                   => $row['Quantity'],
-                'royalty_item'              => $row['RoyaltyItem'],
-                'taxable_item'              => $row['TaxableItem'],
-                'order_id'                   => $row['OrderId'],
-                'item_id'                    => $row['ItemId'],
-                'menu_item_name'            => $row['MenuItemName'],
-                'menu_item_account'         => $row['MenuItemAccount'],
-                'bundle_name'               => $row['BundleName'],
-                'employee'                   => $row['Employee'],
-                'override_approval_employee'=> $row['OverrideApprovalEmployee'],
-                'order_placed_method'        => $row['OrderPlacedMethod'],
-                'order_fulfilled_method'     => $row['OrderFulfilledMethod'],
-                'modified_order_amount'      => $row['ModifiedOrderAmount'],
-                'modification_reason'        => $row['ModificationReason'],
-                'payment_methods'            => $row['PaymentMethods'],
-                'refunded'                   => $row['Refunded'],
-                'tax_included_amount'        => $row['TaxIncludedAmount'],
-            ];
-        }
-
-        foreach (array_chunk($rows, 500) as $batch) {
-            OrderLine::insert($batch);
-        }
-
-        return $rows;
+        $rows[] = [
+            'franchise_store'             => $row['FranchiseStore'],
+            'business_date'               => $row['BusinessDate'],
+            'date_time_placed'            => $dateTimePlaced,
+            'date_time_fulfilled'         => $dateTimeFulfilled,
+            'royalty_obligation'          => $row['RoyaltyObligation'],
+            'quantity'                    => $row['Quantity'],
+            'customer_count'              => $row['CustomerCount'],
+            'order_id'                    => $row['OrderId'],
+            'taxable_amount'              => $row['TaxableAmount'],
+            'non_taxable_amount'          => $row['NonTaxableAmount'],
+            'tax_exempt_amount'           => $row['TaxExemptAmount'],
+            'non_royalty_amount'          => $row['NonRoyaltyAmount'],
+            'sales_tax'                   => $row['SalesTax'],
+            'employee'                    => $row['Employee'],
+            'gross_sales'                 => $row['GrossSales'],
+            'occupational_tax'            => $row['OccupationalTax'],
+            'override_approval_employee'  => $row['OverrideApprovalEmployee'],
+            'order_placed_method'         => $row['OrderPlacedMethod'],
+            'delivery_tip'                => $row['DeliveryTip'],
+            'delivery_tip_tax'            => $row['DeliveryTipTax'],
+            'order_fulfilled_method'      => $row['OrderFulfilledMethod'],
+            'delivery_fee'                => $row['DeliveryFee'],
+            'modified_order_amount'       => $row['ModifiedOrderAmount'],
+            'delivery_fee_tax'            => $row['DeliveryFeeTax'],
+            'modification_reason'         => $row['ModificationReason'],
+            'payment_methods'             => $row['PaymentMethods'],
+            'delivery_service_fee'        => $row['DeliveryServiceFee'],
+            'delivery_service_fee_tax'    => $row['DeliveryServiceFeeTax'],
+            'refunded'                    => $row['Refunded'],
+            'delivery_small_order_fee'    => $row['DeliverySmallOrderFee'],
+            'delivery_small_order_fee_tax'=> $row['DeliverySmallOrderFeeTax'],
+            'transaction_type'            => $row['TransactionType'],
+            'store_tip_amount'            => $row['StoreTipAmount'],
+            'promise_date'                => $promiseDate,
+            'tax_exemption_id'            => $row['TaxExemptionId'],
+            'tax_exemption_entity_name'   => $row['TaxExemptionEntityName'],
+            'user_id'                     => $row['UserId'],
+            'hnrOrder'                    => $row['hnrOrder'],
+            'broken_promise'              => $row['Broken Promise'],
+            'portal_eligible'             => $row['PortalEligible'],
+            'portal_used'                 => $row['PortalUsed'],
+            'put_into_portal_before_promise_time' => $row['Put into Portal before PromiseTime'],
+            'portal_compartments_used'    => $row['Portal Compartments Used']
+        ];
     }
 
+    foreach (array_chunk($rows, 500) as $batch) {
+        DetailOrder::upsert(
+            $batch,
+            ['franchise_store', 'business_date', 'order_id'],
+            [
+                'date_time_placed',
+                'date_time_fulfilled',
+                'royalty_obligation',
+                'quantity',
+                'customer_count',
+                'taxable_amount',
+                'non_taxable_amount',
+                'tax_exempt_amount',
+                'non_royalty_amount',
+                'sales_tax',
+                'employee',
+                'gross_sales',
+                'occupational_tax',
+                'override_approval_employee',
+                'order_placed_method',
+                'delivery_tip',
+                'delivery_tip_tax',
+                'order_fulfilled_method',
+                'delivery_fee',
+                'modified_order_amount',
+                'delivery_fee_tax',
+                'modification_reason',
+                'payment_methods',
+                'delivery_service_fee',
+                'delivery_service_fee_tax',
+                'refunded',
+                'delivery_small_order_fee',
+                'delivery_small_order_fee_tax',
+                'transaction_type',
+                'store_tip_amount',
+                'promise_date',
+                'tax_exemption_id',
+                'tax_exemption_entity_name',
+                'user_id',
+                'hnrOrder',
+                'broken_promise',
+                'portal_eligible',
+                'portal_used',
+                'put_into_portal_before_promise_time',
+                'portal_compartments_used'
+            ]
+        );
+    }
+
+    return $rows;
+}
+
+
+
+
+  private function processOrderLine($filePath)
+{
+    $data = $this->readCsv($filePath);
+    $rows = [];
+
+    foreach ($data as $row) {
+
+        $dateTimePlaced    = $this->parseDateTime($row['DateTimePlaced']);
+        $dateTimeFulfilled = $this->parseDateTime($row['DateTimeFulfilled']);
+
+        $rows[] = [
+            'franchise_store'             => $row['FranchiseStore'],
+            'business_date'               => $row['BusinessDate'],
+            'date_time_placed'            => $dateTimePlaced,
+            'date_time_fulfilled'         => $dateTimeFulfilled,
+            'net_amount'                  => $row['NetAmount'],
+            'quantity'                    => $row['Quantity'],
+            'royalty_item'                => $row['RoyaltyItem'],
+            'taxable_item'                => $row['TaxableItem'],
+            'order_id'                    => $row['OrderId'],
+            'item_id'                     => $row['ItemId'],
+            'menu_item_name'              => $row['MenuItemName'],
+            'menu_item_account'           => $row['MenuItemAccount'],
+            'bundle_name'                 => $row['BundleName'],
+            'employee'                    => $row['Employee'],
+            'override_approval_employee'  => $row['OverrideApprovalEmployee'],
+            'order_placed_method'         => $row['OrderPlacedMethod'],
+            'order_fulfilled_method'      => $row['OrderFulfilledMethod'],
+            'modified_order_amount'       => $row['ModifiedOrderAmount'],
+            'modification_reason'         => $row['ModificationReason'],
+            'payment_methods'             => $row['PaymentMethods'],
+            'refunded'                    => $row['Refunded'],
+            'tax_included_amount'         => $row['TaxIncludedAmount']
+        ];
+    }
+
+    foreach (array_chunk($rows, 500) as $batch) {
+        OrderLine::upsert(
+            $batch,
+            ['franchise_store', 'business_date', 'order_id', 'item_id'],
+            [
+                'date_time_placed',
+                'date_time_fulfilled',
+                'net_amount',
+                'quantity',
+                'royalty_item',
+                'taxable_item',
+                'menu_item_name',
+                'menu_item_account',
+                'bundle_name',
+                'employee',
+                'override_approval_employee',
+                'order_placed_method',
+                'order_fulfilled_method',
+                'modified_order_amount',
+                'modification_reason',
+                'payment_methods',
+                'refunded',
+                'tax_included_amount'
+            ]
+        );
+    }
+
+    return $rows;
+}
 
 
     private function readCsv($filePath)
