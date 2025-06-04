@@ -225,9 +225,22 @@ class FinanceDataImporter extends Command
                 ->count();
 
             // Agent and AI fields - not found yet in the original code
-            $ONLINE_ORDERING_Pay_In_Store = 0;
-            $Agent_Pre_Paid = 0;
-            $Agent_Pay_InStore = 0;
+            $ONLINE_ORDERING_Pay_In_Store =$detailOrders
+            ->whereIn('order_placed_method', ['Mobile' , 'Website'])
+            ->whereIn('order_fulfilled_method',['Register','Drive-Thru'])
+            ->Count();
+
+            $Agent_Pre_Paid = $detailOrders
+            ->where('order_placed_method', 'SoundHoundAgent')
+            ->where('order_fulfilled_method','Delivery')
+            ->Count();
+
+            $Agent_Pay_In_Store = $detailOrders
+            ->where('order_placed_method', 'SoundHoundAgent')
+            ->whereIn('order_fulfilled_method',['Register','Drive-Thru'])
+            ->Count();
+
+
             $AI_Pre_Paid = 0;
             $AI_Pay_InStore = 0;
 
@@ -275,15 +288,24 @@ class FinanceDataImporter extends Command
                 $Gift_Card_Non_Royalty;
 
 
+
+            $Cash_Drop = $financialViews
+            ->where('sub_account', 'Cash Drop Total')
+            ->sum('amount');
+
+            $Tip_Drop_Total = $financialViews
+            ->where('sub_account', 'Tip Drop Total')
+            ->sum('amount');
+
+
+            $Cash_Drop_Total = $Cash_Drop + $Tip_Drop_Total;
             //check this
-            $Cash_Sales = $financialViews
-                ->where('sub_account', 'Cash-Check-Deposit')
-                ->sum('amount');
-            $Cash_Drop_Total = $financialViews
-                ->where('sub_account', 'Cash Drop Total')
-                ->sum('amount');
+
+
+
+
             $Over_Short = $financialViews
-                ->where('sub_account', 'Over-Short')
+                ->where('sub_account', 'Over-Short-Operating')
                 ->sum('amount');
             $Payouts = $financialViews
                 ->where('sub_account', 'Payouts')
@@ -332,7 +354,7 @@ class FinanceDataImporter extends Command
             $data['ONLINE_ORDERING_Online_Order_Quantity'] = $ONLINE_ORDERING_Online_Order_Quantity;
             $data['ONLINE_ORDERING_Pay_In_Store'] = $ONLINE_ORDERING_Pay_In_Store;
             $data['Agent_Pre_Paid'] = $Agent_Pre_Paid;
-            $data['Agent_Pay_InStore'] = $Agent_Pay_InStore;
+            $data['Agent_Pay_InStore'] = $Agent_Pay_In_Store;
             $data['AI_Pre_Paid'] = $AI_Pre_Paid;
             $data['AI_Pay_InStore'] = $AI_Pay_InStore;
             $data['PrePaid_Cash_Orders'] = $PrePaid_Cash_Orders;
@@ -395,7 +417,7 @@ class FinanceDataImporter extends Command
                 'ONLINE_ORDERING_Online_Order_Quantity' => $ONLINE_ORDERING_Online_Order_Quantity,
                 'ONLINE_ORDERING_Pay_In_Store' => $ONLINE_ORDERING_Pay_In_Store,
                 'Agent_Pre_Paid' => $Agent_Pre_Paid,
-                'Agent_Pay_InStore' => $Agent_Pay_InStore,
+                'Agent_Pay_InStore' => $Agent_Pay_In_Store,
                 'AI_Pre_Paid' => $AI_Pre_Paid,
                 'AI_Pay_InStore' => $AI_Pay_InStore,
                 'PrePaid_Cash_Orders' => $PrePaid_Cash_Orders,

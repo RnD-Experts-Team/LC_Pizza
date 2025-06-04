@@ -775,12 +775,18 @@ class LCReportDataService
             ->where('sub_account', 'Cash-Check-Deposit')
             ->sum('amount');
 
-            $Cash_Drop_Total = $financeRows
+            $Cash_Drop = $financeRows
             ->where('sub_account', 'Cash Drop Total')
             ->sum('amount');
 
+            $Tip_Drop_Total = $financeRows
+            ->where('sub_account', 'Tip Drop Total')
+            ->sum('amount');
+
+            $Cash_Drop_Total = $Cash_Drop + $Tip_Drop_Total;
+
             $Over_Short = $financeRows
-            ->where('sub_account', 'Over-Short')
+            ->where('sub_account', 'Over-Short-Operating')
             ->sum('amount') ;
 
             $Payouts = $financeRows
