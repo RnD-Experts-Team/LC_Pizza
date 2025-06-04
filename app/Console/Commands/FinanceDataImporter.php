@@ -288,6 +288,9 @@ class FinanceDataImporter extends Command
                 $Gift_Card_Non_Royalty;
 
 
+            $Cash_Sales = $financialViews
+            ->where('sub_account', 'Cash-Check-Deposit')
+            ->sum('amount');
 
             $Cash_Drop = $financialViews
             ->where('sub_account', 'Cash Drop Total')
