@@ -658,11 +658,21 @@ class LCReportDataService
             ->where('sub_account','Delivery-Fees')
             ->sum('amount');
 
-            $Delivery_Late_to_Portal_Fee_Count =$OrderRows
-            ->where('delivery_fee','<>', 0)
-            ->where('put_into_portal_before_promise_time','No')
-            ->where('portal_eligible','Yes')
-            ->count();
+            $Delivery_Late_to_Portal_Fee_Count = $OrderRows
+             ->where('delivery_fee', '<>', 0)
+             ->whereIn('order_placed_method', ['Mobile', 'Website'])
+             ->where('order_fulfilled_method', 'Delivery')
+             ->filter(function($order) {
+        if (empty($order->time_loaded_into_portal) || empty($order->promise_date)) {
+            return false;
+        }
+
+        $timeLoaded = Carbon::parse($order->time_loaded_into_portal);
+        $promisePlus5 = Carbon::parse($order->promise_date)->addMinutes(5);
+
+        return $timeLoaded->greaterThan($promisePlus5);
+    })
+    ->count();
 
             $Delivery_Late_to_Portal_Fee = $Delivery_Late_to_Portal_Fee_Count * 0.5;
 
@@ -1343,6 +1353,7 @@ private function processFinancialView($filePath)
         $dateTimePlaced    = $this->parseDateTime($row['DateTimePlaced']);
         $dateTimeFulfilled = $this->parseDateTime($row['DateTimeFulfilled']);
         $promiseDate       = $this->parseDateTime($row['PromiseDate']);
+        $timeLoadedIntoPortal = $this->parseDateTime($row['Time Loaded into Portal']);
 
         $rows[] = [
             'franchise_store'             => $row['FranchiseStore'],
@@ -1387,7 +1398,8 @@ private function processFinancialView($filePath)
             'portal_eligible'             => $row['PortalEligible'],
             'portal_used'                 => $row['PortalUsed'],
             'put_into_portal_before_promise_time' => $row['Put into Portal before PromiseTime'],
-            'portal_compartments_used'    => $row['Portal Compartments Used']
+            'portal_compartments_used'    => $row['Portal Compartments Used'],
+            'time_loaded_into_portal'     => $timeLoadedIntoPortal
         ];
     }
 
@@ -1435,7 +1447,8 @@ private function processFinancialView($filePath)
                 'portal_eligible',
                 'portal_used',
                 'put_into_portal_before_promise_time',
-                'portal_compartments_used'
+                'portal_compartments_used',
+                'time_loaded_into_portal'
             ]
         );
     }

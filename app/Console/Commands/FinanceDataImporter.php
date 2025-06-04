@@ -183,11 +183,21 @@ class FinanceDataImporter extends Command
                 ->sum('amount');
 
 
-            $Delivery_Late_to_Portal_Fee_Count =$detailOrders
-            ->where('delivery_fee','<>', 0)
-            ->where('put_into_portal_before_promise_time','No')
-            ->where('portal_eligible','Yes')
-            ->count();
+            $Delivery_Late_to_Portal_Fee_Count = $detailOrders
+             ->where('delivery_fee', '<>', 0)
+             ->whereIn('order_placed_method', ['Mobile', 'Website'])
+             ->where('order_fulfilled_method', 'Delivery')
+             ->filter(function($order) {
+        if (empty($order->time_loaded_into_portal) || empty($order->promise_date)) {
+            return false;
+        }
+
+        $timeLoaded = Carbon::parse($order->time_loaded_into_portal);
+        $promisePlus5 = Carbon::parse($order->promise_date)->addMinutes(5);
+
+        return $timeLoaded->greaterThan($promisePlus5);
+    })
+    ->count();
 
             $Delivery_Late_to_Portal_Fee = $Delivery_Late_to_Portal_Fee_Count * 0.5;
 

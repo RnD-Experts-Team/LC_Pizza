@@ -53,7 +53,8 @@ class DetailOrder extends Model
         'portal_eligible',
         'portal_used',
         'put_into_portal_before_promise_time',
-        'portal_compartments_used'
+        'portal_compartments_used',
+        'time_loaded_into_portal'
 
     ];
 }
