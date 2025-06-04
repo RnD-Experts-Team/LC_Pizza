@@ -402,6 +402,12 @@ class FinanceDataImporter extends Command
                 'Gift_Card_Non_Royalty' => $Gift_Card_Non_Royalty,
                 'Total_Non_Royalty_Sales' => $Total_Non_Royalty_Sales,
                 'Total_Non_Delivery_Tips' => $Total_Non_Delivery_Tips,
+
+                'Sales_Tax_Food_Beverage' => $Sales_Tax_Food_Beverage,
+                'Sales_Tax_Delivery' => $Sales_Tax_Delivery,
+
+
+
                 'TOTAL_Sales_TaxQuantity' => $TOTAL_Sales_TaxQuantity,
                 'DELIVERY_Quantity' => $DELIVERY_Quantity,
                 'Delivery_Fee' => $Delivery_Fee,
