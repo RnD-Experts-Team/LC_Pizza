@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 class AddCompositeUniqueIndexesToUpsertedTables extends Migration
 {
@@ -28,7 +29,6 @@ class AddCompositeUniqueIndexesToUpsertedTables extends Migration
             ['final_summaries', ['franchise_store', 'business_date'], 'unique_final_summary'],
             ['hourly_sales', ['franchise_store', 'business_date', 'hour'], 'unique_hourly_sales'],
             ['waste', ['business_date', 'franchise_store', 'cv_item_id', 'waste_date_time'], 'unique_waste'],
-            ['channel_data', ['store', 'date', 'category', 'sub_category', 'order_placed_method', 'order_fulfilled_method'], 'unique_channel_data'],
         ];
 
         foreach ($tables as [$tableName, $columns, $indexName]) {
@@ -38,10 +38,20 @@ class AddCompositeUniqueIndexesToUpsertedTables extends Migration
             });
         }
 
-        // // Special index for channel_data
-        // Schema::table('channel_data', function (Blueprint $table) {
-        //     $table->index(['store', 'date', 'category', 'sub_category'], 'index_channel_data');
-        // });
+        // Add index to `channel_data` using prefix lengths to avoid key size overflow
+        $this->safeDropUnique('channel_data', 'unique_channel_data');
+
+        DB::statement("
+            ALTER TABLE channel_data
+            ADD UNIQUE INDEX unique_channel_data (
+                store,
+                date,
+                category(100),
+                sub_category(100),
+                order_placed_method(100),
+                order_fulfilled_method(100)
+            )
+        ");
     }
 
     public function down()
@@ -62,17 +72,12 @@ class AddCompositeUniqueIndexesToUpsertedTables extends Migration
             ['final_summaries', 'unique_final_summary'],
             ['hourly_sales', 'unique_hourly_sales'],
             ['waste', 'unique_waste'],
-             ['channel_data', 'unique_channel_data'],
-
+            ['channel_data', 'unique_channel_data'],
         ];
 
         foreach ($indexMap as [$table, $index]) {
             $this->safeDropUnique($table, $index);
         }
-
-        // Schema::table('channel_data', function (Blueprint $table) {
-        //     $table->dropIndex('index_channel_data');
-        // });
     }
 
     private function safeDropUnique(string $table, string $index): void
@@ -82,7 +87,7 @@ class AddCompositeUniqueIndexesToUpsertedTables extends Migration
                 $table->dropUnique($index);
             });
         } catch (\Throwable $e) {
-
+            // silent fail
         }
     }
 }
