@@ -74,7 +74,7 @@ class LogicsAndQueriesServices
         ];
 
         $summaryRows = [];
-        $summaryDate = $selectedDate ?? now();
+        
         Log::info('Started the store loop');
         foreach ($allFranchiseStores as $store) {
 

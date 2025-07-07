@@ -55,7 +55,6 @@ class ImportFinalSummaryCommand extends Command
         }
 
 
-
         // Make the combinations unique by a composite key.
         $combinations = $combinations->unique(function ($item) {
             return $item->franchise_store . '_' . $item->business_date;

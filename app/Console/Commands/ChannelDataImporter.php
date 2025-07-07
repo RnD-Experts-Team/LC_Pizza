@@ -83,10 +83,10 @@ class ChannelDataImporter extends Command
             // Optional: clear out any existing summaries for this date
             ChannelData::where('date', $date)->delete();
 
-            // 2) Load all orders for that date
+        // 2) Load all orders for that date
             $detailOrders = DetailOrder::where('business_date', $date)->get();
 
-            // 3) Get all stores for that date
+        // 3) Get all stores for that date
             $stores = $detailOrders->pluck('franchise_store')->unique();
 
             $summaryRows = [];
