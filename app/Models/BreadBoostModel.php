@@ -19,7 +19,7 @@ class BreadBoostModel extends Model
      * @var array
      */
     protected $fillable = [
-        'date',
+        'business_date',
         'franchise_store',
         'classic_order',
         'classic_with_bread',
@@ -33,7 +33,7 @@ class BreadBoostModel extends Model
      * @var array
      */
     protected $casts = [
-        'date' => 'date',
+        'business_date' => 'date',
         'classic_order' => 'integer',
         'classic_with_bread' => 'integer',
         'other_pizza_order' => 'integer',

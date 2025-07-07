@@ -3,7 +3,8 @@
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Carbon\Carbon;
-use App\Services\LCReportDataService;
+use App\Services\Main\LCReportDataService;
+
 use Illuminate\Support\Facades\Log;
 
 Artisan::command('inspire', function () {
@@ -17,8 +18,8 @@ Artisan::command('lc:import-report-data', function () {
     $this->info('Starting the import of LC Report Data.');
 
 
-     $date = Carbon::yesterday()->format('Y-m-d');
-   //$date = '2025-05-26';
+    // $date = Carbon::yesterday()->format('Y-m-d');
+   $date = '2025-07-06';
 
     $this->info('Importing data for date: ' . $date);
 

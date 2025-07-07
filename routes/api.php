@@ -1,6 +1,4 @@
 <?php
-
-
 use Illuminate\Support\Facades\Route;
 use App\Http\Middleware\ApiKeyMiddleware;
 use App\Http\Controllers\Data\ExportFinanceController;
@@ -9,6 +7,8 @@ use App\Http\Controllers\Data\ExportChannelDataController;
 use App\Http\Controllers\Data\ExportDeliveryOrderSummaryController;
 use App\Http\Controllers\Data\OnlineDiscountProgramExporterController;
 use App\Http\Controllers\Data\ThirdPartyMarketplaceOrderExporter;
+
+use App\Http\Controllers\Data\ExportingController;
 
 use App\Http\Controllers\Data\ExportController;
 Route::get('/final-summary-json/{start_date?}/{end_date?}/{franchise_store?}', [ExportController::class, 'getFinalSummaryJson']);
@@ -23,6 +23,7 @@ Route::get('/hourly-sales-csv/{start_date?}/{end_date?}/{franchise_store?}', [Ex
 use App\Http\Controllers\Data\ExportUpsellingController;
 Route::get('/upselling-summary-json/{start_date?}/{end_date?}/{franchise_store?}', [ExportUpsellingController::class, 'getUpsellingJson']);
 Route::get('/upselling-summary-csv/{start_date?}/{end_date?}/{franchise_store?}', [ExportUpsellingController::class, 'exportUpsellingCsv']);
+
 // Finance Data Export Routes
 Route::get('/finance/export-csv/{start_date?}/{end_date?}/{franchise_store?}', [ExportFinanceController::class, 'exportCSVs']);
 Route::get('/finance/export-json/{start_date?}/{end_date?}/{franchise_store?}', [ExportFinanceController::class, 'exportJson']);
@@ -62,5 +63,10 @@ Route::middleware(ApiKeyMiddleware::class)->group(function () {
     Route::get('/export/delivery-order-summary/excel/{startDate?}/{endDate?}/{franchiseStore?}', [ExportDeliveryOrderSummaryController::class, 'exportToExcel']);
     Route::get('/export/online-discount-program/excel/{startDate?}/{endDate?}/{franchiseStore?}', [OnlineDiscountProgramExporterController::class, 'exportToExcel']);
     Route::get('/export/third-party-marketplace-orders/excel/{startDate?}/{endDate?}/{franchiseStore?}', [ThirdPartyMarketplaceOrderExporter::class, 'exportToExcel']);
+
+    // exporting route csv and excel
+    Route::get('/export/{model}/csv/{start?}/{end?}/{stores?}', [ExportingController::class, 'exportCSV']);
 });
 
+// exporting route json
+Route::get('/export/{model}/json/{start?}/{end?}/{stores?}', [ExportingController::class, 'exportJson']);

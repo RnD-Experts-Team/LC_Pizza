@@ -10,7 +10,7 @@ class ChannelData extends Model
 
     protected $fillable = [
         'store',
-        'date',
+        'business_date',
         'category',
         'sub_category',
         'order_placed_method',
@@ -19,7 +19,7 @@ class ChannelData extends Model
     ];
 
     protected $casts = [
-        'date' => 'date',
+        'business_date' => 'date',
         'amount' => 'decimal:2'
     ];
 }

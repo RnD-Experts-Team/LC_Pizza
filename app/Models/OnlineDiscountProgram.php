@@ -21,7 +21,7 @@ class OnlineDiscountProgram extends Model
     protected $fillable = [
         'franchise_store',
         'order_id',
-        'date',
+        'business_date',
         'pay_type',
         'original_subtotal',
         'modified_subtotal',
@@ -35,7 +35,7 @@ class OnlineDiscountProgram extends Model
      */
     protected $casts = [
         'order_id' => 'integer',
-        'date' => 'date',
+        'business_date' => 'date',
         'original_subtotal' => 'decimal:2',
         'modified_subtotal' => 'decimal:2'
     ];

@@ -19,7 +19,7 @@ class DeliveryOrderSummary extends Model
      * @var array
      */
     protected $fillable = [
-        'date',
+        'business_date',
         'franchise_store',
         'orders_count',
         'product_cost',
@@ -44,7 +44,7 @@ class DeliveryOrderSummary extends Model
      * @var array
      */
     protected $casts = [
-        'date' => 'date',
+        'business_date' => 'date',
         'orders_count' => 'integer',
         'product_cost' => 'decimal:2',
         'tax' => 'decimal:2',

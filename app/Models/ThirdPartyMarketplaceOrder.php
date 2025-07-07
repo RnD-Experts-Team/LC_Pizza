@@ -19,7 +19,7 @@ class ThirdPartyMarketplaceOrder extends Model
      * @var array
      */
     protected $fillable = [
-        'date',
+        'business_date',
         'franchise_store',
         'doordash_product_costs_Marketplace',
         'doordash_tax_Marketplace',
@@ -38,7 +38,7 @@ class ThirdPartyMarketplaceOrder extends Model
      * @var array
      */
     protected $casts = [
-        'date' => 'date',
+        'business_date' => 'date',
         'doordash_product_costs' => 'decimal:2',
         'doordash_tax' => 'decimal:2',
         'doordash_order_total' => 'decimal:2',
