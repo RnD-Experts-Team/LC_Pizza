@@ -49,17 +49,17 @@ class LogicDataImporter extends Command
                 $dates[] = $date->format('Y-m-d');
             }
         }
-        Log::info( 'the dates array'. json_encode($dates));
+        Log::info( 'the dates array'. print_r($dates));
 
         //Start with the date loop
         foreach ($dates as $date) {
-            // Log::info( 'start the loop for '.$date);
+             Log::info( 'start the loop for '.$date);
 
             $Data = $this->processModelData($date);
-            // Log::info( 'Got All data for '.$date);
+             Log::info( 'Got All data for '. json_encode($Data));
 
             $this->logic->DataLoop($Data,$date);
-            // Log::info( 'finished the Logic loop');
+             Log::info( 'finished the Logic loop');
         }
         Log::info( 'All data updated');
     }

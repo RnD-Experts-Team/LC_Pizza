@@ -74,7 +74,7 @@ class LogicsAndQueriesServices
         ];
 
         $summaryRows = [];
-        
+
         Log::info('Started the store loop');
         foreach ($allFranchiseStores as $store) {
 
