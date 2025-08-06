@@ -1,43 +1,55 @@
 <?php
 namespace App\Services\Helper;
 
-use App\Models\BreadBoostModel;//*
-use App\Models\CashManagement;//*
-use App\Models\ChannelData;//**
-use App\Models\DeliveryOrderSummary;//*
-use App\Models\DetailOrder;//*
-use App\Models\FinalSummary;//*
-use App\Models\FinanceData;//*
-use App\Models\FinancialView;//*
-use App\Models\HourlySales;//
-use App\Models\OnlineDiscountProgram;//
-use App\Models\OrderLine;//*
-use App\Models\SummaryItem;//*
-use App\Models\SummarySale;//*
-use App\Models\SummaryTransaction;//*
-use App\Models\ThirdPartyMarketplaceOrder;//*
-use App\Models\Waste;//*
+use Illuminate\Database\Eloquent\Model;
 
 //just inserting functions using models in the db
 
 class InsertDataServices{
 
-    /**  
-     * @param  class-string<Model>  $model  
-     * @param  array<int,array>     $rows  
-     * @param  string[]             $uniqueBy  
-     * @param  string[]             $updateCols  
+    /**
+     * @param  class-string<Model>  $model
+     * @param  array<int,array>     $rows
+     * @param  string[]             $uniqueBy
+     * @param  string[]             $updateCols
      */
     // upsert rows function (uses the model name, rows[witch have the new data], uniqueBy array, updateCols)
-    protected function upsertRows(string $model, array $rows, array $uniqueBy, array $updateCols): void
+    protected function upsertRows(string $table, array $rows, array $uniqueBy, array $updateCols): void
     {
         if (empty($rows)) {
             return;
         }
-        $model::upsert($rows, $uniqueBy, $updateCols);
+        $table::upsert($rows, $uniqueBy, $updateCols);
     }
 
-    // array with all the models 
+    //insertHelper
+    protected function insertHelper(array $data, string $tableName){
+        $cfg  = $this->tables[$tableName];
+
+        $this->upsertRows(
+            $cfg['model'],
+            $data ,
+            $cfg['unique'],
+            $cfg['updateCols']
+        );
+    }
+    //loopInsertHelper
+    protected function loopInsertHelper(array $data, string $tableName, int $chunkSize)
+    {
+        if (empty($data)) {
+            return;
+        }
+
+        $cfg = $this->tables[$tableName];
+        $model     = $cfg['model'];
+        $uniqueBy  = $cfg['unique'];
+        $updateCols= $cfg['updateCols'];
+
+        foreach (array_chunk($data, $chunkSize) as $batch) {
+            $this->upsertRows($model, $batch, $uniqueBy, $updateCols);
+        }
+    }
+    // array with all the models
     protected array $tables = [
         'bread_boost' => [
             'model'      => \App\Models\BreadBoostModel::class,
@@ -178,7 +190,7 @@ class InsertDataServices{
                 'verified_by',
             ]
         ],
-        'wast' => [
+        'waste' => [
             'model'      => \App\Models\Waste::class,
             'unique'     => ['business_date', 'franchise_store', 'cv_item_id', 'waste_date_time'],
             'updateCols' => ['menu_item_name', 'expired', 'produce_date_time', 'waste_reason', 'cv_order_id', 'waste_type', 'item_cost', 'quantity']
@@ -329,275 +341,95 @@ class InsertDataServices{
                 'order_count'
             ]
         ],
-
-
     ];
 
     //BreadBoostModel
-    public function insertBreadBoostData(array $data): void
-    {
-        $cfg  = $this->tables['bread_boost'];
+    public function insertBreadBoostData(array $data): void{
 
-        $this->upsertRows(
-            $cfg['model'],
-            $data ,  
-            $cfg['unique'],
-            $cfg['updateCols']
-        );
-
+        $this->insertHelper($data,'bread_boost');
     }
-
     //DeliveryOrderSummary
     public function insertDeliveryOrderSummaryData(array $data){
-        $cfg  = $this->tables['delivery_order_summary'];
 
-        $this->upsertRows(
-            $cfg['model'],
-            $data ,  
-            $cfg['unique'],
-            $cfg['updateCols']
-        );
-        
+        $this->insertHelper($data,'delivery_order_summary');
     }
-
     //DeliveryOrderSummary
-    public function insertOnlineDiscountProgramData(array $data)
-    {
-        $cfg  = $this->tables['online_discount_program'];
+    public function insertOnlineDiscountProgramData(array $data){
 
-        $this->upsertRows(
-            $cfg['model'],
-            $data ,  
-            $cfg['unique'],
-            $cfg['updateCols']
-        );
-        
+        $this->insertHelper($data,'online_discount_program');
     }
-
     //ThirdPartyMarketplaceOrder
     public function insertThirdPartyMarketplaceOrder(array $data){
-        $cfg  = $this->tables['third_party_marketplace_order'];
 
-        $this->upsertRows(
-            $cfg['model'],
-            $data ,  
-            $cfg['unique'],
-            $cfg['updateCols']
-        );
-        
+       $this->insertHelper($data,'third_party_marketplace_order');
     }
-
     //FinanceData
-    public function insertFinanceData(array $data): void
-    {
-        $cfg  = $this->tables['finance_data'];
+    public function insertFinanceData(array $data): void{
 
-        $this->upsertRows(
-            $cfg['model'],
-            $data ,  
-            $cfg['unique'],
-            $cfg['updateCols']
-        );
-
-        
+        $this->insertHelper($data,'finance_data');
     }
-
     //FinalSummary
     public function insertFinalSummary($data){
-   
 
-        $cfg  = $this->tables['final_summary'];
-
-            $this->upsertRows(
-                $cfg['model'],
-                $data ,  
-                $cfg['unique'],
-                $cfg['updateCols']
-            );
-        
+        $this->insertHelper($data,'final_summary');
     }
+    //hourlySales
+    public function insertHourlySales($data){
+
+        $this->insertHelper($data,'hourly_sales');
+     }
 
     //CashManagement
     public function insertCashManagement(array $data, int $chunkSize = 500){
 
-        if (empty($data)) {
-            return;
-        }
-
-        $cfg = $this->tables['cash_management'];
-        $model     = $cfg['model'];    
-        $uniqueBy  = $cfg['unique']; 
-        $updateCols= $cfg['updateCols'];
-
-        foreach (array_chunk($data, $chunkSize) as $batch) {
-            $this->upsertRows($model, $batch, $uniqueBy, $updateCols);
-        }
+        $this->loopInsertHelper($data,'cash_management',$chunkSize);
     }
-
     //Waste
     public function insertWaste(array $data, int $chunkSize = 500){
 
-        if (empty($data)) {
-            return;
-        }
-
-        $cfg = $this->tables['wast'];
-        $model     = $cfg['model'];    
-        $uniqueBy  = $cfg['unique']; 
-        $updateCols= $cfg['updateCols'];
-
-        foreach (array_chunk($data, $chunkSize) as $batch) {
-            $this->upsertRows($model, $batch, $uniqueBy, $updateCols);
-        }
-
+        $this->loopInsertHelper($data,'waste',$chunkSize);
     }
-
     //FinancialView
     public function insertFinancialView(array $data, int $chunkSize = 500){
 
-        if (empty($data)) {
-            return;
-        }
-
-        $cfg = $this->tables['financial_view'];
-        $model     = $cfg['model'];    
-        $uniqueBy  = $cfg['unique']; 
-        $updateCols= $cfg['updateCols'];
-
-        foreach (array_chunk($data, $chunkSize) as $batch) {
-            $this->upsertRows($model, $batch, $uniqueBy, $updateCols);
-        }
+        $this->loopInsertHelper($data,'financial_view',$chunkSize);
     }
-
     //SummaryItems
     public function insertSummaryItems(array $data, int $chunkSize = 500){
-        if (empty($data)) {
-            return;
-        }
-        $cfg = $this->tables['summary_items'];
-        $model     = $cfg['model'];    
-        $uniqueBy  = $cfg['unique']; 
-        $updateCols= $cfg['updateCols'];
-
-        foreach (array_chunk($data, $chunkSize) as $batch) {
-            $this->upsertRows($model, $batch, $uniqueBy, $updateCols);
-        }
-
+        $this->loopInsertHelper($data,'summary_items',$chunkSize);
     }
-
     //SummarySale
     public function insertSummarySale(array $data, int $chunkSize = 500){
 
-        if (empty($data)) {
-            return;
-        }
-        $cfg = $this->tables['summary_sale'];
-        $model     = $cfg['model'];    
-        $uniqueBy  = $cfg['unique']; 
-        $updateCols= $cfg['updateCols'];
-
-        foreach (array_chunk($data, $chunkSize) as $batch) {
-            $this->upsertRows($model, $batch, $uniqueBy, $updateCols);
-        }
+        $this->loopInsertHelper($data,'summary_sale',$chunkSize);
     }
-
     //SummaryTransactions
     public function insertSummaryTransactions(array $data, int $chunkSize = 500){
-        
-         if (empty($data)) {
-            return;
-        }
-        $cfg = $this->tables['summary_transactions'];
-        $model     = $cfg['model'];    
-        $uniqueBy  = $cfg['unique']; 
-        $updateCols= $cfg['updateCols'];
 
-        foreach (array_chunk($data, $chunkSize) as $batch) {
-            $this->upsertRows($model, $batch, $uniqueBy, $updateCols);
-        }
-
+        $this->loopInsertHelper($data,'summary_transactions',$chunkSize);
     }
-
     //DetailOrders
     public function insertDetailOrders(array $data, int $chunkSize = 500){
-      
-        if (empty($data)) {
-            return;
-        }
-        $cfg = $this->tables['detail_orders'];
-        $model     = $cfg['model'];    
-        $uniqueBy  = $cfg['unique']; 
-        $updateCols= $cfg['updateCols'];
 
-        foreach (array_chunk($data, $chunkSize) as $batch) {
-            $this->upsertRows($model, $batch, $uniqueBy, $updateCols);
-        }
+        $this->loopInsertHelper($data,'detail_orders',$chunkSize);
     }
-
     //OrderLine
     public function insertOrderLine(array $data, int $chunkSize = 500){
-        if (empty($data)) {
-            return;
-        }
-        $cfg = $this->tables['order_line'];
-        $model     = $cfg['model'];    
-        $uniqueBy  = $cfg['unique']; 
-        $updateCols= $cfg['updateCols'];
 
-        foreach (array_chunk($data, $chunkSize) as $batch) {
-            $this->upsertRows($model, $batch, $uniqueBy, $updateCols);
-        }
-
+        $this->loopInsertHelper($data,'order_line',$chunkSize);
     }
 
     /**
-     * Insert or update channel data in batches.
-     *
-     * @param  array  $rows       List of rows; each row is an associative array:
-     *                            [
-     *                              'store'                  => ...,
-     *                              'business_date'          => ...,
-     *                              'category'               => ...,
-     *                              'sub_category'           => ...,
-     *                              'order_placed_method'    => ...,
-     *                              'order_fulfilled_method' => ...,
-     *                              'amount'                 => ...,
-     *                            ]
      * @param  int    $chunkSize  How many rows per batch (default 1000)
      * @return void
      */
-    public function insertChannelData(array $rows, int $chunkSize = 1000): void
-    {
-        if (empty($rows)) {
-            return;
-        }
+    public function insertChannelData(array $data, int $chunkSize = 1000): void{
 
-        $uniqueBy   = [
-            'store',
-            'business_date',
-            'category',
-            'sub_category',
-            'order_placed_method',
-            'order_fulfilled_method',
-        ];
-        $updateCols = ['amount'];
-
-        foreach (array_chunk($rows, $chunkSize) as $batch) {
-            ChannelData::upsert($batch, $uniqueBy, $updateCols);
-        }
+        $this->loopInsertHelper($data,'channel_data',$chunkSize);
     }
 
-    //hourlySales
-    public function insertHourlySales($data){
 
-        $cfg  = $this->tables['hourly_sales'];
 
-        $this->upsertRows(
-            $cfg['model'],
-            $data ,  
-            $cfg['unique'],
-            $cfg['updateCols']
-        );
-    
-     }
+
+
 }
