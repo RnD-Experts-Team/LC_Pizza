@@ -60,21 +60,21 @@ class ImportAndProcessCsvServices {
         $rows = [];
 
         foreach ($data as $row) {
-            $createDatetime = $this->parseDateTime($row['CreateDatetime']);
-            $verifiedDatetime = $this->parseDateTime($row['VerifiedDatetime']);
+            $createDatetime = $this->parseDateTime($row['createdatetime']);
+            $verifiedDatetime = $this->parseDateTime($row['verifieddatetime']);
 
             $rows[] = [
-                'franchise_store' => $row['FranchiseStore'],
-                'business_date' => $row['BusinessDate'],
+                'franchise_store' => $row['franchisestore'],
+                'business_date' => $row['businessdate'],
                 'create_datetime' => $createDatetime,
                 'verified_datetime' => $verifiedDatetime,
-                'till' => $row['Till'],
-                'check_type' => $row['CheckType'],
-                'system_totals' => $row['SystemTotals'],
-                'verified' => $row['Verified'],
-                'variance' => $row['Variance'],
-                'created_by' => $row['CreatedBy'],
-                'verified_by' => $row['VerifiedBy']
+                'till' => $row['till'],
+                'check_type' => $row['checktype'],
+                'system_totals' => $row['systemtotals'],
+                'verified' => $row['verified'],
+                'variance' => $row['variance'],
+                'created_by' => $row['createdby'],
+                'verified_by' => $row['verifiedby']
             ];
         }
         $this->inserter->insertCashManagement($rows);
@@ -95,22 +95,22 @@ class ImportAndProcessCsvServices {
         $rows = [];
 
         foreach ($data as $row) {
-            $wasteDateTime = $this->parseDateTime($row['WasteDateTime']);
-            $produceDateTime = $this->parseDateTime($row['ProduceDateTime']);
+            $wasteDateTime = $this->parseDateTime($row['wastedatetime']);
+            $produceDateTime = $this->parseDateTime($row['producedatetime']);
 
             $rows[] = [
-                'business_date' => $row['BusinessDate'],
-                'franchise_store' => $row['FranchiseStore'],
-                'cv_item_id' => $row['CVItemId'],
-                'menu_item_name' => $row['MenuItemName'],
-                'expired' => strtolower($row['Expired']) === 'yes',
+                'business_date' => $row['businessdate'],
+                'franchise_store' => $row['franchisestore'],
+                'cv_item_id' => $row['cvitemid'],
+                'menu_item_name' => $row['menuitemname'],
+                'expired' => strtolower($row['expired']) === 'yes',
                 'waste_date_time' => $wasteDateTime,
                 'produce_date_time' => $produceDateTime,
-                'waste_reason' => $row['WasteReason'] ?? null,
-                'cv_order_id' => $row['CVOrderId'] ?? null,
-                'waste_type' => $row['WasteType'],
-                'item_cost' => $row['ItemCost'],
-                'quantity' => $row['Quantity'],
+                'waste_reason' => $row['wastereason'] ?? null,
+                'cv_order_id' => $row['cvorderid'] ?? null,
+                'waste_type' => $row['wastetype'],
+                'item_cost' => $row['itemcost'],
+                'quantity' => $row['quantity'],
             ];
         }
         $this->inserter->insertWaste($rows);
@@ -124,11 +124,11 @@ class ImportAndProcessCsvServices {
         $rows = [];
         foreach ($data as $row) {
             $rows[] = [
-                'franchise_store' => $row['FranchiseStore'],
-                'business_date' => $row['BusinessDate'],
-                'area' => $row['Area'],
-                'sub_account' => $row['SubAccount'],
-                'amount' => $row['Amount']
+                'franchise_store' => $row['franchisestore'],
+                'business_date' => $row['businessdate'],
+                'area' => $row['area'],
+                'sub_account' => $row['subaccount'],
+                'amount' => $row['amount']
             ];
         }
 
@@ -143,18 +143,18 @@ class ImportAndProcessCsvServices {
         $rows = [];
         foreach ($data as $row) {
             $rows[] = [
-                'franchise_store' => $row['FranchiseStore'],
-                'business_date' => $row['BusinessDate'],
-                'menu_item_name' => $row['MenuItemName'],
-                'menu_item_account' => $row['MenuItemAccount'],
-                'item_id' => $row['ItemId'],
-                'item_quantity' => $row['ItemQuantity'],
-                'royalty_obligation' => $row['RoyaltyObligation'],
-                'taxable_amount' => $row['TaxableAmount'],
-                'non_taxable_amount' => $row['NonTaxableAmount'],
-                'tax_exempt_amount' => $row['TaxExemptAmount'],
-                'non_royalty_amount' => $row['NonRoyaltyAmount'],
-                'tax_included_amount' => $row['TaxIncludedAmount']
+                'franchise_store' => $row['franchisestore'],
+                'business_date' => $row['businessdate'],
+                'menu_item_name' => $row['menuitemname'],
+                'menu_item_account' => $row['menuitemaccount'],
+                'item_id' => $row['itemid'],
+                'item_quantity' => $row['itemquantity'],
+                'royalty_obligation' => $row['royaltyobligation'],
+                'taxable_amount' => $row['taxableamount'],
+                'non_taxable_amount' => $row['nontaxableamount'],
+                'tax_exempt_amount' => $row['taxexemptamount'],
+                'non_royalty_amount' => $row['nonroyaltyamount'],
+                'tax_included_amount' => $row['taxincludedamount']
             ];
         }
         $this->inserter->insertSummaryItems($rows);
@@ -168,33 +168,33 @@ class ImportAndProcessCsvServices {
 
         foreach ($data as $row) {
             $rows[] = [
-                'franchise_store' => $row['FranchiseStore'],
-                'business_date' => $row['BusinessDate'],
-                'royalty_obligation' => $row['RoyaltyObligation'],
-                'customer_count' => $row['CustomerCount'],
-                'taxable_amount' => $row['TaxableAmount'],
-                'non_taxable_amount' => $row['NonTaxableAmount'],
-                'tax_exempt_amount' => $row['TaxExemptAmount'],
-                'non_royalty_amount' => $row['NonRoyaltyAmount'],
-                'refund_amount' => $row['RefundAmount'],
-                'sales_tax' => $row['SalesTax'],
-                'gross_sales' => $row['GrossSales'],
-                'occupational_tax' => $row['OccupationalTax'],
-                'delivery_tip' => $row['DeliveryTip'],
-                'delivery_fee' => $row['DeliveryFee'],
-                'delivery_service_fee' => $row['DeliveryServiceFee'],
-                'delivery_small_order_fee' => $row['DeliverySmallOrderFee'],
-                'modified_order_amount' => $row['ModifiedOrderAmount'],
-                'store_tip_amount' => $row['StoreTipAmount'],
-                'prepaid_cash_orders' => $row['PrepaidCashOrders'],
-                'prepaid_non_cash_orders' => $row['PrepaidNonCashOrders'],
-                'prepaid_sales' => $row['PrepaidSales'],
-                'prepaid_delivery_tip' => $row['PrepaidDeliveryTip'],
-                'prepaid_in_store_tip_amount' => $row['PrepaidInStoreTipAmount'],
-                'over_short' => $row['OverShort'],
-                'previous_day_refunds' => $row['PreviousDayRefunds'],
-                'saf' => $row['SAF'],
-                'manager_notes' => $row['ManagerNotes']
+                'franchise_store' => $row['franchisestore'],
+                'business_date' => $row['businessdate'],
+                'royalty_obligation' => $row['royaltyobligation'],
+                'customer_count' => $row['customercount'],
+                'taxable_amount' => $row['taxableamount'],
+                'non_taxable_amount' => $row['nontaxableamount'],
+                'tax_exempt_amount' => $row['taxexemptamount'],
+                'non_royalty_amount' => $row['nonroyaltyamount'],
+                'refund_amount' => $row['refundamount'],
+                'sales_tax' => $row['salestax'],
+                'gross_sales' => $row['grosssales'],
+                'occupational_tax' => $row['occupationaltax'],
+                'delivery_tip' => $row['deliverytip'],
+                'delivery_fee' => $row['deliveryfee'],
+                'delivery_service_fee' => $row['deliveryservicefee'],
+                'delivery_small_order_fee' => $row['deliverysmallorderfee'],
+                'modified_order_amount' => $row['modifiedorderamount'],
+                'store_tip_amount' => $row['storetipamount'],
+                'prepaid_cash_orders' => $row['prepaidcashorders'],
+                'prepaid_non_cash_orders' => $row['prepaidnoncashorders'],
+                'prepaid_sales' => $row['prepaidsales'],
+                'prepaid_delivery_tip' => $row['prepaiddeliverytip'],
+                'prepaid_in_store_tip_amount' => $row['prepaidinstoretipamount'],
+                'over_short' => $row['overshort'],
+                'previous_day_refunds' => $row['previousdayrefunds'],
+                'saf' => $row['saf'],
+                'manager_notes' => $row['managernotes']
             ];
         }
 
@@ -246,10 +246,10 @@ class ImportAndProcessCsvServices {
                 'franchise_store' => $row['franchisestore'],
                 'business_date' => $row['businessdate'],
                 'payment_method' => $row['paymentmethod'],
-                'sub_payment_method' => $row['SubPaymentMethod'],
-                'total_amount' => $row['TotalAmount'],
-                'saf_qty' => $row['SAFQty'],
-                'saf_total' => $row['SAFTotal']
+                'sub_payment_method' => $row['subpaymentmethod'],
+                'total_amount' => $row['totalamount'],
+                'saf_qty' => $row['safqty'],
+                'saf_total' => $row['saftotal']
             ];
         }
         $this->inserter->insertSummaryTransactions($rows);
@@ -263,55 +263,55 @@ class ImportAndProcessCsvServices {
 
         foreach ($data as $row) {
             // Parse datetime fields
-            $dateTimePlaced = $this->parseDateTime($row['DateTimePlaced']);
-            $dateTimeFulfilled = $this->parseDateTime($row['DateTimeFulfilled']);
-            $promiseDate = $this->parseDateTime($row['PromiseDate']);
-            $timeLoadedIntoPortal = $this->parseDateTime($row['Time Loaded into Portal']);
+            $dateTimePlaced = $this->parseDateTime($row['datetimeplaced']);
+            $dateTimeFulfilled = $this->parseDateTime($row['datetimefulfilled']);
+            $promiseDate = $this->parseDateTime($row['promisedate']);
+            $timeLoadedIntoPortal = $this->parseDateTime($row['timeloadedintoportal']);
 
             $rows[] = [
-                'franchise_store' => $row['FranchiseStore'],
-                'business_date' => $row['BusinessDate'],
+                'franchise_store' => $row['franchisestore'],
+                'business_date' => $row['businessdate'],
                 'date_time_placed' => $dateTimePlaced,
                 'date_time_fulfilled' => $dateTimeFulfilled,
-                'royalty_obligation' => $row['RoyaltyObligation'],
-                'quantity' => $row['Quantity'],
-                'customer_count' => $row['CustomerCount'],
-                'order_id' => $row['OrderId'],
-                'taxable_amount' => $row['TaxableAmount'],
-                'non_taxable_amount' => $row['NonTaxableAmount'],
-                'tax_exempt_amount' => $row['TaxExemptAmount'],
-                'non_royalty_amount' => $row['NonRoyaltyAmount'],
-                'sales_tax' => $row['SalesTax'],
-                'employee' => $row['Employee'],
-                'gross_sales' => $row['GrossSales'],
-                'occupational_tax' => $row['OccupationalTax'],
-                'override_approval_employee' => $row['OverrideApprovalEmployee'],
-                'order_placed_method' => $row['OrderPlacedMethod'],
-                'delivery_tip' => $row['DeliveryTip'],
-                'delivery_tip_tax' => $row['DeliveryTipTax'],
-                'order_fulfilled_method' => $row['OrderFulfilledMethod'],
-                'delivery_fee' => $row['DeliveryFee'],
-                'modified_order_amount' => $row['ModifiedOrderAmount'],
-                'delivery_fee_tax' => $row['DeliveryFeeTax'],
-                'modification_reason' => $row['ModificationReason'],
-                'payment_methods' => $row['PaymentMethods'],
-                'delivery_service_fee' => $row['DeliveryServiceFee'],
-                'delivery_service_fee_tax' => $row['DeliveryServiceFeeTax'],
-                'refunded' => $row['Refunded'],
-                'delivery_small_order_fee' => $row['DeliverySmallOrderFee'],
-                'delivery_small_order_fee_tax' => $row['DeliverySmallOrderFeeTax'],
-                'transaction_type' => $row['TransactionType'],
-                'store_tip_amount' => $row['StoreTipAmount'],
+                'royalty_obligation' => $row['royaltyobligation'],
+                'quantity' => $row['quantity'],
+                'customer_count' => $row['customercount'],
+                'order_id' => $row['orderid'],
+                'taxable_amount' => $row['taxableamount'],
+                'non_taxable_amount' => $row['nontaxableamount'],
+                'tax_exempt_amount' => $row['taxexemptamount'],
+                'non_royalty_amount' => $row['nonroyaltyamount'],
+                'sales_tax' => $row['salestax'],
+                'employee' => $row['employee'],
+                'gross_sales' => $row['grosssales'],
+                'occupational_tax' => $row['occupationaltax'],
+                'override_approval_employee' => $row['overrideapprovalemployee'],
+                'order_placed_method' => $row['orderplacedmethod'],
+                'delivery_tip' => $row['deliverytip'],
+                'delivery_tip_tax' => $row['deliverytiptax'],
+                'order_fulfilled_method' => $row['orderfulfilledmethod'],
+                'delivery_fee' => $row['deliveryfee'],
+                'modified_order_amount' => $row['modifiedorderamount'],
+                'delivery_fee_tax' => $row['deliveryfeetax'],
+                'modification_reason' => $row['modificationreason'],
+                'payment_methods' => $row['paymentmethods'],
+                'delivery_service_fee' => $row['deliveryservicefee'],
+                'delivery_service_fee_tax' => $row['deliveryservicefeetax'],
+                'refunded' => $row['refunded'],
+                'delivery_small_order_fee' => $row['deliverysmallorderfee'],
+                'delivery_small_order_fee_tax' => $row['deliverysmallorderfeetax'],
+                'transaction_type' => $row['transactiontype'],
+                'store_tip_amount' => $row['storetipamount'],
                 'promise_date' => $promiseDate,
-                'tax_exemption_id' => $row['TaxExemptionId'],
-                'tax_exemption_entity_name' => $row['TaxExemptionEntityName'],
-                'user_id' => $row['UserId'],
-                'hnrOrder' => $row['hnrOrder'],
-                'broken_promise' => $row['Broken Promise'],
-                'portal_eligible' => $row['PortalEligible'],
-                'portal_used' => $row['PortalUsed'],
-                'put_into_portal_before_promise_time' => $row['Put into Portal before PromiseTime'],
-                'portal_compartments_used' => $row['Portal Compartments Used'],
+                'tax_exemption_id' => $row['taxexemptionid'],
+                'tax_exemption_entity_name' => $row['taxexemptionentityname'],
+                'user_id' => $row['userid'],
+                'hnrOrder' => $row['hnrorder'],
+                'broken_promise' => $row['brokenpromise'],
+                'portal_eligible' => $row['portaleligible'],
+                'portal_used' => $row['portalused'],
+                'put_into_portal_before_promise_time' => $row['putintoportalbeforepromisetime'],
+                'portal_compartments_used' => $row['portalcompartmentsused'],
                 'time_loaded_into_portal' => $timeLoadedIntoPortal
             ];
         }
@@ -376,32 +376,32 @@ class ImportAndProcessCsvServices {
         $rows = [];
 
         foreach ($data as $row) {
-            $dateTimePlaced = $this->parseDateTime($row['DateTimePlaced']);
-            $dateTimeFulfilled = $this->parseDateTime($row['DateTimeFulfilled']);
+            $dateTimePlaced = $this->parseDateTime($row['datetimeplaced']);
+            $dateTimeFulfilled = $this->parseDateTime($row['datetimefulfilled']);
 
             $rows[] = [
-                'franchise_store' => $row['FranchiseStore'],
-                'business_date' => $row['BusinessDate'],
+                'franchise_store' => $row['franchisestore'],
+                'business_date' => $row['businessdate'],
                 'date_time_placed' => $dateTimePlaced,
                 'date_time_fulfilled' => $dateTimeFulfilled,
-                'net_amount' => $row['NetAmount'],
-                'quantity' => $row['Quantity'],
-                'royalty_item' => $row['RoyaltyItem'],
-                'taxable_item' => $row['TaxableItem'],
-                'order_id' => $row['OrderId'],
-                'item_id' => $row['ItemId'],
-                'menu_item_name' => $row['MenuItemName'],
-                'menu_item_account' => $row['MenuItemAccount'],
-                'bundle_name' => $row['BundleName'],
-                'employee' => $row['Employee'],
-                'override_approval_employee' => $row['OverrideApprovalEmployee'],
-                'order_placed_method' => $row['OrderPlacedMethod'],
-                'order_fulfilled_method' => $row['OrderFulfilledMethod'],
-                'modified_order_amount' => $row['ModifiedOrderAmount'],
-                'modification_reason' => $row['ModificationReason'],
-                'payment_methods' => $row['PaymentMethods'],
-                'refunded' => $row['Refunded'],
-                'tax_included_amount' => $row['TaxIncludedAmount']
+                'net_amount' => $row['netamount'],
+                'quantity' => $row['quantity'],
+                'royalty_item' => $row['royaltyitem'],
+                'taxable_item' => $row['taxableitem'],
+                'order_id' => $row['orderid'],
+                'item_id' => $row['itemid'],
+                'menu_item_name' => $row['menuitemname'],
+                'menu_item_account' => $row['menuitemaccount'],
+                'bundle_name' => $row['bundlename'],
+                'employee' => $row['employee'],
+                'override_approval_employee' => $row['overrideapprovalemployee'],
+                'order_placed_method' => $row['orderplacedmethod'],
+                'order_fulfilled_method' => $row['orderfulfilledmethod'],
+                'modified_order_amount' => $row['modifiedorderamount'],
+                'modification_reason' => $row['modificationreason'],
+                'payment_methods' => $row['paymentmethods'],
+                'refunded' => $row['refunded'],
+                'tax_included_amount' => $row['taxincludedamount']
             ];
         }
 
@@ -437,18 +437,31 @@ class ImportAndProcessCsvServices {
     }
 
     //****** helping functions **********/
-    public function readCsv($filePath)
+    private function readCsv($filePath)
     {
         $data = [];
+
         if (($handle = fopen($filePath, 'r')) !== false) {
             $header = fgetcsv($handle, 1000, ',');
+
+            // Normalize header: trim, lowercase, and remove all spaces
+            $normalizedHeader = array_map(function ($key) {
+                return str_replace(' ', '', strtolower(trim($key)));
+            }, $header);
+
             while (($row = fgetcsv($handle, 1000, ',')) !== false) {
-                if (count($row) == count($header)) {
-                    $data[] = array_combine($header, $row);
+                if (count($row) == count($normalizedHeader)) {
+                    // Just trim the row values (optional, depending on your use case)
+                    $trimmedValues = array_map('trim', $row);
+
+                    $normalizedRow = array_combine($normalizedHeader, $trimmedValues);
+                    $data[] = $normalizedRow;
                 }
             }
+
             fclose($handle);
         }
+
         return $data;
     }
 

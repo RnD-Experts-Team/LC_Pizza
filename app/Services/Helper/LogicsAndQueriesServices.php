@@ -174,21 +174,18 @@ class LogicsAndQueriesServices
                 ->where('modification_reason', '<>', '');
 
 
+               
             foreach ($discountOrders as $discountOrder) {
-                $OnlineDiscountProgramArray =[
-                    [
-                        $store,
-                        $selectedDate,
-                        $discountOrder['order_id']
-                    ],
-                    [
-                        $discountOrder['payment_methods'],
-                        0,
-                        $discountOrder['royalty_obligation'],
-                        trim(explode(':', string: $discountOrder['modification_reason'])[1] ?? '')
-                    ]
+                $OnlineDiscountProgramArray = [
+                    'franchise_store'      => $store,
+                    'business_date'        => $selectedDate,
+                    'order_id'             => $discountOrder['order_id'],
+                    'pay_type'             => $discountOrder['payment_methods'],
+                    'original_subtotal'    => 0,
+                    'modified_subtotal'    => $discountOrder['royalty_obligation'],
+                    'promo_code'           => trim(explode(':', $discountOrder['modification_reason'])[1] ?? ''),
                 ];
-                $this->inserter->insertOnlineDiscountProgramData($OnlineDiscountProgramArray);
+                $this->inserter->insertOnlineDiscountProgramData([$OnlineDiscountProgramArray]);
             }
             //******* End Of Online Discount Program *********//
 
@@ -668,158 +665,155 @@ class LogicsAndQueriesServices
             });
 
 
-
-            $BreadBoostArray =[
-                [ $store,  $selectedDate],
-                [
-                    $classicOrdersCount,
-                    $classicWithBreadCount,
-                    $OtherPizzaOrderCount,
-                    $OtherPizzaWithBreadCount,
-                ]
-            ];
-            $this->inserter->insertBreadBoostData($BreadBoostArray);
+            $BreadBoostArray =
+                [ 
+                    'franchise_store'        =>$store,
+                    'business_date'          =>$selectedDate,
+                    'classic_order'          =>$classicOrdersCount,
+                    'classic_with_bread'     =>$classicWithBreadCount,
+                    'other_pizza_order'      =>$OtherPizzaOrderCount,
+                    'other_pizza_with_bread' =>$OtherPizzaWithBreadCount,
+                ];
+            $this->inserter->insertBreadBoostData([$BreadBoostArray]);
 
             $DeliveryOrderSummaryArray=[
-                [ $store,  $selectedDate],
-                [
-                     $Oreders_count,
-                     $product_cost,
-                     $tax,
-                     $occupational_tax,
-                     $delivery_charges,
-                     $delivery_charges_Taxes,
-                     $delivery_Service_charges,
-                     $delivery_Service_charges_Tax,
-                     $delivery_small_order_charge,
-                     $delivery_small_order_charge_Tax,
-                     $Delivery_Late_to_Portal_Fee,
-                     $Delivery_Tip_Summary,
-                     $Delivery_Tip_Tax_Summary,
-                     $total_taxes,
-                     $order_total
-                ]
+                'franchise_store' => $store,  
+                'business_date' => $selectedDate,
+                'orders_count' =>$Oreders_count,
+                'product_cost'=>$product_cost,
+                'tax'=>$tax,
+                'occupational_tax'=>$occupational_tax,
+                'delivery_charges'=>$delivery_charges,
+                'delivery_charges_taxes'=>$delivery_charges_Taxes,
+                'service_charges'=>$delivery_Service_charges,
+                'service_charges_taxes'=>$delivery_Service_charges_Tax,
+                'small_order_charge'=>$delivery_small_order_charge,
+                'small_order_charge_taxes'=>$delivery_small_order_charge_Tax,
+                'delivery_late_charge'=>$Delivery_Late_to_Portal_Fee,
+                'tip'=>$Delivery_Tip_Summary,
+                'tip_tax'=>$Delivery_Tip_Tax_Summary,
+                'total_taxes'=>$total_taxes,
+                'order_total'=>$order_total
             ];
-            $this->inserter->insertDeliveryOrderSummaryData($DeliveryOrderSummaryArray);
+            $this->inserter->insertDeliveryOrderSummaryData([$DeliveryOrderSummaryArray]);
 
 
             $ThirdPartyMarketplaceOrderArray=[
-                [ $store,  $selectedDate],
-                [
-                    $doordash_product_costs_Marketplace,
-                    $doordash_tax_Marketplace,
-                    $doordash_order_total_Marketplace,
-                    $ubereats_product_costs_Marketplace,
-                    $ubereats_tax_Marketplace,
-                    $uberEats_order_total_Marketplace,
-                    $grubhub_product_costs_Marketplace,
-                    $grubhub_tax_Marketplace,
-                    $grubhub_order_total_Marketplace,
-                ]
+                'franchise_store' =>$store,  
+                'business_date' => $selectedDate,
+                'doordash_product_costs_Marketplace'=>$doordash_product_costs_Marketplace,
+                'doordash_tax_Marketplace'=>$doordash_tax_Marketplace,
+                'doordash_order_total_Marketplace' =>$doordash_order_total_Marketplace,
+                'ubereats_product_costs_Marketplace'=>$ubereats_product_costs_Marketplace,
+                'ubereats_tax_Marketplace'=>$ubereats_tax_Marketplace,
+                'uberEats_order_total_Marketplace'=>$uberEats_order_total_Marketplace,
+                'grubhub_product_costs_Marketplace'=>$grubhub_product_costs_Marketplace,
+                'grubhub_tax_Marketplace'=>$grubhub_tax_Marketplace,
+                'grubhub_order_total_Marketplace'=>$grubhub_order_total_Marketplace,
+                
             ];
-            $this->inserter->insertThirdPartyMarketplaceOrder($ThirdPartyMarketplaceOrderArray);
+            $this->inserter->insertThirdPartyMarketplaceOrder([$ThirdPartyMarketplaceOrderArray]);
 
             $FinanceDataArray=[
-                [ $store,  $selectedDate],
-                [
-                    $Pizza_Carryout,
-                    $HNR_Carryout,
-                    $Bread_Carryout,
-                    $Wings_Carryout,
-                    $Beverages_Carryout,
-                    $Other_Foods_Carryout,
-                    $Side_Items_Carryout,
-                    $Pizza_Delivery,
-                    $HNR_Delivery,
-                    $Bread_Delivery,
-                    $Wings_Delivery,
-                    $Beverages_Delivery,
-                    $Other_Foods_Delivery,
-                    $Side_Items_Delivery,
-                    $Delivery_Charges,
-                    $TOTAL_Net_Sales,
-                    $customerCount,
-                    $Gift_Card_Non_Royalty,
-                    $Total_Non_Royalty_Sales,
-                    $Total_Non_Delivery_Tips,
-                    $Sales_Tax_Food_Beverage,
-                    $Sales_Tax_Delivery,
-                    $TOTAL_Sales_TaxQuantity,
-                    $DELIVERY_Quantity,
-                    $Delivery_Fee,
-                    $Delivery_Service_Fee,
-                    $Delivery_Small_Order_Fee,
-                    $Delivery_Late_to_Portal_Fee,
-                    $TOTAL_Native_App_Delivery_Fees,
-                    $Delivery_Tips,
-                    $DoorDash_Quantity,
-                    $DoorDash_Order_Total,
-                    $Grubhub_Quantity,
-                    $Grubhub_Order_Total,
-                    $Uber_Eats_Quantity,
-                    $Uber_Eats_Order_Total,
-                    $ONLINE_ORDERING_Mobile_Order_Quantity,
-                    $ONLINE_ORDERING_Online_Order_Quantity,
-                    $ONLINE_ORDERING_Pay_In_Store,
-                    $Agent_Pre_Paid,
-                    $Agent_Pay_In_Store,
-                    null,
-                    null,
-                    $PrePaid_Cash_Orders,
-                    $PrePaid_Non_Cash_Orders,
-                    $PrePaid_Sales,
-                    $Prepaid_Delivery_Tips,
-                    $Prepaid_InStore_Tips,
-                    $Marketplace_from_Non_Cash_Payments_box,
-                    $AMEX,
-                    $Total_Non_Cash_Payments,
-                    $credit_card_Cash_Payments,
-                    $Debit_Cash_Payments,
-                    $epay_Cash_Payments,
-                    $Non_Cash_Payments,
-                    $Cash_Sales,
-                    $Cash_Drop_Total,
-                    $Over_Short,
-                    $Payouts,
-                ]
+                'franchise_store'=>$store,  
+                'business_date'=>$selectedDate,
+                'Pizza_Carryout'=>$Pizza_Carryout,
+                'HNR_Carryout'=>$HNR_Carryout,
+                'Bread_Carryout'=>$Bread_Carryout,
+                'Wings_Carryout'=>$Wings_Carryout,
+                'Beverages_Carryout'=>$Beverages_Carryout,
+                'Other_Foods_Carryout'=>$Other_Foods_Carryout,
+                'Side_Items_Carryout'=>$Side_Items_Carryout,
+                'Pizza_Delivery'=>$Pizza_Delivery,
+                'HNR_Delivery'=>$HNR_Delivery,
+                'Bread_Delivery'=>$Bread_Delivery,
+                'Wings_Delivery'=>$Wings_Delivery,
+                'Beverages_Delivery'=>$Beverages_Delivery,
+                'Other_Foods_Delivery'=>$Other_Foods_Delivery,
+                'Side_Items_Delivery'=>$Side_Items_Delivery,
+                'Delivery_Charges'=>$Delivery_Charges,
+                'TOTAL_Net_Sales'=>$TOTAL_Net_Sales,
+                'Customer_Count'=>$customerCount,
+                'Gift_Card_Non_Royalty'=>$Gift_Card_Non_Royalty,
+                'Total_Non_Royalty_Sales'=>$Total_Non_Royalty_Sales,
+                'Total_Non_Delivery_Tips'=>$Total_Non_Delivery_Tips,
+                'Sales_Tax_Food_Beverage'=>$Sales_Tax_Food_Beverage,
+                'Sales_Tax_Delivery'=>$Sales_Tax_Delivery,
+                'TOTAL_Sales_TaxQuantity'=>$TOTAL_Sales_TaxQuantity,
+                'DELIVERY_Quantity'=>$DELIVERY_Quantity,
+                'Delivery_Fee'=>$Delivery_Fee,
+                'Delivery_Service_Fee'=>$Delivery_Service_Fee,
+                'Delivery_Small_Order_Fee'=>$Delivery_Small_Order_Fee,
+                'Delivery_Late_to_Portal_Fee'=>$Delivery_Late_to_Portal_Fee,
+                'TOTAL_Native_App_Delivery_Fees'=>$TOTAL_Native_App_Delivery_Fees,
+                'Delivery_Tips'=>$Delivery_Tips,
+                'DoorDash_Quantity'=>$DoorDash_Quantity,
+                'DoorDash_Order_Total'=>$DoorDash_Order_Total,
+                'Grubhub_Quantity'=>$Grubhub_Quantity,
+                'Grubhub_Order_Total'=>$Grubhub_Order_Total,
+                'Uber_Eats_Quantity'=>$Uber_Eats_Quantity,
+                'Uber_Eats_Order_Total'=>$Uber_Eats_Order_Total,
+                'ONLINE_ORDERING_Mobile_Order_Quantity'=>$ONLINE_ORDERING_Mobile_Order_Quantity,
+                'ONLINE_ORDERING_Online_Order_Quantity'=>$ONLINE_ORDERING_Online_Order_Quantity,
+                'ONLINE_ORDERING_Pay_In_Store'=>$ONLINE_ORDERING_Pay_In_Store,
+                'Agent_Pre_Paid'=>$Agent_Pre_Paid,
+                'Agent_Pay_InStore'=>$Agent_Pay_In_Store,
+                'AI_Pre_Paid'=>null,
+                'AI_Pay_InStore'=>null,
+                'PrePaid_Cash_Orders'=>$PrePaid_Cash_Orders,
+                'PrePaid_Non_Cash_Orders'=>$PrePaid_Non_Cash_Orders,
+                'PrePaid_Sales'=>$PrePaid_Sales,
+                'Prepaid_Delivery_Tips'=>$Prepaid_Delivery_Tips,
+                'Prepaid_InStore_Tips'=>$Prepaid_InStore_Tips,
+                'Marketplace_from_Non_Cash_Payments_box'=>$Marketplace_from_Non_Cash_Payments_box,
+                'AMEX'=>$AMEX,
+                'Total_Non_Cash_Payments'=>$Total_Non_Cash_Payments,
+                'credit_card_Cash_Payments'=>$credit_card_Cash_Payments,
+                'Debit_Cash_Payments'=>$Debit_Cash_Payments,
+                'epay_Cash_Payments'=>$epay_Cash_Payments,
+                'Non_Cash_Payments'=>$Non_Cash_Payments,
+                'Cash_Sales'=>$Cash_Sales,
+                'Cash_Drop_Total'=>$Cash_Drop_Total,
+                'Over_Short'=>$Over_Short,
+                'Payouts'=>$Payouts,
+                
             ];
-            $this->inserter->insertFinanceData($FinanceDataArray);
+            $this->inserter->insertFinanceData([$FinanceDataArray]);
 
 
             $FinalSummaryArray=[
-                [$store, $selectedDate],
-                [
-                    $totalSales,
-                    $modifiedOrderQty,
-                    $RefundedOrderQty,
-                    $customerCount,
-                    $phoneSales,
-                    $callCenterAgent,
-                    $driveThruSales,
-                    $websiteSales,
-                    $mobileSales,
-                    $doordashSales,
-                    $grubHubSales,
-                    $uberEatsSales,
-                    $deliverySales,
-                    round($digitalSales, 2),
-                    $portalTransaction,
-                    $putIntoPortal,
-                    round($portalPercentage, 2),
-                    $portalOnTime,
-                    round($inPortalPercentage, 2),
-                    $deliveryTips,
-                    $prePaidDeliveryTips,
-                    $inStoreTipAmount,
-                    $prePaidInStoreTipAmount,
-                    $totalTips,
-                    $overShort,
-                    $cashSales,
-                    $totalWasteCost,
-                ]
+                'franchise_store'             => $store,
+                'business_date'               => $selectedDate,
+                'total_sales'                 => $totalSales,
+                'modified_order_qty'          => $modifiedOrderQty,
+                'refunded_order_qty'          => $RefundedOrderQty,
+                'customer_count'              => $customerCount,
+                'phone_sales'                 => $phoneSales,
+                'call_center_sales'           => $callCenterAgent,
+                'drive_thru_sales'            => $driveThruSales,
+                'website_sales'               => $websiteSales,
+                'mobile_sales'                => $mobileSales,
+                'doordash_sales'              => $doordashSales,
+                'grubhub_sales'               => $grubHubSales,
+                'ubereats_sales'              => $uberEatsSales,
+                'delivery_sales'              => $deliverySales,
+                'digital_sales_percent'       => round($digitalSales, 2),
+                'portal_transactions'         => $portalTransaction,
+                'put_into_portal'             => $putIntoPortal,
+                'portal_used_percent'         => round($portalPercentage, 2),
+                'put_in_portal_on_time'       => $portalOnTime,
+                'in_portal_on_time_percent'   => round($inPortalPercentage, 2),
+                'delivery_tips'               => $deliveryTips,
+                'prepaid_delivery_tips'       => $prePaidDeliveryTips,
+                'in_store_tip_amount'         => $inStoreTipAmount,
+                'prepaid_instore_tip_amount'  => $prePaidInStoreTipAmount,
+                'total_tips'                  => $totalTips,
+                'over_short'                  => $overShort,
+                'cash_sales'                  => $cashSales,
+                'total_waste_cost'            => $totalWasteCost,
             ];
 
-            $this->inserter->insertFinalSummary($FinalSummaryArray);
+            $this->inserter->insertFinalSummary([$FinalSummaryArray]);
 
 
 
@@ -830,23 +824,21 @@ class LogicsAndQueriesServices
 
             foreach ($ordersByHour as $hour => $hourOrders) {
 
-                $HourlySalesArray=[[
-                        $store,
-                        $selectedDate,
-                        (int) $hour,
-                    ],
-                    [
-                        $hourOrders->sum('royalty_obligation'),
-                        $hourOrders->where('order_placed_method', 'Phone')->sum('royalty_obligation'),
-                        $hourOrders->where('order_placed_method', 'SoundHoundAgent')->sum('royalty_obligation'),
-                        $hourOrders->where('order_placed_method', 'Drive Thru')->sum('royalty_obligation'),
-                        $hourOrders->where('order_placed_method', 'Website')->sum('royalty_obligation'),
-                        $hourOrders->where('order_placed_method', 'Mobile')->sum('royalty_obligation'),
-                        $hourOrders->count(),
-                    ]];
+                $HourlySalesArray=[
+                        'franchise_store' =>$store,
+                        'business_date' =>$selectedDate,
+                        'hour' =>(int) $hour,
+                        'total_sales' =>$hourOrders->sum('royalty_obligation'),
+                        'phone_sales' =>$hourOrders->where('order_placed_method', 'Phone')->sum('royalty_obligation'),
+                        'call_center_sales' =>$hourOrders->where('order_placed_method', 'SoundHoundAgent')->sum('royalty_obligation'),
+                        'drive_thru_sales' =>$hourOrders->where('order_placed_method', 'Drive Thru')->sum('royalty_obligation'),
+                        'website_sales' =>$hourOrders->where('order_placed_method', 'Website')->sum('royalty_obligation'),
+                        'mobile_sales'=>$hourOrders->where('order_placed_method', 'Mobile')->sum('royalty_obligation'),
+                        'order_count'=>$hourOrders->count(),
+                    ];
 
 
-                    $this->inserter->insertHourlySales($HourlySalesArray);
+                    $this->inserter->insertHourlySales([$HourlySalesArray]);
 
 
             }
