@@ -7,22 +7,23 @@ use GuzzleHttp\Exception\RequestException;
 use Illuminate\Support\Facades\Log;
 
 use App\Services\Helper\LogicsAndQueriesServices;
-use App\Services\Helper\ImportAndProcessCsvServices;
+use App\Services\Helper\ProcessCsvServices;
 
 class LCReportDataService
 {
     protected LogicsAndQueriesServices $logic;
-    protected ImportAndProcessCsvServices $csvImporter;
+    protected ProcessCsvServices $csvImporter;
 
-    public function __construct(LogicsAndQueriesServices $logic, ImportAndProcessCsvServices $csvImporter)
+    public function __construct(LogicsAndQueriesServices $logic, ProcessCsvServices $csvImporter,)
     {
         $this->logic = $logic;
         $this->csvImporter = $csvImporter;
-
+        
     }
 
-    public function importReportData($selectedDate)
+    public function importReportData(string $selectedDate):bool
     {
+        
         $client = new Client();
 
         Log::info('Starting report data import process for date: ' . $selectedDate);
@@ -78,11 +79,11 @@ class LCReportDataService
             $requestUrl = config('services.lcegateway.portal_server') . $endpoint . '?' . http_build_query($queryParams);
 
             // Build the URL for the signature
-            $encodedRequestUrl = $this->csvImporter->prepareRequestUrlForSignature($requestUrl);
+            $encodedRequestUrl = $this->prepareRequestUrlForSignature($requestUrl);
 
             // Generate timestamp and nonce
             $requestTimeStamp = time();
-            $nonce = $this->csvImporter->generateNonce();
+            $nonce = $this->generateNonce();
 
             // For GET requests, bodyHash is empty
 
@@ -169,13 +170,13 @@ class LCReportDataService
                     Log::info('Extraction took: ' . (microtime(true) - $start) . ' seconds');
                     // Process the CSV files
                     $data = $this->csvImporter->processCsvFiles($extractPath, $selectedDate);
-                    $this->buildFinalSummaryFromData($data, $selectedDate);
+                    $this->logic->DataLoop($data, $selectedDate);
 
                     // Delete temporary files
                     unlink($tempZipPath);
                     // Optionally delete extracted files
 
-                    $this->csvImporter->deleteDirectory($extractPath);
+                    $this->deleteDirectory($extractPath);
 
                     Log::info('Successfully deleted files');
 
@@ -195,27 +196,44 @@ class LCReportDataService
         }
     }
 
-    /**
-     * @param array{
-     *   processCashManagement?: array,
-     *   processFinancialView?: array,
-     *   processSummaryItems?: array,
-     *   processSummarySales?: array,
-     *   processSummaryTransactions?: array,
-     *   processDetailOrders?: array,
-     *   processWaste?: array,
-     *   processOrderline?: array,
-     * } $data
-     * @param string $selectedDate
-     * @return void
-     */
-
-    private function buildFinalSummaryFromData(array $data, string $selectedDate): void
+    public function deleteDirectory($dirPath)
     {
-        Log::info('Building final summary from in-memory data.');
-        $this->logic->DataLoop($data, $selectedDate);
-
+        if (!is_dir($dirPath)) {
+            return;
+        }
+        $files = scandir($dirPath);
+        foreach ($files as $file) {
+            if ($file != '.' && $file != '..') {
+                $fullPath = $dirPath . DIRECTORY_SEPARATOR . $file;
+                if (is_dir($fullPath)) {
+                    $this->deleteDirectory($fullPath);
+                } else {
+                    unlink($fullPath);
+                }
+            }
+        }
+        rmdir($dirPath);
     }
 
+    public function generateNonce()
+    {
+        // Replicating the GetNonce() function in the Postman script
+        $nonce = strtolower(string: bin2hex(random_bytes(16)));
+        // Log::info('Generated nonce: ' . $nonce);
+        return $nonce;
+    }
+
+    public function prepareRequestUrlForSignature($requestUrl)
+    {
+        // Replace any {{variable}} in the URL if necessary
+        $requestUrl = preg_replace_callback('/{{(\w*)}}/', function ($matches) {
+            return env($matches[1], '');
+        }, $requestUrl);
+
+        // Encode and lowercase the URL
+        $encodedUrl = strtolower(rawurlencode($requestUrl));
+        //  Log::info('Encoded request URL: ' . $encodedUrl);
+        return $encodedUrl;
+    }
 
 }

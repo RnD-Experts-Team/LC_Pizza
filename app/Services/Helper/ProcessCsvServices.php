@@ -10,7 +10,7 @@ use App\Services\Helper\InsertDataServices;
 
 
 // this service is used for the request -> download the ZIP file -> save the files as CSVs -> get data from them ->save them inthe db tables -> delete the files
-class ImportAndProcessCsvServices {
+class ProcessCsvServices {
 
     protected InsertDataServices $inserter;
 
@@ -21,6 +21,7 @@ class ImportAndProcessCsvServices {
 
     }
 
+    // the main process Csv Files function
     public function processCsvFiles($extractPath, $selectedDate)
     {
         // Log::info('Starting to process CSV files.');
@@ -398,27 +399,12 @@ class ImportAndProcessCsvServices {
         return $rows;
     }
 
-    // Optional method to delete the extracted files
-    public function deleteDirectory($dirPath)
-    {
-        if (!is_dir($dirPath)) {
-            return;
-        }
-        $files = scandir($dirPath);
-        foreach ($files as $file) {
-            if ($file != '.' && $file != '..') {
-                $fullPath = $dirPath . DIRECTORY_SEPARATOR . $file;
-                if (is_dir($fullPath)) {
-                    $this->deleteDirectory($fullPath);
-                } else {
-                    unlink($fullPath);
-                }
-            }
-        }
-        rmdir($dirPath);
-    }
+    //********* end of files prossessing functions ***********/
+    
 
+    //********************* helping functions *********************/
 
+    //map Csv To Rows function
     protected function mapCsvToRows(string $filePath, array $columnMap, array $transformers = []): array
     {
         $raw = $this->readCsv($filePath);
@@ -441,7 +427,8 @@ class ImportAndProcessCsvServices {
 
         return $rows;
     }
-    //****** helping functions **********/
+    
+    // read csv columns and fix the headers
     private function readCsv($filePath)
     {
         $data = [];
@@ -470,27 +457,7 @@ class ImportAndProcessCsvServices {
         return $data;
     }
 
-    public function generateNonce()
-    {
-        // Replicating the GetNonce() function in the Postman script
-        $nonce = strtolower(string: bin2hex(random_bytes(16)));
-        // Log::info('Generated nonce: ' . $nonce);
-        return $nonce;
-    }
-
-    public function prepareRequestUrlForSignature($requestUrl)
-    {
-        // Replace any {{variable}} in the URL if necessary
-        $requestUrl = preg_replace_callback('/{{(\w*)}}/', function ($matches) {
-            return env($matches[1], '');
-        }, $requestUrl);
-
-        // Encode and lowercase the URL
-        $encodedUrl = strtolower(rawurlencode($requestUrl));
-        //  Log::info('Encoded request URL: ' . $encodedUrl);
-        return $encodedUrl;
-    }
-
+    // fix date function
     public function parseDateTime($dateTimeString)
     {
         if (empty($dateTimeString)) {
@@ -515,6 +482,6 @@ class ImportAndProcessCsvServices {
             return null;
         }
     }
-    /*********************  Helpers   *********************/
+    /*********************  end of helping functions   *********************/
 
 }
