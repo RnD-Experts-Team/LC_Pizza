@@ -1,11 +1,11 @@
 <?php
 
-namespace App\Services\CSVs\Helper;
+namespace App\Services\Helper\CSVs;
 
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
-use App\Services\Helper\InsertDataServices;
+use App\Services\Helper\Insert\InsertDataServices;
 
 
 
@@ -400,7 +400,7 @@ class ProcessCsvServices {
     }
 
     //********* end of files prossessing functions ***********/
-    
+
 
     //********************* helping functions *********************/
 
@@ -427,7 +427,7 @@ class ProcessCsvServices {
 
         return $rows;
     }
-    
+
     // read csv columns and fix the headers
     private function readCsv($filePath)
     {

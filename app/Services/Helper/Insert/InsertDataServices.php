@@ -1,5 +1,5 @@
 <?php
-namespace App\Services\Helper;
+namespace App\Services\Helper\Insert;
 
 use Illuminate\Database\Eloquent\Model;
 
@@ -14,7 +14,7 @@ class InsertDataServices{
      * @param  string[]             $updateCols
      */
     // upsert rows function (uses the model name, rows[witch have the new data], uniqueBy array, updateCols)
-    protected function upsertRows(string $table, array $rows, array $uniqueBy, array $updateCols): void
+    public function upsertRows(string $table, array $rows, array $uniqueBy, array $updateCols): void
     {
         if (empty($rows)) {
             return;
@@ -23,7 +23,7 @@ class InsertDataServices{
     }
 
     //insertHelper
-    protected function insertHelper(array $data, string $tableName){
+    public function insertHelper(array $data, string $tableName){
         $cfg  = $this->tables[$tableName];
 
         $this->upsertRows(
@@ -34,7 +34,7 @@ class InsertDataServices{
         );
     }
     //loopInsertHelper
-    protected function loopInsertHelper(array $data, string $tableName, int $chunkSize)
+    public function loopInsertHelper(array $data, string $tableName, int $chunkSize)
     {
         if (empty($data)) {
             return;

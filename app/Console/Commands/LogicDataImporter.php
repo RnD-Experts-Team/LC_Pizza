@@ -15,7 +15,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
-use App\Services\Helper\LogicsAndQueriesServices;
+use App\Services\Helper\Logics\LogicsAndQueriesServices;
 
 class LogicDataImporter extends Command
 {

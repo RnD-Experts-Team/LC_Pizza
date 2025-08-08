@@ -1,10 +1,10 @@
 <?php
 
-namespace App\Services\Helper;
+namespace App\Services\Helper\Logics;
 
 use Illuminate\Support\Facades\Log;
 
-use App\Services\Helper\InsertDataServices;
+use App\Services\Helper\Insert\InsertDataServices;
 
 use Carbon\Carbon;
 
@@ -17,6 +17,7 @@ class LogicsAndQueriesServices
         $this->inserter = $inserter;
 
     }
+
 
     public function DataLoop(array $data, string $selectedDate){
 
@@ -174,7 +175,7 @@ class LogicsAndQueriesServices
                 ->where('modification_reason', '<>', '');
 
 
-               
+
             foreach ($discountOrders as $discountOrder) {
                 $OnlineDiscountProgramArray = [
                     'franchise_store'      => $store,
@@ -666,7 +667,7 @@ class LogicsAndQueriesServices
 
 
             $BreadBoostArray =
-                [ 
+                [
                     'franchise_store'        =>$store,
                     'business_date'          =>$selectedDate,
                     'classic_order'          =>$classicOrdersCount,
@@ -677,7 +678,7 @@ class LogicsAndQueriesServices
             $this->inserter->insertBreadBoostData([$BreadBoostArray]);
 
             $DeliveryOrderSummaryArray=[
-                'franchise_store' => $store,  
+                'franchise_store' => $store,
                 'business_date' => $selectedDate,
                 'orders_count' =>$Oreders_count,
                 'product_cost'=>$product_cost,
@@ -699,7 +700,7 @@ class LogicsAndQueriesServices
 
 
             $ThirdPartyMarketplaceOrderArray=[
-                'franchise_store' =>$store,  
+                'franchise_store' =>$store,
                 'business_date' => $selectedDate,
                 'doordash_product_costs_Marketplace'=>$doordash_product_costs_Marketplace,
                 'doordash_tax_Marketplace'=>$doordash_tax_Marketplace,
@@ -710,12 +711,12 @@ class LogicsAndQueriesServices
                 'grubhub_product_costs_Marketplace'=>$grubhub_product_costs_Marketplace,
                 'grubhub_tax_Marketplace'=>$grubhub_tax_Marketplace,
                 'grubhub_order_total_Marketplace'=>$grubhub_order_total_Marketplace,
-                
+
             ];
             $this->inserter->insertThirdPartyMarketplaceOrder([$ThirdPartyMarketplaceOrderArray]);
 
             $FinanceDataArray=[
-                'franchise_store'=>$store,  
+                'franchise_store'=>$store,
                 'business_date'=>$selectedDate,
                 'Pizza_Carryout'=>$Pizza_Carryout,
                 'HNR_Carryout'=>$HNR_Carryout,
@@ -776,7 +777,7 @@ class LogicsAndQueriesServices
                 'Cash_Drop_Total'=>$Cash_Drop_Total,
                 'Over_Short'=>$Over_Short,
                 'Payouts'=>$Payouts,
-                
+
             ];
             $this->inserter->insertFinanceData([$FinanceDataArray]);
 
