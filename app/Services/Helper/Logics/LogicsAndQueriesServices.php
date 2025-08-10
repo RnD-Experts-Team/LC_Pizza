@@ -96,97 +96,82 @@ class LogicsAndQueriesServices
             }
 
             //******* Online Discount Program *********//
-
             $odpRows = $this->OnlineDiscountProgram($OrderRows, $store, $selectedDate);
             if (!empty($odpRows)) {
                 $this->inserter->insertOnlineDiscountProgramData($odpRows);
             }
-            // Log::info('Online Discount Program');
-            // $discountOrders = $OrderRows
-            //     ->where('employee', '')
-            //     ->where('modification_reason', '<>', '');
-
-            // foreach ($discountOrders as $discountOrder) {
-            //     $OnlineDiscountProgramArray = [
-            //         'franchise_store'      => $store,
-            //         'business_date'        => $selectedDate,
-            //         'order_id'             => $discountOrder['order_id'],
-            //         'pay_type'             => $discountOrder['payment_methods'],
-            //         'original_subtotal'    => 0,
-            //         'modified_subtotal'    => $discountOrder['royalty_obligation'],
-            //         'promo_code'           => trim(explode(':', $discountOrder['modification_reason'])[1] ?? ''),
-            //     ];
-            //     $this->inserter->insertOnlineDiscountProgramData([$OnlineDiscountProgramArray]);
-            // }
-            //******* End Of Online Discount Program *********//
 
             //******* Delivery Order Summary *********//
-            Log::info('Delivery Order Summary');
-            $Oreders_count = $OrderRows
-                ->whereIn('order_placed_method', ['Mobile', 'Website'])
-                ->where('order_fulfilled_method', 'Delivery')
-                ->Count();
+            $deliverySummaryRow = $this->DeliveryOrderSummary($OrderRows, $store, $selectedDate);
+            if (!empty($deliverySummaryRow)) {
+                $this->inserter->insertDeliveryOrderSummaryData([$deliverySummaryRow]);
+            }
+            // Log::info('Delivery Order Summary');
+            // $Oreders_count = $OrderRows
+            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            //     ->where('order_fulfilled_method', 'Delivery')
+            //     ->Count();
 
-            $RO = $OrderRows
-                ->whereIn('order_placed_method', ['Mobile', 'Website'])
-                ->where('order_fulfilled_method', 'Delivery')
-                ->Sum('royalty_obligation');
+            // $RO = $OrderRows
+            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            //     ->where('order_fulfilled_method', 'Delivery')
+            //     ->Sum('royalty_obligation');
 
-            $occupational_tax = $OrderRows
-                ->whereIn('order_placed_method', ['Mobile', 'Website'])
-                ->where('order_fulfilled_method', 'Delivery')
-                ->Sum('occupational_tax');
+            // $occupational_tax = $OrderRows
+            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            //     ->where('order_fulfilled_method', 'Delivery')
+            //     ->Sum('occupational_tax');
 
-            $delivery_charges = $OrderRows
-                ->whereIn('order_placed_method', ['Mobile', 'Website'])
-                ->where('order_fulfilled_method', 'Delivery')
-                ->Sum('delivery_fee');
+            // $delivery_charges = $OrderRows
+            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            //     ->where('order_fulfilled_method', 'Delivery')
+            //     ->Sum('delivery_fee');
 
-            $delivery_charges_Taxes = $OrderRows
-                ->whereIn('order_placed_method', ['Mobile', 'Website'])
-                ->where('order_fulfilled_method', 'Delivery')
-                ->Sum('delivery_fee_tax');
+            // $delivery_charges_Taxes = $OrderRows
+            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            //     ->where('order_fulfilled_method', 'Delivery')
+            //     ->Sum('delivery_fee_tax');
 
-            $delivery_Service_charges = $OrderRows
-                ->whereIn('order_placed_method', ['Mobile', 'Website'])
-                ->where('order_fulfilled_method', 'Delivery')
-                ->Sum('delivery_service_fee');
+            // $delivery_Service_charges = $OrderRows
+            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            //     ->where('order_fulfilled_method', 'Delivery')
+            //     ->Sum('delivery_service_fee');
 
-            $delivery_Service_charges_Tax = $OrderRows
-                ->whereIn('order_placed_method', ['Mobile', 'Website'])
-                ->where('order_fulfilled_method', 'Delivery')
-                ->Sum('delivery_service_fee_tax');
+            // $delivery_Service_charges_Tax = $OrderRows
+            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            //     ->where('order_fulfilled_method', 'Delivery')
+            //     ->Sum('delivery_service_fee_tax');
 
-            $delivery_small_order_charge = $OrderRows
-                ->whereIn('order_placed_method', ['Mobile', 'Website'])
-                ->where('order_fulfilled_method', 'Delivery')
-                ->Sum('delivery_small_order_fee');
+            // $delivery_small_order_charge = $OrderRows
+            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            //     ->where('order_fulfilled_method', 'Delivery')
+            //     ->Sum('delivery_small_order_fee');
 
-            $delivery_small_order_charge_Tax = $OrderRows
-                ->whereIn('order_placed_method', ['Mobile', 'Website'])
-                ->where('order_fulfilled_method', 'Delivery')
-                ->Sum('delivery_small_order_fee_tax');
+            // $delivery_small_order_charge_Tax = $OrderRows
+            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            //     ->where('order_fulfilled_method', 'Delivery')
+            //     ->Sum('delivery_small_order_fee_tax');
 
-            $Delivery_Tip_Summary = $OrderRows
-                ->whereIn('order_placed_method', ['Mobile', 'Website'])
-                ->where('order_fulfilled_method', 'Delivery')
-                ->Sum('delivery_tip');
+            // $Delivery_Tip_Summary = $OrderRows
+            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            //     ->where('order_fulfilled_method', 'Delivery')
+            //     ->Sum('delivery_tip');
 
-            $Delivery_Tip_Tax_Summary = $OrderRows
-                ->whereIn('order_placed_method', ['Mobile', 'Website'])
-                ->where('order_fulfilled_method', 'Delivery')
-                ->Sum('delivery_tip_tax');
+            // $Delivery_Tip_Tax_Summary = $OrderRows
+            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            //     ->where('order_fulfilled_method', 'Delivery')
+            //     ->Sum('delivery_tip_tax');
 
-            $total_taxes = $OrderRows
-                ->whereIn('order_placed_method', ['Mobile', 'Website'])
-                ->where('order_fulfilled_method', 'Delivery')
-                ->Sum('sales_tax');
-            // sales tax       delivery_service_fee_tax 4.57    -  delivery_fee_tax 0.9     0.48
-            $tax = $total_taxes - $delivery_Service_charges_Tax - $delivery_charges_Taxes - $delivery_small_order_charge_Tax;
+            // $total_taxes = $OrderRows
+            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            //     ->where('order_fulfilled_method', 'Delivery')
+            //     ->Sum('sales_tax');
+            // // sales tax       delivery_service_fee_tax 4.57    -  delivery_fee_tax 0.9     0.48
+            // $tax = $total_taxes - $delivery_Service_charges_Tax - $delivery_charges_Taxes - $delivery_small_order_charge_Tax;
 
-            $product_cost = $RO - ($delivery_Service_charges + $delivery_charges + $delivery_small_order_charge);
+            // $product_cost = $RO - ($delivery_Service_charges + $delivery_charges + $delivery_small_order_charge);
 
-            $order_total = $RO + $total_taxes + $Delivery_Tip_Summary;
+            // $order_total = $RO + $total_taxes + $Delivery_Tip_Summary;
 
             // $tax = $total_taxes - $delivery_Service_charges_Tax;
 
@@ -595,38 +580,26 @@ class LogicsAndQueriesServices
                 return $row['item_cost'] * $row['quantity'];
             });
 
-
-            // $BreadBoostArray =
-            //     [
-            //         'franchise_store'        =>$store,
-            //         'business_date'          =>$selectedDate,
-            //         'classic_order'          =>$classicOrdersCount,
-            //         'classic_with_bread'     =>$classicWithBreadCount,
-            //         'other_pizza_order'      =>$OtherPizzaOrderCount,
-            //         'other_pizza_with_bread' =>$OtherPizzaWithBreadCount,
-            //     ];
-            // $this->inserter->insertBreadBoostData([$BreadBoostArray]);
-
-            $DeliveryOrderSummaryArray=[
-                'franchise_store' => $store,
-                'business_date' => $selectedDate,
-                'orders_count' =>$Oreders_count,
-                'product_cost'=>$product_cost,
-                'tax'=>$tax,
-                'occupational_tax'=>$occupational_tax,
-                'delivery_charges'=>$delivery_charges,
-                'delivery_charges_taxes'=>$delivery_charges_Taxes,
-                'service_charges'=>$delivery_Service_charges,
-                'service_charges_taxes'=>$delivery_Service_charges_Tax,
-                'small_order_charge'=>$delivery_small_order_charge,
-                'small_order_charge_taxes'=>$delivery_small_order_charge_Tax,
-                'delivery_late_charge'=>$Delivery_Late_to_Portal_Fee,
-                'tip'=>$Delivery_Tip_Summary,
-                'tip_tax'=>$Delivery_Tip_Tax_Summary,
-                'total_taxes'=>$total_taxes,
-                'order_total'=>$order_total
-            ];
-            $this->inserter->insertDeliveryOrderSummaryData([$DeliveryOrderSummaryArray]);
+            // $DeliveryOrderSummaryArray=[
+            //     'franchise_store' => $store,
+            //     'business_date' => $selectedDate,
+            //     'orders_count' =>$Oreders_count,
+            //     'product_cost'=>$product_cost,
+            //     'tax'=>$tax,
+            //     'occupational_tax'=>$occupational_tax,
+            //     'delivery_charges'=>$delivery_charges,
+            //     'delivery_charges_taxes'=>$delivery_charges_Taxes,
+            //     'service_charges'=>$delivery_Service_charges,
+            //     'service_charges_taxes'=>$delivery_Service_charges_Tax,
+            //     'small_order_charge'=>$delivery_small_order_charge,
+            //     'small_order_charge_taxes'=>$delivery_small_order_charge_Tax,
+            //     'delivery_late_charge'=>$Delivery_Late_to_Portal_Fee,
+            //     'tip'=>$Delivery_Tip_Summary,
+            //     'tip_tax'=>$Delivery_Tip_Tax_Summary,
+            //     'total_taxes'=>$total_taxes,
+            //     'order_total'=>$order_total
+            // ];
+            // $this->inserter->insertDeliveryOrderSummaryData([$DeliveryOrderSummaryArray]);
 
 
             $ThirdPartyMarketplaceOrderArray=[
@@ -898,5 +871,117 @@ class LogicsAndQueriesServices
         }
 
         return $rows;
+    }
+
+    public function DeliveryOrderSummary(Collection $OrderRows, string $store, string $selectedDate): array{
+         Log::info('Delivery Order Summary');
+        $placed = ['Mobile', 'Website'];
+
+        $Oreders_count = $OrderRows
+                ->whereIn('order_placed_method', ['Mobile', 'Website'])
+                ->where('order_fulfilled_method', 'Delivery')
+                ->Count();
+
+        $RO = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->where('order_fulfilled_method', 'Delivery')
+            ->Sum('royalty_obligation');
+
+        $occupational_tax = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->where('order_fulfilled_method', 'Delivery')
+            ->Sum('occupational_tax');
+
+        $delivery_charges = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->where('order_fulfilled_method', 'Delivery')
+            ->Sum('delivery_fee');
+
+        $delivery_charges_Taxes = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->where('order_fulfilled_method', 'Delivery')
+            ->Sum('delivery_fee_tax');
+
+        $delivery_Service_charges = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->where('order_fulfilled_method', 'Delivery')
+            ->Sum('delivery_service_fee');
+
+        $delivery_Service_charges_Tax = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->where('order_fulfilled_method', 'Delivery')
+            ->Sum('delivery_service_fee_tax');
+
+        $delivery_small_order_charge = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->where('order_fulfilled_method', 'Delivery')
+            ->Sum('delivery_small_order_fee');
+
+        $delivery_small_order_charge_Tax = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->where('order_fulfilled_method', 'Delivery')
+            ->Sum('delivery_small_order_fee_tax');
+
+        $Delivery_Tip_Summary = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->where('order_fulfilled_method', 'Delivery')
+            ->Sum('delivery_tip');
+
+        $Delivery_Tip_Tax_Summary = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->where('order_fulfilled_method', 'Delivery')
+            ->Sum('delivery_tip_tax');
+
+        $total_taxes = $OrderRows
+            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->where('order_fulfilled_method', 'Delivery')
+            ->Sum('sales_tax');
+        // sales tax       delivery_service_fee_tax 4.57    -  delivery_fee_tax 0.9     0.48
+        $tax = $total_taxes - $delivery_Service_charges_Tax - $delivery_charges_Taxes - $delivery_small_order_charge_Tax;
+
+        $product_cost = $RO - ($delivery_Service_charges + $delivery_charges + $delivery_small_order_charge);
+
+        $order_total = $RO + $total_taxes + $Delivery_Tip_Summary;
+
+            $lateCount = $OrderRows
+        ->where('delivery_fee', '!=', 0)
+        ->whereIn('order_placed_method', $placed)
+        ->where('order_fulfilled_method', 'Delivery')
+        ->filter(function ($order) {
+            $loadedRaw  = trim((string)($order['time_loaded_into_portal'] ?? ''));
+            $promiseRaw = trim((string)($order['promise_date'] ?? ''));
+            if ($loadedRaw === '' || $promiseRaw === '') return false;
+
+            try {
+                $loaded   = Carbon::createFromFormat('Y-m-d H:i:s', $loadedRaw);
+                $promise5 = Carbon::createFromFormat('Y-m-d H:i:s', $promiseRaw)->addMinutes(5);
+                return $loaded->greaterThan($promise5);
+            } catch (\Throwable $e) {
+                return false;
+            }
+        })
+        ->count();
+
+        $delivery_late_charge = round($lateCount * 0.5, 2);
+
+        return [
+        'franchise_store' => $store,
+            'business_date' => $selectedDate,
+            'orders_count' =>$Oreders_count,
+            'product_cost'=>$product_cost,
+            'tax'=>$tax,
+            'occupational_tax'=>$occupational_tax,
+            'delivery_charges'=>$delivery_charges,
+            'delivery_charges_taxes'=>$delivery_charges_Taxes,
+            'service_charges'=>$delivery_Service_charges,
+            'service_charges_taxes'=>$delivery_Service_charges_Tax,
+            'small_order_charge'=>$delivery_small_order_charge,
+            'small_order_charge_taxes'=>$delivery_small_order_charge_Tax,
+            'delivery_late_charge'=>$delivery_late_charge,
+            'tip'=>$Delivery_Tip_Summary,
+            'tip_tax'=>$Delivery_Tip_Tax_Summary,
+            'total_taxes'=>$total_taxes,
+            'order_total'=>$order_total
+        ];
     }
 }
