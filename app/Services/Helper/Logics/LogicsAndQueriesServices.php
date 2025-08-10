@@ -3,7 +3,7 @@
 namespace App\Services\Helper\Logics;
 
 use Illuminate\Support\Facades\Log;
-
+use Illuminate\Support\Collection;
 use App\Services\Helper\Insert\InsertDataServices;
 
 use Carbon\Carbon;
@@ -18,24 +18,7 @@ class LogicsAndQueriesServices
 
     }
 
-
-    public function DataLoop(array $data, string $selectedDate){
-
-        Log::info('Started the data loop.');
-
-        $detailOrder = collect($data['processDetailOrders'] ?? []);
-        $financialView = collect($data['processFinancialView'] ?? []);
-        $wasteData = collect($data['processWaste'] ?? []);
-        $orderLine = collect($data['processOrderLine'] ?? []);
-
-        $allFranchiseStores = collect([
-            ...$detailOrder->pluck('franchise_store'),
-            ...$financialView->pluck('franchise_store'),
-            ...$wasteData->pluck('franchise_store')
-        ])->unique();
-
-        //channel data array
-        $metrics = [
+    protected array $channelDataMetrics = [
             'Sales' => [
                 '-' => ['column' => 'royalty_obligation', 'type' => 'sum'],
             ],
@@ -74,7 +57,24 @@ class LogicsAndQueriesServices
             ],
         ];
 
-        $summaryRows = [];
+    public function DataLoop(array $data, string $selectedDate){
+
+        Log::info('Started the data loop.');
+
+        $detailOrder = collect($data['processDetailOrders'] ?? []);
+        $financialView = collect($data['processFinancialView'] ?? []);
+        $wasteData = collect($data['processWaste'] ?? []);
+        $orderLine = collect($data['processOrderLine'] ?? []);
+
+        $allFranchiseStores = collect([
+            ...$detailOrder->pluck('franchise_store'),
+            ...$financialView->pluck('franchise_store'),
+            ...$wasteData->pluck('franchise_store')
+        ])->unique();
+
+
+
+        $allChannelRows = [];
 
         Log::info('Started the store loop');
         foreach ($allFranchiseStores as $store) {
@@ -83,38 +83,44 @@ class LogicsAndQueriesServices
             $financeRows = $financialView->where('franchise_store', $store);
             $wasteRows = $wasteData->where('franchise_store', $store);
             $storeOrderLines = $orderLine->where('franchise_store', $store);
-            $groupedCombos = $OrderRows->groupBy(function ($row) {
-                return $row['order_placed_method'] . '|' . $row['order_fulfilled_method'];
-            });
 
-
-            Log::info('Started the store loop');
-             foreach ($groupedCombos as $comboKey => $methodOrders) {
-                [$placedMethod, $fulfilledMethod] = explode('|', $comboKey);
-
-                foreach ($metrics as $category => $subcats) {
-                    foreach ($subcats as $subcat => $info) {
-                        if ($info['type'] === 'sum') {
-                            $amount = $methodOrders->sum(function ($row) use ($info) {
-                                return floatval($row[$info['column']] ?? 0);
-                            });
-                        } elseif ($info['type'] === 'count') {
-                            $amount = $methodOrders->unique('order_id')->count();
-                        }
-                        if ($amount != 0) {
-                            $summaryRows[] = [
-                                'store' => $store,
-                                'business_date' => $selectedDate,
-                                'category' => $category,
-                                'sub_category' => $subcat,
-                                'order_placed_method' => $placedMethod,
-                                'order_fulfilled_method' => $fulfilledMethod,
-                                'amount' => $amount,
-                            ];
-                        }
-                    }
-                }
+            //******* ChannelData *******
+            $channelRows = $this->ChannelData($OrderRows, $store, $selectedDate);
+            if (!empty($channelRows)) {
+                array_push($allChannelRows, ...$channelRows);
             }
+            // $groupedCombos = $OrderRows->groupBy(function ($row) {
+            //     return $row['order_placed_method'] . '|' . $row['order_fulfilled_method'];
+            // });
+
+
+            // Log::info('Started the store loop');
+            //  foreach ($groupedCombos as $comboKey => $methodOrders) {
+            //     [$placedMethod, $fulfilledMethod] = explode('|', $comboKey);
+
+            //     foreach ($this->channelDataMetrics as $category => $subcats) {
+            //         foreach ($subcats as $subcat => $info) {
+            //             if ($info['type'] === 'sum') {
+            //                 $amount = $methodOrders->sum(function ($row) use ($info) {
+            //                     return floatval($row[$info['column']] ?? 0);
+            //                 });
+            //             } elseif ($info['type'] === 'count') {
+            //                 $amount = $methodOrders->unique('order_id')->count();
+            //             }
+            //             if ($amount != 0) {
+            //                 $summaryRows[] = [
+            //                     'store' => $store,
+            //                     'business_date' => $selectedDate,
+            //                     'category' => $category,
+            //                     'sub_category' => $subcat,
+            //                     'order_placed_method' => $placedMethod,
+            //                     'order_fulfilled_method' => $fulfilledMethod,
+            //                     'amount' => $amount,
+            //                 ];
+            //             }
+            //         }
+            //     }
+            // }
             //******* EndChannelData *******
 
             //******* Bread Boost Summary *********//
@@ -845,10 +851,48 @@ class LogicsAndQueriesServices
             }
 
         }
-        if (!empty($summaryRows)) {
-            $this->inserter->insertChannelData($summaryRows);
+        // if (!empty($summaryRows)) {
+        //     $this->inserter->insertChannelData($summaryRows);
+        // }
+        if (!empty($allChannelRows)) {
+            $this->inserter->insertChannelData($allChannelRows);
         }
         Log::info('Ended the data loop.');
     }
 
+    public function ChannelData(Collection $orderRows, string $store, string $selectedDate): array{
+        $rows = [];
+        $groupedCombos = $orderRows->groupBy(function ($row) {
+            return ($row['order_placed_method'] ?? '') . '|' . ($row['order_fulfilled_method'] ?? '');
+        });
+
+        foreach ($groupedCombos as $comboKey => $methodOrders) {
+            [$placedMethod, $fulfilledMethod] = explode('|', $comboKey);
+
+            foreach ($this->channelDataMetrics as $category => $subcats) {
+                foreach ($subcats as $subcat => $info) {
+                    if ($info['type'] === 'sum') {
+                        $amount = $methodOrders->sum(fn($row) => (float)($row[$info['column']] ?? 0));
+                    } else { // count distinct orders
+                        $amount = $methodOrders->unique('order_id')->count();
+                    }
+
+                    if ($amount != 0) {
+                        $rows[] = [
+                            'store'                 => $store,
+                            'business_date'         => $selectedDate,
+                            'category'              => $category,
+                            'sub_category'          => $subcat,
+                            'order_placed_method'   => $placedMethod,
+                            'order_fulfilled_method'=> $fulfilledMethod,
+                            'amount'                => $amount,
+                        ];
+                    }
+                }
+            }
+        }
+
+        return $rows;
+
+    }
 }
