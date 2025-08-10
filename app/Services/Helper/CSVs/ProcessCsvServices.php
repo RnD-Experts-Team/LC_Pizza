@@ -8,7 +8,6 @@ use Carbon\Carbon;
 use App\Services\Helper\Insert\InsertDataServices;
 
 
-
 // this service is used for the request -> download the ZIP file -> save the files as CSVs -> get data from them ->save them inthe db tables -> delete the files
 class ProcessCsvServices {
 
@@ -34,7 +33,12 @@ class ProcessCsvServices {
             'Summary-Transactions' => 'processSummaryTransactions',
             'Detail-Orders' => 'processDetailOrders',
             'Waste-Report' => 'processWaste',
-            'Detail-OrderLines' => 'processOrderLine'
+            'Detail-OrderLines' => 'processOrderLine',
+
+            'InventoryWaste' => 'processInventoryWaste',
+            'InventoryCOGS' => 'processInventoryCOGS',
+            'InventoryIngredient-Usage' => 'processInventoryIngredientUsage',
+            'InventoryPurchase-Orders' => 'processInventoryPurchaseOrders'
         ];
 
         $allData = [];
@@ -311,54 +315,6 @@ class ProcessCsvServices {
         $rows =$this->mapCsvToRows($filePath,$columnMap,$transformers);
         $this->inserter->insertDetailOrders($rows);
 
-        //     DetailOrder::upsert(
-        //         $batch,
-        //         ['franchise_store', 'business_date', 'order_id'],
-        //         [
-        //             'date_time_placed',
-        //             'date_time_fulfilled',
-        //             'royalty_obligation',
-        //             'quantity',
-        //             'customer_count',
-        //             'taxable_amount',
-        //             'non_taxable_amount',
-        //             'tax_exempt_amount',
-        //             'non_royalty_amount',
-        //             'sales_tax',
-        //             'employee',
-        //             'gross_sales',
-        //             'occupational_tax',
-        //             'override_approval_employee',
-        //             'order_placed_method',
-        //             'delivery_tip',
-        //             'delivery_tip_tax',
-        //             'order_fulfilled_method',
-        //             'delivery_fee',
-        //             'modified_order_amount',
-        //             'delivery_fee_tax',
-        //             'modification_reason',
-        //             'payment_methods',
-        //             'delivery_service_fee',
-        //             'delivery_service_fee_tax',
-        //             'refunded',
-        //             'delivery_small_order_fee',
-        //             'delivery_small_order_fee_tax',
-        //             'transaction_type',
-        //             'store_tip_amount',
-        //             'promise_date',
-        //             'tax_exemption_id',
-        //             'tax_exemption_entity_name',
-        //             'user_id',
-        //             'hnrOrder',
-        //             'broken_promise',
-        //             'portal_eligible',
-        //             'portal_used',
-        //             'put_into_portal_before_promise_time',
-        //             'portal_compartments_used',
-        //             'time_loaded_into_portal'
-        //         ]
-        //     );
-        // }
 
         return $rows;
     }
@@ -399,12 +355,96 @@ class ProcessCsvServices {
         return $rows;
     }
 
+    private function processInventoryWaste($filePath)
+    {
+        $columnMap = [
+            'franchise_store'   =>'franchisestore',
+            'business_date'     =>'businessdate',
+            'item_id'           =>'itemid',
+            'item_description'  =>'itemdescription',
+            'waste_reason'      =>'wastereason',
+            'unit_food_cost'    =>'unitfoodcost',
+            'qty'               =>'qty',
+        ];
+        $rows =$this->mapCsvToRows($filePath,$columnMap);
+         $this->inserter->insertInventoryWaste($rows);
+
+        return $rows;
+    }
+
+    private function processInventoryCOGS($filePath)
+    {
+        $columnMap = [
+            'franchise_store'           =>'franchisestore',
+            'business_date'             =>'businessdate',
+            'count_period'              =>'countperiod',
+            'inventory_category'        =>'inventorycategory',
+            'starting_value'            =>'startingvalue',
+            'received_value'            =>'receivedvalue',
+            'net_transfer_value'        =>'nettransfervalue',
+            'ending_value'              =>'endingvalue',
+            'used_value'                =>'usedvalue',
+            'theoretical_usage_value'   =>'theoreticalusagevalue',
+            'variance_value'            =>'variancevalue',
+        ];
+        $rows =$this->mapCsvToRows($filePath,$columnMap);
+         $this->inserter->insertAltaInventoryCogs($rows);
+
+        return $rows;
+    }
+    private function processInventoryIngredientUsage($filePath)
+    {
+        $columnMap = [
+            'franchise_store'       =>'franchisestore',
+            'business_date'         =>'businessdate',
+            'count_period'          =>'countperiod',
+            'ingredient_id'         =>'ingredientid',
+            'ingredient_description'=>'ingredientdescription',
+            'ingredient_category'   =>'ingredientcategory',
+            'ingredient_unit'       =>'ingredientunit',
+            'ingredient_unit_cost'  =>'ingredientunitcost',
+            'starting_inventory_qty'=>'startinginventoryqty',
+            'received_qty'          =>'receivedqty',
+            'net_transferred_qty'   =>'nettransferredqty',
+            'ending_inventory_qty'  =>'endinginventoryqty',
+            'actual_usage'          =>'actualusage',
+            'theoretical_usage'     =>'theoreticalusage',
+            'variance_qty'          =>'varianceqty',
+            'waste_qty'             =>'wasteqty',
+        ];
+        $rows =$this->mapCsvToRows($filePath,$columnMap);
+         $this->inserter->insertAltaInventoryIngredientUsage($rows);
+
+        return $rows;
+    }
+    private function processInventoryPurchaseOrders($filePath)
+    {
+        $columnMap = [
+            'franchise_store'       =>'franchisestore',
+            'business_date'         =>'businessdate',
+            'supplier'              =>'supplier',
+            'invoice_number'        =>'invoicenumber',
+            'purchase_order_number' =>'purchaseordernumber',
+            'ingredient_id'         =>'ingredientid',
+            'ingredient_description'=>'ingredientdescription',
+            'ingredient_category'   =>'ingredientcategory',
+            'ingredient_unit'       =>'ingredientunit',
+            'unit_price'            =>'unitprice',
+            'order_qty'             =>'orderqty',
+            'sent_qty'              =>'sentqty',
+            'received_qty'          =>'receivedqty',
+            'total_cost'            =>'totalcost',
+        ];
+        $rows =$this->mapCsvToRows($filePath,$columnMap);
+         $this->inserter->insertAltaInventoryIngredientOrder($rows);
+
+        return $rows;
+    }
     //********* end of files prossessing functions ***********/
 
 
     //********************* helping functions *********************/
 
-    //map Csv To Rows function
     protected function mapCsvToRows(string $filePath, array $columnMap, array $transformers = []): array
     {
         $raw = $this->readCsv($filePath);

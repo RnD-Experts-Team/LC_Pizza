@@ -17,7 +17,6 @@ class LogicsAndQueriesServices
         $this->inserter = $inserter;
 
     }
-
     protected array $channelDataMetrics = [
             'Sales' => [
                 '-' => ['column' => 'royalty_obligation', 'type' => 'sum'],
@@ -56,7 +55,10 @@ class LogicsAndQueriesServices
                 'PutInPortalOnTimeOrdersCount' => ['column' => 'put_into_portal_before_promise_time', 'type' => 'sum'],
             ],
         ];
-
+    protected array $breadExcludedItemIds = [
+        '-1','6','7','8','9','101001','101002','101288','103044','202901','101289','204100','204200',
+    ];
+    //main fun
     public function DataLoop(array $data, string $selectedDate){
 
         Log::info('Started the data loop.');
@@ -115,7 +117,6 @@ class LogicsAndQueriesServices
                 $this->inserter->insertFinanceData([$financeDataRow]);
             }
 
-
             //******* final summary *********//
             $finalSummaryRow = $this->FinalSummaries($OrderRows, $financeRows, $wasteRows, $store, $selectedDate);
             if (!empty($finalSummaryRow)) {
@@ -128,30 +129,6 @@ class LogicsAndQueriesServices
                 $this->inserter->insertHourlySales($hourlyRows);
             }
 
-            // $ordersByHour = $OrderRows->groupBy(function ($order) {
-            //     return Carbon::parse($order['promise_date'])->format('H');
-            // });
-
-            // foreach ($ordersByHour as $hour => $hourOrders) {
-
-            //     $HourlySalesArray=[
-            //             'franchise_store' =>$store,
-            //             'business_date' =>$selectedDate,
-            //             'hour' =>(int) $hour,
-            //             'total_sales' =>$hourOrders->sum('royalty_obligation'),
-            //             'phone_sales' =>$hourOrders->where('order_placed_method', 'Phone')->sum('royalty_obligation'),
-            //             'call_center_sales' =>$hourOrders->where('order_placed_method', 'SoundHoundAgent')->sum('royalty_obligation'),
-            //             'drive_thru_sales' =>$hourOrders->where('order_placed_method', 'Drive Thru')->sum('royalty_obligation'),
-            //             'website_sales' =>$hourOrders->where('order_placed_method', 'Website')->sum('royalty_obligation'),
-            //             'mobile_sales'=>$hourOrders->where('order_placed_method', 'Mobile')->sum('royalty_obligation'),
-            //             'order_count'=>$hourOrders->count(),
-            //         ];
-
-
-            //         $this->inserter->insertHourlySales([$HourlySalesArray]);
-
-
-            // }
             //******* ChannelData *******
             $channelRows = $this->ChannelData($OrderRows, $store, $selectedDate);
             if (!empty($channelRows)) {
@@ -220,21 +197,7 @@ class LogicsAndQueriesServices
                 ->count();
 
             $OtherPizzaOrder = $storeOrderLines
-                ->whereNotIn('item_id', [
-                    '-1',
-                    '6',
-                    '7',
-                    '8',
-                    '9',
-                    '101001',
-                    '101002',
-                    '101288',
-                    '103044',
-                    '202901',
-                    '101289',
-                    '204100',
-                    '204200'
-                ])
+                ->whereNotIn('item_id', $this->breadExcludedItemIds)
                 ->whereIn('order_fulfilled_method', ['Register', 'Drive-Thru'])
                 ->whereIn('order_placed_method', ['Phone', 'Register', 'Drive Thru'])
                 ->pluck('order_id')
@@ -397,47 +360,22 @@ class LogicsAndQueriesServices
     public function ThirdPartyMarketplace(Collection $OrderRows, string $store, string $selectedDate): array{
         Log::info('3rd Party Marketplace Orders');
 
-        $doordash_product_costs_Marketplace = $OrderRows
-            ->where('order_placed_method', 'DoorDash')
-            ->Sum('royalty_obligation');
-        $ubereats_product_costs_Marketplace = $OrderRows
-            ->where('order_placed_method', 'UberEats')
-            ->Sum('royalty_obligation');
-        $grubhub_product_costs_Marketplace = $OrderRows
-            ->where('order_placed_method', 'Grubhub')
-            ->Sum('royalty_obligation');
+        $dd  = $OrderRows->where('order_placed_method', 'DoorDash');
+        $ue  = $OrderRows->where('order_placed_method', 'UberEats');
+        $gh  = $OrderRows->where('order_placed_method', 'Grubhub');
 
-        $doordash_tax_Marketplace = $OrderRows
-            ->where('order_placed_method', 'DoorDash')
-            ->Sum('sales_tax');
-        $ubereats_tax_Marketplace = $OrderRows
-            ->where('order_placed_method', 'UberEats')
-            ->Sum('sales_tax');
-        $grubhub_tax_Marketplace = $OrderRows
-            ->where('order_placed_method', 'Grubhub')
-            ->Sum('sales_tax');
-
-        $doordash_order_total_Marketplace = $OrderRows
-            ->where('order_placed_method', 'DoorDash')
-            ->Sum('gross_sales');
-        $uberEats_order_total_Marketplace = $OrderRows
-            ->where('order_placed_method', 'UberEats')
-            ->Sum('gross_sales');
-        $grubhub_order_total_Marketplace = $OrderRows
-            ->where('order_placed_method', 'Grubhub')
-            ->Sum('gross_sales');
         return [
-                'franchise_store' =>$store,
-                'business_date' => $selectedDate,
-                'doordash_product_costs_Marketplace'=>$doordash_product_costs_Marketplace,
-                'doordash_tax_Marketplace'=>$doordash_tax_Marketplace,
-                'doordash_order_total_Marketplace' =>$doordash_order_total_Marketplace,
-                'ubereats_product_costs_Marketplace'=>$ubereats_product_costs_Marketplace,
-                'ubereats_tax_Marketplace'=>$ubereats_tax_Marketplace,
-                'uberEats_order_total_Marketplace'=>$uberEats_order_total_Marketplace,
-                'grubhub_product_costs_Marketplace'=>$grubhub_product_costs_Marketplace,
-                'grubhub_tax_Marketplace'=>$grubhub_tax_Marketplace,
-                'grubhub_order_total_Marketplace'=>$grubhub_order_total_Marketplace,
+                'franchise_store'                       => $store,
+                'business_date'                         => $selectedDate,
+                'doordash_product_costs_Marketplace'    => $dd->Sum('royalty_obligation'),
+                'doordash_tax_Marketplace'              => $dd->Sum('sales_tax'),
+                'doordash_order_total_Marketplace'      => $dd->Sum('gross_sales'),
+                'ubereats_product_costs_Marketplace'    => $ue->Sum('royalty_obligation'),
+                'ubereats_tax_Marketplace'              => $ue->Sum('sales_tax'),
+                'uberEats_order_total_Marketplace'      => $ue->Sum('gross_sales'),
+                'grubhub_product_costs_Marketplace'     => $gh->Sum('royalty_obligation'),
+                'grubhub_tax_Marketplace'               => $gh->Sum('sales_tax'),
+                'grubhub_order_total_Marketplace'       => $gh->Sum('gross_sales'),
 
             ];
     }
@@ -907,7 +845,7 @@ class LogicsAndQueriesServices
                 'total_waste_cost'            => $totalWasteCost,
             ];
     }
-    private function HourlySales(Collection $OrderRows, string $store, string $selectedDate): array
+    public function HourlySales(Collection $OrderRows, string $store, string $selectedDate): array
     {
         $rows = [];
 
@@ -937,5 +875,5 @@ class LogicsAndQueriesServices
         }
 
         return $rows;
-        }
+    }
 }

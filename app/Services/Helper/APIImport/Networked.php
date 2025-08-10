@@ -18,7 +18,9 @@ class Networked{
                 'Accept'       => 'application/json,text/plain,*/*',
                 'Content-Type' => 'application/x-www-form-urlencoded',
             ],
-            'http_errors' => false,
+            'timeout'         => 60,
+            'connect_timeout' => 15,
+            'http_errors'     => false,
         ]);
 
         $status = $response->getStatusCode();
@@ -45,6 +47,8 @@ class Networked{
                 'Content-Type'            => 'application/json',
             ],
             'http_errors' => false,
+            'timeout'         => 90,
+            'connect_timeout' => 15,
             'stream'      => true,
         ]);
 
@@ -71,6 +75,8 @@ class Networked{
 
         $http->get($downloadUrl, [
             'sink'        => $zipPath,
+            'timeout'         => 600, // 10 minutes
+            'connect_timeout' => 20,
             'http_errors' => false,
         ]);
 

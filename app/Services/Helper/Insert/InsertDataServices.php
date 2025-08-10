@@ -341,6 +341,68 @@ class InsertDataServices{
                 'order_count'
             ]
         ],
+        'alta_inventory_waste' => [
+            'model'      => \App\Models\AltaInventoryWaste::class,
+            'unique'     => ['franchise_store', 'business_date', 'item_id'],
+            'updateCols' => [
+                'item_description',
+                'waste_reason',
+                'unit_food_cost',
+                'qty',
+            ]
+        ],
+        'alta_inventory_cogs' => [
+            'model'      => \App\Models\AltaInventoryCogs::class,
+            'unique'     => ['franchise_store', 'business_date', 'count_period', 'inventory_category'],
+            'updateCols' => [
+                'starting_value',
+                'received_value',
+                'net_transfer_value',
+                'ending_value',
+                'used_value',
+                'theoretical_usage_value',
+                'variance_value',
+            ]
+        ],
+        'alta_inventory_ingredient_order' => [
+            'model'      => \App\Models\AltaInventoryIngredientOrder::class,
+            'unique'     => [
+                'franchise_store',
+                'business_date',
+                'supplier',
+                'invoice_number',
+                'purchase_order_number',
+                'ingredient_id'
+            ],
+            'updateCols' => [
+                'ingredient_description',
+                'ingredient_category',
+                'ingredient_unit',
+                'unit_price',
+                'order_qty',
+                'sent_qty',
+                'received_qty',
+                'total_cost',
+            ]
+        ],
+        'alta_inventory_ingredient_usage' => [
+            'model'      => \App\Models\AltaInventoryIngredientUsage::class,
+            'unique'     => ['franchise_store', 'business_date', 'count_period', 'ingredient_id'],
+            'updateCols' => [
+                'ingredient_description',
+                'ingredient_category',
+                'ingredient_unit',
+                'ingredient_unit_cost',
+                'starting_inventory_qty',
+                'received_qty',
+                'net_transferred_qty',
+                'ending_inventory_qty',
+                'actual_usage',
+                'theoretical_usage',
+                'variance_qty',
+                'waste_qty',
+            ]
+        ],
     ];
 
     //BreadBoostModel
@@ -426,6 +488,25 @@ class InsertDataServices{
     public function insertChannelData(array $data, int $chunkSize = 1000): void{
 
         $this->loopInsertHelper($data,'channel_data',$chunkSize);
+    }
+    //alta inv waste
+    public function insertInventoryWaste(array $data, int $chunkSize = 1000): void{
+
+        $this->loopInsertHelper($data,'alta_inventory_waste',$chunkSize);
+    }
+    //alta inv COGS
+    public function insertAltaInventoryCogs(array $data, int $chunkSize = 1000): void{
+
+        $this->loopInsertHelper($data,'alta_inventory_cogs',$chunkSize);
+    }
+    public function insertAltaInventoryIngredientOrder(array $data, int $chunkSize = 1000): void{
+
+        $this->loopInsertHelper($data,'alta_inventory_ingredient_order',$chunkSize);
+    }
+
+    public function insertAltaInventoryIngredientUsage(array $data, int $chunkSize = 1000): void{
+
+        $this->loopInsertHelper($data,'alta_inventory_ingredient_usage',$chunkSize);
     }
 
 
