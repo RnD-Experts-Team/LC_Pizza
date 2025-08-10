@@ -89,87 +89,57 @@ class LogicsAndQueriesServices
             if (!empty($channelRows)) {
                 array_push($allChannelRows, ...$channelRows);
             }
-            // $groupedCombos = $OrderRows->groupBy(function ($row) {
-            //     return $row['order_placed_method'] . '|' . $row['order_fulfilled_method'];
-            // });
-
-
-            // Log::info('Started the store loop');
-            //  foreach ($groupedCombos as $comboKey => $methodOrders) {
-            //     [$placedMethod, $fulfilledMethod] = explode('|', $comboKey);
-
-            //     foreach ($this->channelDataMetrics as $category => $subcats) {
-            //         foreach ($subcats as $subcat => $info) {
-            //             if ($info['type'] === 'sum') {
-            //                 $amount = $methodOrders->sum(function ($row) use ($info) {
-            //                     return floatval($row[$info['column']] ?? 0);
-            //                 });
-            //             } elseif ($info['type'] === 'count') {
-            //                 $amount = $methodOrders->unique('order_id')->count();
-            //             }
-            //             if ($amount != 0) {
-            //                 $summaryRows[] = [
-            //                     'store' => $store,
-            //                     'business_date' => $selectedDate,
-            //                     'category' => $category,
-            //                     'sub_category' => $subcat,
-            //                     'order_placed_method' => $placedMethod,
-            //                     'order_fulfilled_method' => $fulfilledMethod,
-            //                     'amount' => $amount,
-            //                 ];
-            //             }
-            //         }
-            //     }
-            // }
-            //******* EndChannelData *******
-
             //******* Bread Boost Summary *********//
-            Log::info('Bread Boost Summary');
-            $classicOrders = $storeOrderLines
-                ->whereIn('menu_item_name', ['Classic Pepperoni', 'Classic Cheese'])
-                ->whereIn('order_fulfilled_method', ['Register', 'Drive-Thru'])
-                ->whereIn('order_placed_method', ['Phone', 'Register', 'Drive Thru'])
-                ->pluck('order_id')
-                ->unique();
+            $breadBoostRow = $this->BreadBoost($storeOrderLines, $store, $selectedDate);
+            if (!empty($breadBoostRow)) {
+                $this->inserter->insertBreadBoostData([$breadBoostRow]);
+            }
+            // Log::info('Bread Boost Summary');
+            // $classicOrders = $storeOrderLines
+            //     ->whereIn('menu_item_name', ['Classic Pepperoni', 'Classic Cheese'])
+            //     ->whereIn('order_fulfilled_method', ['Register', 'Drive-Thru'])
+            //     ->whereIn('order_placed_method', ['Phone', 'Register', 'Drive Thru'])
+            //     ->pluck('order_id')
+            //     ->unique();
 
-            $classicOrdersCount = $classicOrders->count();
+            // $classicOrdersCount = $classicOrders->count();
 
-            $classicWithBreadCount = $storeOrderLines
-                ->whereIn('order_id', $classicOrders)
-                ->where('menu_item_name', 'Crazy Bread')
-                ->pluck('order_id')
-                ->unique()
-                ->count();
+            // $classicWithBreadCount = $storeOrderLines
+            //     ->whereIn('order_id', $classicOrders)
+            //     ->where('menu_item_name', 'Crazy Bread')
+            //     ->pluck('order_id')
+            //     ->unique()
+            //     ->count();
 
-            $OtherPizzaOrder = $storeOrderLines
-                ->whereNotIn('item_id', [
-                    '-1',
-                    '6',
-                    '7',
-                    '8',
-                    '9',
-                    '101001',
-                    '101002',
-                    '101288',
-                    '103044',
-                    '202901',
-                    '101289',
-                    '204100',
-                    '204200'
-                ])
-                ->whereIn('order_fulfilled_method', ['Register', 'Drive-Thru'])
-                ->whereIn('order_placed_method', ['Phone', 'Register', 'Drive Thru'])
-                ->pluck('order_id')
-                ->unique();
+            // $OtherPizzaOrder = $storeOrderLines
+            //     ->whereNotIn('item_id', [
+            //         '-1',
+            //         '6',
+            //         '7',
+            //         '8',
+            //         '9',
+            //         '101001',
+            //         '101002',
+            //         '101288',
+            //         '103044',
+            //         '202901',
+            //         '101289',
+            //         '204100',
+            //         '204200'
+            //     ])
+            //     ->whereIn('order_fulfilled_method', ['Register', 'Drive-Thru'])
+            //     ->whereIn('order_placed_method', ['Phone', 'Register', 'Drive Thru'])
+            //     ->pluck('order_id')
+            //     ->unique();
 
-            $OtherPizzaOrderCount = $OtherPizzaOrder->count();
+            // $OtherPizzaOrderCount = $OtherPizzaOrder->count();
 
-            $OtherPizzaWithBreadCount = $storeOrderLines
-                ->whereIn('order_id', $OtherPizzaOrder)
-                ->where('menu_item_name', 'Crazy Bread')
-                ->pluck('order_id')
-                ->unique()
-                ->count();
+            // $OtherPizzaWithBreadCount = $storeOrderLines
+            //     ->whereIn('order_id', $OtherPizzaOrder)
+            //     ->where('menu_item_name', 'Crazy Bread')
+            //     ->pluck('order_id')
+            //     ->unique()
+            //     ->count();
             //******* End Of Bread Boost Summary *********//
 
 
@@ -672,16 +642,16 @@ class LogicsAndQueriesServices
             });
 
 
-            $BreadBoostArray =
-                [
-                    'franchise_store'        =>$store,
-                    'business_date'          =>$selectedDate,
-                    'classic_order'          =>$classicOrdersCount,
-                    'classic_with_bread'     =>$classicWithBreadCount,
-                    'other_pizza_order'      =>$OtherPizzaOrderCount,
-                    'other_pizza_with_bread' =>$OtherPizzaWithBreadCount,
-                ];
-            $this->inserter->insertBreadBoostData([$BreadBoostArray]);
+            // $BreadBoostArray =
+            //     [
+            //         'franchise_store'        =>$store,
+            //         'business_date'          =>$selectedDate,
+            //         'classic_order'          =>$classicOrdersCount,
+            //         'classic_with_bread'     =>$classicWithBreadCount,
+            //         'other_pizza_order'      =>$OtherPizzaOrderCount,
+            //         'other_pizza_with_bread' =>$OtherPizzaWithBreadCount,
+            //     ];
+            // $this->inserter->insertBreadBoostData([$BreadBoostArray]);
 
             $DeliveryOrderSummaryArray=[
                 'franchise_store' => $store,
@@ -851,9 +821,7 @@ class LogicsAndQueriesServices
             }
 
         }
-        // if (!empty($summaryRows)) {
-        //     $this->inserter->insertChannelData($summaryRows);
-        // }
+
         if (!empty($allChannelRows)) {
             $this->inserter->insertChannelData($allChannelRows);
         }
@@ -894,5 +862,63 @@ class LogicsAndQueriesServices
 
         return $rows;
 
+    }
+
+    public function BreadBoost(Collection $storeOrderLines, string $store, string $selectedDate): array{
+        Log::info('Bread Boost Summary');
+            $classicOrders = $storeOrderLines
+                ->whereIn('menu_item_name', ['Classic Pepperoni', 'Classic Cheese'])
+                ->whereIn('order_fulfilled_method', ['Register', 'Drive-Thru'])
+                ->whereIn('order_placed_method', ['Phone', 'Register', 'Drive Thru'])
+                ->pluck('order_id')
+                ->unique();
+
+            $classicOrdersCount = $classicOrders->count();
+
+            $classicWithBreadCount = $storeOrderLines
+                ->whereIn('order_id', $classicOrders)
+                ->where('menu_item_name', 'Crazy Bread')
+                ->pluck('order_id')
+                ->unique()
+                ->count();
+
+            $OtherPizzaOrder = $storeOrderLines
+                ->whereNotIn('item_id', [
+                    '-1',
+                    '6',
+                    '7',
+                    '8',
+                    '9',
+                    '101001',
+                    '101002',
+                    '101288',
+                    '103044',
+                    '202901',
+                    '101289',
+                    '204100',
+                    '204200'
+                ])
+                ->whereIn('order_fulfilled_method', ['Register', 'Drive-Thru'])
+                ->whereIn('order_placed_method', ['Phone', 'Register', 'Drive Thru'])
+                ->pluck('order_id')
+                ->unique();
+
+            $OtherPizzaOrderCount = $OtherPizzaOrder->count();
+
+            $OtherPizzaWithBreadCount = $storeOrderLines
+                ->whereIn('order_id', $OtherPizzaOrder)
+                ->where('menu_item_name', 'Crazy Bread')
+                ->pluck('order_id')
+                ->unique()
+                ->count();
+
+            return [
+            'franchise_store'         => $store,
+            'business_date'           => $selectedDate,
+            'classic_order'           => $classicOrdersCount,
+            'classic_with_bread'      => $classicWithBreadCount,
+            'other_pizza_order'       => $OtherPizzaOrderCount,
+            'other_pizza_with_bread'  => $OtherPizzaWithBreadCount,
+        ];
     }
 }
