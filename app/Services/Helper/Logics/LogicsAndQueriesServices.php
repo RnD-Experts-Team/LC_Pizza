@@ -84,11 +84,7 @@ class LogicsAndQueriesServices
             $wasteRows = $wasteData->where('franchise_store', $store);
             $storeOrderLines = $orderLine->where('franchise_store', $store);
 
-            //******* ChannelData *******
-            $channelRows = $this->ChannelData($OrderRows, $store, $selectedDate);
-            if (!empty($channelRows)) {
-                array_push($allChannelRows, ...$channelRows);
-            }
+
             //******* Bread Boost Summary *********//
             $breadBoostRow = $this->BreadBoost($storeOrderLines, $store, $selectedDate);
             if (!empty($breadBoostRow)) {
@@ -126,171 +122,41 @@ class LogicsAndQueriesServices
                 $this->inserter->insertFinalSummary([$finalSummaryRow]);
             }
 
-            
-            // $totalSales = $OrderRows->sum('royalty_obligation');
-
-            // $modifiedOrderQty = $OrderRows->filter(function ($row) {
-            //     return !empty(trim($row['override_approval_employee']));
-            // })->count();
-
-            // $RefundedOrderQty = $OrderRows
-            //     ->where('refunded', "Yes")
-            //     ->count();
-
-            // $customerCount = $OrderRows->sum('customer_count');
-
-            // $phoneSales = $OrderRows
-            //     ->where('order_placed_method', 'Phone')
-            //     ->sum('royalty_obligation');
-
-            // $callCenterAgent = $OrderRows
-            //     ->where('order_placed_method', 'SoundHoundAgent')
-            //     ->sum('royalty_obligation');
-
-            // $driveThruSales = $OrderRows
-            //     ->where('order_placed_method', 'Drive Thru')
-            //     ->sum('royalty_obligation');
-
-            // $websiteSales = $OrderRows
-            //     ->where('order_placed_method', 'Website')
-            //     ->sum('royalty_obligation');
-
-            // $mobileSales = $OrderRows
-            //     ->where('order_placed_method', 'Mobile')
-            //     ->sum('royalty_obligation');
-
-            // $doordashSales = $OrderRows
-            //     ->where('order_placed_method', 'DoorDash')
-            //     ->sum('royalty_obligation');
-
-            // $grubHubSales = $OrderRows
-            //     ->where('order_placed_method', 'Grubhub')
-            //     ->sum('royalty_obligation');
-
-            // $uberEatsSales = $OrderRows
-            //     ->where('order_placed_method', 'UberEats')
-            //     ->sum('royalty_obligation');
-
-            // $deliverySales = $doordashSales + $grubHubSales + $uberEatsSales + $mobileSales + $websiteSales;
-
-            // $digitalSales = $totalSales > 0
-            //     ? ($deliverySales / $totalSales)
-            //     : 0;
-
-            // $portalTransaction = $OrderRows
-            //     ->where('portal_eligible', 'Yes')
-            //     ->count();
-
-            // $putIntoPortal = $OrderRows
-            //     ->where('portal_used', 'Yes')
-            //     ->count();
-
-            // $portalPercentage = $portalTransaction > 0
-            //     ? ($putIntoPortal / $portalTransaction)
-            //     : 0;
-
-            // $portalOnTime = $OrderRows
-            //     ->where('put_into_portal_before_promise_time', 'Yes')
-            //     ->count();
-
-            // $inPortalPercentage = $portalTransaction > 0
-            //     ? ($portalOnTime / $portalTransaction)
-            //     : 0;
-            // // detail_orders (OrderRows) end
-
-            // $deliveryTips = $financeRows
-            //     ->where('sub_account', 'Delivery-Tips')
-            //     ->sum('amount');
-
-            // $prePaidDeliveryTips = $financeRows
-            //     ->where('sub_account', 'Prepaid-Delivery-Tips')
-            //     ->sum('amount');
-
-            // $inStoreTipAmount = $financeRows
-            //     ->where('sub_account', 'InStoreTipAmount')
-            //     ->sum('amount');
-
-            // $prePaidInStoreTipAmount = $financeRows
-            //     ->where('sub_account', 'Prepaid-InStoreTipAmount')
-            //     ->sum('amount');
-
-            // $totalTips = $deliveryTips + $prePaidDeliveryTips + $inStoreTipAmount + $prePaidInStoreTipAmount;
-
-            // $overShort = $financeRows
-            //     ->where('sub_account', 'Over-Short')
-            //     ->sum('amount');
-
-            // //final sum
-            // $cashSales = $financeRows
-            //     ->where('sub_account', 'Total Cash Sales')
-            //     ->sum('amount');
-
-            // $totalWasteCost = $wasteRows->sum(function ($row) {
-            //     return $row['item_cost'] * $row['quantity'];
-            // });
-
-            // $FinalSummaryArray=[
-            //     'franchise_store'             => $store,
-            //     'business_date'               => $selectedDate,
-            //     'total_sales'                 => $totalSales,
-            //     'modified_order_qty'          => $modifiedOrderQty,
-            //     'refunded_order_qty'          => $RefundedOrderQty,
-            //     'customer_count'              => $customerCount,
-            //     'phone_sales'                 => $phoneSales,
-            //     'call_center_sales'           => $callCenterAgent,
-            //     'drive_thru_sales'            => $driveThruSales,
-            //     'website_sales'               => $websiteSales,
-            //     'mobile_sales'                => $mobileSales,
-            //     'doordash_sales'              => $doordashSales,
-            //     'grubhub_sales'               => $grubHubSales,
-            //     'ubereats_sales'              => $uberEatsSales,
-            //     'delivery_sales'              => $deliverySales,
-            //     'digital_sales_percent'       => round($digitalSales, 2),
-            //     'portal_transactions'         => $portalTransaction,
-            //     'put_into_portal'             => $putIntoPortal,
-            //     'portal_used_percent'         => round($portalPercentage, 2),
-            //     'put_in_portal_on_time'       => $portalOnTime,
-            //     'in_portal_on_time_percent'   => round($inPortalPercentage, 2),
-            //     'delivery_tips'               => $deliveryTips,
-            //     'prepaid_delivery_tips'       => $prePaidDeliveryTips,
-            //     'in_store_tip_amount'         => $inStoreTipAmount,
-            //     'prepaid_instore_tip_amount'  => $prePaidInStoreTipAmount,
-            //     'total_tips'                  => $totalTips,
-            //     'over_short'                  => $overShort,
-            //     'cash_sales'                  => $cashSales,
-            //     'total_waste_cost'            => $totalWasteCost,
-            // ];
-
-            // $this->inserter->insertFinalSummary([$FinalSummaryArray]);
-
-
-
             // Save hourly sales
-            $ordersByHour = $OrderRows->groupBy(function ($order) {
-                return Carbon::parse($order['promise_date'])->format('H');
-            });
-
-            foreach ($ordersByHour as $hour => $hourOrders) {
-
-                $HourlySalesArray=[
-                        'franchise_store' =>$store,
-                        'business_date' =>$selectedDate,
-                        'hour' =>(int) $hour,
-                        'total_sales' =>$hourOrders->sum('royalty_obligation'),
-                        'phone_sales' =>$hourOrders->where('order_placed_method', 'Phone')->sum('royalty_obligation'),
-                        'call_center_sales' =>$hourOrders->where('order_placed_method', 'SoundHoundAgent')->sum('royalty_obligation'),
-                        'drive_thru_sales' =>$hourOrders->where('order_placed_method', 'Drive Thru')->sum('royalty_obligation'),
-                        'website_sales' =>$hourOrders->where('order_placed_method', 'Website')->sum('royalty_obligation'),
-                        'mobile_sales'=>$hourOrders->where('order_placed_method', 'Mobile')->sum('royalty_obligation'),
-                        'order_count'=>$hourOrders->count(),
-                    ];
-
-
-                    $this->inserter->insertHourlySales([$HourlySalesArray]);
-
-
+            $hourlyRows = $this->HourlySales($OrderRows, $store, $selectedDate);
+            if (!empty($hourlyRows)) {
+                $this->inserter->insertHourlySales($hourlyRows);
             }
 
+            // $ordersByHour = $OrderRows->groupBy(function ($order) {
+            //     return Carbon::parse($order['promise_date'])->format('H');
+            // });
+
+            // foreach ($ordersByHour as $hour => $hourOrders) {
+
+            //     $HourlySalesArray=[
+            //             'franchise_store' =>$store,
+            //             'business_date' =>$selectedDate,
+            //             'hour' =>(int) $hour,
+            //             'total_sales' =>$hourOrders->sum('royalty_obligation'),
+            //             'phone_sales' =>$hourOrders->where('order_placed_method', 'Phone')->sum('royalty_obligation'),
+            //             'call_center_sales' =>$hourOrders->where('order_placed_method', 'SoundHoundAgent')->sum('royalty_obligation'),
+            //             'drive_thru_sales' =>$hourOrders->where('order_placed_method', 'Drive Thru')->sum('royalty_obligation'),
+            //             'website_sales' =>$hourOrders->where('order_placed_method', 'Website')->sum('royalty_obligation'),
+            //             'mobile_sales'=>$hourOrders->where('order_placed_method', 'Mobile')->sum('royalty_obligation'),
+            //             'order_count'=>$hourOrders->count(),
+            //         ];
+
+
+            //         $this->inserter->insertHourlySales([$HourlySalesArray]);
+
+
+            // }
+            //******* ChannelData *******
+            $channelRows = $this->ChannelData($OrderRows, $store, $selectedDate);
+            if (!empty($channelRows)) {
+                array_push($allChannelRows, ...$channelRows);
+            }
         }
 
         if (!empty($allChannelRows)) {
@@ -1041,4 +907,35 @@ class LogicsAndQueriesServices
                 'total_waste_cost'            => $totalWasteCost,
             ];
     }
+    private function HourlySales(Collection $OrderRows, string $store, string $selectedDate): array
+    {
+        $rows = [];
+
+        $ordersByHour = $OrderRows->groupBy(function ($order) {
+            $raw = $order['promise_date'] ?? null;
+            if (!$raw) return '00';
+            try {
+                return Carbon::parse($raw)->format('H');
+            } catch (\Throwable $e) {
+                return '00';
+            }
+        });
+
+        foreach ($ordersByHour as $hour => $hourOrders) {
+            $rows[] = [
+                'franchise_store'   => $store,
+                'business_date'     => $selectedDate,
+                'hour'              => (int)$hour,
+                'total_sales'       => $hourOrders->sum('royalty_obligation'),
+                'phone_sales'       => $hourOrders->where('order_placed_method', 'Phone')->sum('royalty_obligation'),
+                'call_center_sales' => $hourOrders->where('order_placed_method', 'SoundHoundAgent')->sum('royalty_obligation'),
+                'drive_thru_sales'  => $hourOrders->where('order_placed_method', 'Drive Thru')->sum('royalty_obligation'),
+                'website_sales'     => $hourOrders->where('order_placed_method', 'Website')->sum('royalty_obligation'),
+                'mobile_sales'      => $hourOrders->where('order_placed_method', 'Mobile')->sum('royalty_obligation'),
+                'order_count'       => $hourOrders->count(),
+            ];
+        }
+
+        return $rows;
+        }
 }
