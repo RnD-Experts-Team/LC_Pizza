@@ -403,6 +403,21 @@ class InsertDataServices{
                 'waste_qty',
             ]
         ],
+        'store_hot_n_ready_transaction' => [
+            'model'      => \App\Models\StoreHNRTransaction::class,
+            'unique'     => ['franchise_store', 'business_date', 'item_id'],
+            'updateCols' => [
+                'item_name',
+                'transactions',
+                'promise_met_transactions',
+                'promise_met_percentage',
+            ]
+        ],
+        'hour_hnr_transactions' => [
+        'model'      => \App\Models\HourHNRTransaction::class,
+        'unique'     => ['franchise_store', 'business_date', 'hour'],
+        'updateCols' => ['transactions', 'promise_broken_transactions', 'promise_broken_percentage'],
+    ],
     ];
 
     //BreadBoostModel
@@ -508,6 +523,14 @@ class InsertDataServices{
 
         $this->loopInsertHelper($data,'alta_inventory_ingredient_usage',$chunkSize);
     }
+    public function insertStoreHotNReadyTransaction(array $data, int $chunkSize = 1000): void{
+
+        $this->loopInsertHelper($data,'store_hot_n_ready_transaction',$chunkSize);
+    }
+    public function insertHourHnrTransactions(array $data, int $chunkSize = 200): void
+{
+    $this->loopInsertHelper($data, 'hour_hnr_transactions', $chunkSize);
+}
 
 
 

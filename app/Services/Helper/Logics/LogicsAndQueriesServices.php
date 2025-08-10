@@ -123,17 +123,39 @@ class LogicsAndQueriesServices
                 $this->inserter->insertFinalSummary([$finalSummaryRow]);
             }
 
-            // Save hourly sales
-            $hourlyRows = $this->HourlySales($OrderRows, $store, $selectedDate);
-            if (!empty($hourlyRows)) {
-                $this->inserter->insertHourlySales($hourlyRows);
+            //Hours loop
+            $ordersByHour = $this->groupOrdersByHour($OrderRows);
+
+            $hourlySalesRows = [];
+            $hourHnrRows     = [];
+
+            foreach ($ordersByHour as $hour => $hourOrders) {
+                $h = (int) $hour;
+
+                $hourlySalesRows[] = $this->makeHourlySalesRow($hourOrders, $store, $selectedDate, $h);
+                $hourHnrRows[]     = $this->makeHourHnrRow($hourOrders, $store, $selectedDate, $h);
             }
+
+            if (!empty($hourlySalesRows)) {
+                $this->inserter->insertHourlySales($hourlySalesRows);
+            }
+            if (!empty($hourHnrRows)) {
+                $this->inserter->insertHourHnrTransactions($hourHnrRows);
+            }
+
+            // Store hnr transactions
+            $storeHNRRows = $this->StoreHotNReadyTransaction($OrderRows,$storeOrderLines, $store, $selectedDate);
+            if (!empty($storeHNRRows)) {
+                $this->inserter->insertStoreHotNReadyTransaction($storeHNRRows);
+            }
+            //End of Hours loop
 
             //******* ChannelData *******
             $channelRows = $this->ChannelData($OrderRows, $store, $selectedDate);
             if (!empty($channelRows)) {
                 array_push($allChannelRows, ...$channelRows);
             }
+
         }
 
         if (!empty($allChannelRows)) {
@@ -251,62 +273,62 @@ class LogicsAndQueriesServices
         $placed = ['Mobile', 'Website'];
 
         $Oreders_count = $OrderRows
-                ->whereIn('order_placed_method', ['Mobile', 'Website'])
-                ->where('order_fulfilled_method', 'Delivery')
-                ->Count();
+            ->whereIn('order_placed_method', $placed)
+            ->where('order_fulfilled_method', 'Delivery')
+            ->Count();
 
         $RO = $OrderRows
-            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->whereIn('order_placed_method', $placed)
             ->where('order_fulfilled_method', 'Delivery')
             ->Sum('royalty_obligation');
 
         $occupational_tax = $OrderRows
-            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->whereIn('order_placed_method', $placed)
             ->where('order_fulfilled_method', 'Delivery')
             ->Sum('occupational_tax');
 
         $delivery_charges = $OrderRows
-            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->whereIn('order_placed_method', $placed)
             ->where('order_fulfilled_method', 'Delivery')
             ->Sum('delivery_fee');
 
         $delivery_charges_Taxes = $OrderRows
-            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->whereIn('order_placed_method', $placed)
             ->where('order_fulfilled_method', 'Delivery')
             ->Sum('delivery_fee_tax');
 
         $delivery_Service_charges = $OrderRows
-            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->whereIn('order_placed_method', $placed)
             ->where('order_fulfilled_method', 'Delivery')
             ->Sum('delivery_service_fee');
 
         $delivery_Service_charges_Tax = $OrderRows
-            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->whereIn('order_placed_method', $placed)
             ->where('order_fulfilled_method', 'Delivery')
             ->Sum('delivery_service_fee_tax');
 
         $delivery_small_order_charge = $OrderRows
-            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->whereIn('order_placed_method', $placed)
             ->where('order_fulfilled_method', 'Delivery')
             ->Sum('delivery_small_order_fee');
 
         $delivery_small_order_charge_Tax = $OrderRows
-            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->whereIn('order_placed_method', $placed)
             ->where('order_fulfilled_method', 'Delivery')
             ->Sum('delivery_small_order_fee_tax');
 
         $Delivery_Tip_Summary = $OrderRows
-            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->whereIn('order_placed_method', $placed)
             ->where('order_fulfilled_method', 'Delivery')
             ->Sum('delivery_tip');
 
         $Delivery_Tip_Tax_Summary = $OrderRows
-            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->whereIn('order_placed_method', $placed)
             ->where('order_fulfilled_method', 'Delivery')
             ->Sum('delivery_tip_tax');
 
         $total_taxes = $OrderRows
-            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->whereIn('order_placed_method', $placed)
             ->where('order_fulfilled_method', 'Delivery')
             ->Sum('sales_tax');
         // sales tax       delivery_service_fee_tax 4.57    -  delivery_fee_tax 0.9     0.48
@@ -317,10 +339,10 @@ class LogicsAndQueriesServices
         $order_total = $RO + $total_taxes + $Delivery_Tip_Summary;
 
             $lateCount = $OrderRows
-        ->where('delivery_fee', '!=', 0)
-        ->whereIn('order_placed_method', $placed)
-        ->where('order_fulfilled_method', 'Delivery')
-        ->filter(function ($order) {
+            ->where('delivery_fee', '!=', 0)
+            ->whereIn('order_placed_method', $placed)
+            ->where('order_fulfilled_method', 'Delivery')
+            ->filter(function ($order) {
             $loadedRaw  = trim((string)($order['time_loaded_into_portal'] ?? ''));
             $promiseRaw = trim((string)($order['promise_date'] ?? ''));
             if ($loadedRaw === '' || $promiseRaw === '') return false;
@@ -876,4 +898,102 @@ class LogicsAndQueriesServices
 
         return $rows;
     }
+    public function StoreHotNReadyTransaction(Collection $OrderRows, Collection $orderLine, string $store, string $selectedDate){
+
+        $hnrOrders = $OrderRows
+        ->where('hnrOrder', 'Yes');
+
+        $hnrOrderIds = $hnrOrders->pluck('order_id')->unique();
+
+        $hnrOrderLines = $orderLine
+            ->where('franchise_store', $store)
+            ->whereIn('order_id', $hnrOrderIds);
+
+        // Group by item_id and item_name
+        $groupedItems = $hnrOrderLines->groupBy(function ($item) {
+            return $item['item_id'] . '|' . $item['menu_item_name'];
+        });
+
+        foreach ($groupedItems as $itemKey => $lines) {
+            [$itemId, $itemName] = explode('|', $itemKey);
+
+            // Count all item-level occurrences
+            if ($itemId == '105001'){
+                $transactions =$lines->pluck('order_id')->unique()->count();
+            }else{
+                $transactions = $lines->count();
+            }
+            // Filter lines where the parent order has broken_promise == 'No'
+            $promiseMetTransactions = $lines->filter(function ($line) use ($hnrOrders) {
+                $order = $hnrOrders->firstWhere('order_id', $line['order_id']);
+                return $order && strtolower($order['broken_promise']) === 'no';
+            })->count();
+
+            $percentage = $transactions > 0
+                ? round(($promiseMetTransactions / $transactions) * 100, 2)
+                : 0;
+
+            $rows[] =[
+                    'franchise_store' => $store,
+                    'business_date' => $selectedDate,
+                    'item_id' => $itemId,
+                    'item_name' => $itemName,
+                    'transactions' => $transactions,
+                    'promise_met_transactions' => $promiseMetTransactions,
+                    'promise_met_percentage' => $percentage,
+                ];
+
+        }
+        return $rows;
+    }
+    private function groupOrdersByHour(Collection $orders): Collection
+    {
+        return $orders->groupBy(function ($order) {
+            $raw = $order['promise_date'] ?? null;
+            if (!$raw) return '00';
+            try {
+                return Carbon::parse($raw)->format('H');
+            } catch (\Throwable $e) {
+                return '00';
+            }
+        });
+    }
+
+    private function makeHourlySalesRow(Collection $hourOrders,string $store,string $selectedDate,int $hour): array {
+        return [
+            'franchise_store'   => $store,
+            'business_date'     => $selectedDate,
+            'hour'              => $hour,
+            'total_sales'       => $hourOrders->sum('royalty_obligation'),
+            'phone_sales'       => $hourOrders->where('order_placed_method', 'Phone')->sum('royalty_obligation'),
+            'call_center_sales' => $hourOrders->where('order_placed_method', 'SoundHoundAgent')->sum('royalty_obligation'),
+            'drive_thru_sales'  => $hourOrders->where('order_placed_method', 'Drive Thru')->sum('royalty_obligation'),
+            'website_sales'     => $hourOrders->where('order_placed_method', 'Website')->sum('royalty_obligation'),
+            'mobile_sales'      => $hourOrders->where('order_placed_method', 'Mobile')->sum('royalty_obligation'),
+            'order_count'       => $hourOrders->count(),
+        ];
+    }
+
+    private function makeHourHnrRow(Collection $hourOrders, string $store, string $selectedDate, int $hour): array {
+        $transactions = $hourOrders->where('hnrOrder', 'Yes')->count();
+
+        $promiseBroken = $hourOrders
+            ->where('hnrOrder', 'Yes')
+            ->where('broken_promise', 'Yes')
+            ->count();
+
+        $percentage = $transactions > 0
+            ? round(($promiseBroken / $transactions) * 100, 2)
+            : 0;
+
+        return [
+            'franchise_store'             => $store,
+            'business_date'               => $selectedDate,
+            'hour'                        => $hour,
+            'transactions'                => $transactions,
+            'promise_broken_transactions' => $promiseBroken,
+            'promise_broken_percentage'   => $percentage,
+        ];
+    }
+
 }
