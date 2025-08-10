@@ -106,108 +106,43 @@ class LogicsAndQueriesServices
             if (!empty($deliverySummaryRow)) {
                 $this->inserter->insertDeliveryOrderSummaryData([$deliverySummaryRow]);
             }
-            // Log::info('Delivery Order Summary');
-            // $Oreders_count = $OrderRows
-            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
-            //     ->where('order_fulfilled_method', 'Delivery')
-            //     ->Count();
-
-            // $RO = $OrderRows
-            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
-            //     ->where('order_fulfilled_method', 'Delivery')
-            //     ->Sum('royalty_obligation');
-
-            // $occupational_tax = $OrderRows
-            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
-            //     ->where('order_fulfilled_method', 'Delivery')
-            //     ->Sum('occupational_tax');
-
-            // $delivery_charges = $OrderRows
-            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
-            //     ->where('order_fulfilled_method', 'Delivery')
-            //     ->Sum('delivery_fee');
-
-            // $delivery_charges_Taxes = $OrderRows
-            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
-            //     ->where('order_fulfilled_method', 'Delivery')
-            //     ->Sum('delivery_fee_tax');
-
-            // $delivery_Service_charges = $OrderRows
-            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
-            //     ->where('order_fulfilled_method', 'Delivery')
-            //     ->Sum('delivery_service_fee');
-
-            // $delivery_Service_charges_Tax = $OrderRows
-            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
-            //     ->where('order_fulfilled_method', 'Delivery')
-            //     ->Sum('delivery_service_fee_tax');
-
-            // $delivery_small_order_charge = $OrderRows
-            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
-            //     ->where('order_fulfilled_method', 'Delivery')
-            //     ->Sum('delivery_small_order_fee');
-
-            // $delivery_small_order_charge_Tax = $OrderRows
-            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
-            //     ->where('order_fulfilled_method', 'Delivery')
-            //     ->Sum('delivery_small_order_fee_tax');
-
-            // $Delivery_Tip_Summary = $OrderRows
-            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
-            //     ->where('order_fulfilled_method', 'Delivery')
-            //     ->Sum('delivery_tip');
-
-            // $Delivery_Tip_Tax_Summary = $OrderRows
-            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
-            //     ->where('order_fulfilled_method', 'Delivery')
-            //     ->Sum('delivery_tip_tax');
-
-            // $total_taxes = $OrderRows
-            //     ->whereIn('order_placed_method', ['Mobile', 'Website'])
-            //     ->where('order_fulfilled_method', 'Delivery')
-            //     ->Sum('sales_tax');
-            // // sales tax       delivery_service_fee_tax 4.57    -  delivery_fee_tax 0.9     0.48
-            // $tax = $total_taxes - $delivery_Service_charges_Tax - $delivery_charges_Taxes - $delivery_small_order_charge_Tax;
-
-            // $product_cost = $RO - ($delivery_Service_charges + $delivery_charges + $delivery_small_order_charge);
-
-            // $order_total = $RO + $total_taxes + $Delivery_Tip_Summary;
-
-            // $tax = $total_taxes - $delivery_Service_charges_Tax;
-
-            //******* End Of Delivery Order Summary *********//
 
             //*******3rd Party Marketplace Orders*********//
-            Log::info('3rd Party Marketplace Orders');
-            $doordash_product_costs_Marketplace = $OrderRows
-                ->where('order_placed_method', 'DoorDash')
-                ->Sum('royalty_obligation');
-            $ubereats_product_costs_Marketplace = $OrderRows
-                ->where('order_placed_method', 'UberEats')
-                ->Sum('royalty_obligation');
-            $grubhub_product_costs_Marketplace = $OrderRows
-                ->where('order_placed_method', 'Grubhub')
-                ->Sum('royalty_obligation');
+            $thirdPartyRow = $this->ThirdPartyMarketplace($OrderRows, $store, $selectedDate);
+            if (!empty($thirdPartyRow)) {
+                $this->inserter->insertThirdPartyMarketplaceOrder([$thirdPartyRow]);
+            }
+            
+            // Log::info('3rd Party Marketplace Orders');
+            // $doordash_product_costs_Marketplace = $OrderRows
+            //     ->where('order_placed_method', 'DoorDash')
+            //     ->Sum('royalty_obligation');
+            // $ubereats_product_costs_Marketplace = $OrderRows
+            //     ->where('order_placed_method', 'UberEats')
+            //     ->Sum('royalty_obligation');
+            // $grubhub_product_costs_Marketplace = $OrderRows
+            //     ->where('order_placed_method', 'Grubhub')
+            //     ->Sum('royalty_obligation');
 
-            $doordash_tax_Marketplace = $OrderRows
-                ->where('order_placed_method', 'DoorDash')
-                ->Sum('sales_tax');
-            $ubereats_tax_Marketplace = $OrderRows
-                ->where('order_placed_method', 'UberEats')
-                ->Sum('sales_tax');
-            $grubhub_tax_Marketplace = $OrderRows
-                ->where('order_placed_method', 'Grubhub')
-                ->Sum('sales_tax');
+            // $doordash_tax_Marketplace = $OrderRows
+            //     ->where('order_placed_method', 'DoorDash')
+            //     ->Sum('sales_tax');
+            // $ubereats_tax_Marketplace = $OrderRows
+            //     ->where('order_placed_method', 'UberEats')
+            //     ->Sum('sales_tax');
+            // $grubhub_tax_Marketplace = $OrderRows
+            //     ->where('order_placed_method', 'Grubhub')
+            //     ->Sum('sales_tax');
 
-            $doordash_order_total_Marketplace = $OrderRows
-                ->where('order_placed_method', 'DoorDash')
-                ->Sum('gross_sales');
-            $uberEats_order_total_Marketplace = $OrderRows
-                ->where('order_placed_method', 'UberEats')
-                ->Sum('gross_sales');
-            $grubhub_order_total_Marketplace = $OrderRows
-                ->where('order_placed_method', 'Grubhub')
-                ->Sum('gross_sales');
+            // $doordash_order_total_Marketplace = $OrderRows
+            //     ->where('order_placed_method', 'DoorDash')
+            //     ->Sum('gross_sales');
+            // $uberEats_order_total_Marketplace = $OrderRows
+            //     ->where('order_placed_method', 'UberEats')
+            //     ->Sum('gross_sales');
+            // $grubhub_order_total_Marketplace = $OrderRows
+            //     ->where('order_placed_method', 'Grubhub')
+            //     ->Sum('gross_sales');
 
             //******* End Of 3rd Party Marketplace Orders *********//
 
@@ -580,43 +515,23 @@ class LogicsAndQueriesServices
                 return $row['item_cost'] * $row['quantity'];
             });
 
-            // $DeliveryOrderSummaryArray=[
-            //     'franchise_store' => $store,
+
+
+            // $ThirdPartyMarketplaceOrderArray=[
+            //     'franchise_store' =>$store,
             //     'business_date' => $selectedDate,
-            //     'orders_count' =>$Oreders_count,
-            //     'product_cost'=>$product_cost,
-            //     'tax'=>$tax,
-            //     'occupational_tax'=>$occupational_tax,
-            //     'delivery_charges'=>$delivery_charges,
-            //     'delivery_charges_taxes'=>$delivery_charges_Taxes,
-            //     'service_charges'=>$delivery_Service_charges,
-            //     'service_charges_taxes'=>$delivery_Service_charges_Tax,
-            //     'small_order_charge'=>$delivery_small_order_charge,
-            //     'small_order_charge_taxes'=>$delivery_small_order_charge_Tax,
-            //     'delivery_late_charge'=>$Delivery_Late_to_Portal_Fee,
-            //     'tip'=>$Delivery_Tip_Summary,
-            //     'tip_tax'=>$Delivery_Tip_Tax_Summary,
-            //     'total_taxes'=>$total_taxes,
-            //     'order_total'=>$order_total
+            //     'doordash_product_costs_Marketplace'=>$doordash_product_costs_Marketplace,
+            //     'doordash_tax_Marketplace'=>$doordash_tax_Marketplace,
+            //     'doordash_order_total_Marketplace' =>$doordash_order_total_Marketplace,
+            //     'ubereats_product_costs_Marketplace'=>$ubereats_product_costs_Marketplace,
+            //     'ubereats_tax_Marketplace'=>$ubereats_tax_Marketplace,
+            //     'uberEats_order_total_Marketplace'=>$uberEats_order_total_Marketplace,
+            //     'grubhub_product_costs_Marketplace'=>$grubhub_product_costs_Marketplace,
+            //     'grubhub_tax_Marketplace'=>$grubhub_tax_Marketplace,
+            //     'grubhub_order_total_Marketplace'=>$grubhub_order_total_Marketplace,
+
             // ];
-            // $this->inserter->insertDeliveryOrderSummaryData([$DeliveryOrderSummaryArray]);
-
-
-            $ThirdPartyMarketplaceOrderArray=[
-                'franchise_store' =>$store,
-                'business_date' => $selectedDate,
-                'doordash_product_costs_Marketplace'=>$doordash_product_costs_Marketplace,
-                'doordash_tax_Marketplace'=>$doordash_tax_Marketplace,
-                'doordash_order_total_Marketplace' =>$doordash_order_total_Marketplace,
-                'ubereats_product_costs_Marketplace'=>$ubereats_product_costs_Marketplace,
-                'ubereats_tax_Marketplace'=>$ubereats_tax_Marketplace,
-                'uberEats_order_total_Marketplace'=>$uberEats_order_total_Marketplace,
-                'grubhub_product_costs_Marketplace'=>$grubhub_product_costs_Marketplace,
-                'grubhub_tax_Marketplace'=>$grubhub_tax_Marketplace,
-                'grubhub_order_total_Marketplace'=>$grubhub_order_total_Marketplace,
-
-            ];
-            $this->inserter->insertThirdPartyMarketplaceOrder([$ThirdPartyMarketplaceOrderArray]);
+            // $this->inserter->insertThirdPartyMarketplaceOrder([$ThirdPartyMarketplaceOrderArray]);
 
             $FinanceDataArray=[
                 'franchise_store'=>$store,
@@ -983,5 +898,52 @@ class LogicsAndQueriesServices
             'total_taxes'=>$total_taxes,
             'order_total'=>$order_total
         ];
+    }
+    public function ThirdPartyMarketplace(Collection $OrderRows, string $store, string $selectedDate): array{
+        Log::info('3rd Party Marketplace Orders');
+
+        $doordash_product_costs_Marketplace = $OrderRows
+            ->where('order_placed_method', 'DoorDash')
+            ->Sum('royalty_obligation');
+        $ubereats_product_costs_Marketplace = $OrderRows
+            ->where('order_placed_method', 'UberEats')
+            ->Sum('royalty_obligation');
+        $grubhub_product_costs_Marketplace = $OrderRows
+            ->where('order_placed_method', 'Grubhub')
+            ->Sum('royalty_obligation');
+
+        $doordash_tax_Marketplace = $OrderRows
+            ->where('order_placed_method', 'DoorDash')
+            ->Sum('sales_tax');
+        $ubereats_tax_Marketplace = $OrderRows
+            ->where('order_placed_method', 'UberEats')
+            ->Sum('sales_tax');
+        $grubhub_tax_Marketplace = $OrderRows
+            ->where('order_placed_method', 'Grubhub')
+            ->Sum('sales_tax');
+
+        $doordash_order_total_Marketplace = $OrderRows
+            ->where('order_placed_method', 'DoorDash')
+            ->Sum('gross_sales');
+        $uberEats_order_total_Marketplace = $OrderRows
+            ->where('order_placed_method', 'UberEats')
+            ->Sum('gross_sales');
+        $grubhub_order_total_Marketplace = $OrderRows
+            ->where('order_placed_method', 'Grubhub')
+            ->Sum('gross_sales');
+        return [
+                'franchise_store' =>$store,
+                'business_date' => $selectedDate,
+                'doordash_product_costs_Marketplace'=>$doordash_product_costs_Marketplace,
+                'doordash_tax_Marketplace'=>$doordash_tax_Marketplace,
+                'doordash_order_total_Marketplace' =>$doordash_order_total_Marketplace,
+                'ubereats_product_costs_Marketplace'=>$ubereats_product_costs_Marketplace,
+                'ubereats_tax_Marketplace'=>$ubereats_tax_Marketplace,
+                'uberEats_order_total_Marketplace'=>$uberEats_order_total_Marketplace,
+                'grubhub_product_costs_Marketplace'=>$grubhub_product_costs_Marketplace,
+                'grubhub_tax_Marketplace'=>$grubhub_tax_Marketplace,
+                'grubhub_order_total_Marketplace'=>$grubhub_order_total_Marketplace,
+
+            ];
     }
 }
