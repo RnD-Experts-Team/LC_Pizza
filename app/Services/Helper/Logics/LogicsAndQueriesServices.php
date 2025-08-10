@@ -94,76 +94,30 @@ class LogicsAndQueriesServices
             if (!empty($breadBoostRow)) {
                 $this->inserter->insertBreadBoostData([$breadBoostRow]);
             }
-            // Log::info('Bread Boost Summary');
-            // $classicOrders = $storeOrderLines
-            //     ->whereIn('menu_item_name', ['Classic Pepperoni', 'Classic Cheese'])
-            //     ->whereIn('order_fulfilled_method', ['Register', 'Drive-Thru'])
-            //     ->whereIn('order_placed_method', ['Phone', 'Register', 'Drive Thru'])
-            //     ->pluck('order_id')
-            //     ->unique();
-
-            // $classicOrdersCount = $classicOrders->count();
-
-            // $classicWithBreadCount = $storeOrderLines
-            //     ->whereIn('order_id', $classicOrders)
-            //     ->where('menu_item_name', 'Crazy Bread')
-            //     ->pluck('order_id')
-            //     ->unique()
-            //     ->count();
-
-            // $OtherPizzaOrder = $storeOrderLines
-            //     ->whereNotIn('item_id', [
-            //         '-1',
-            //         '6',
-            //         '7',
-            //         '8',
-            //         '9',
-            //         '101001',
-            //         '101002',
-            //         '101288',
-            //         '103044',
-            //         '202901',
-            //         '101289',
-            //         '204100',
-            //         '204200'
-            //     ])
-            //     ->whereIn('order_fulfilled_method', ['Register', 'Drive-Thru'])
-            //     ->whereIn('order_placed_method', ['Phone', 'Register', 'Drive Thru'])
-            //     ->pluck('order_id')
-            //     ->unique();
-
-            // $OtherPizzaOrderCount = $OtherPizzaOrder->count();
-
-            // $OtherPizzaWithBreadCount = $storeOrderLines
-            //     ->whereIn('order_id', $OtherPizzaOrder)
-            //     ->where('menu_item_name', 'Crazy Bread')
-            //     ->pluck('order_id')
-            //     ->unique()
-            //     ->count();
-            //******* End Of Bread Boost Summary *********//
-
 
             //******* Online Discount Program *********//
 
-            Log::info('Online Discount Program');
-            $discountOrders = $OrderRows
-                ->where('employee', '')
-                ->where('modification_reason', '<>', '');
-
-
-
-            foreach ($discountOrders as $discountOrder) {
-                $OnlineDiscountProgramArray = [
-                    'franchise_store'      => $store,
-                    'business_date'        => $selectedDate,
-                    'order_id'             => $discountOrder['order_id'],
-                    'pay_type'             => $discountOrder['payment_methods'],
-                    'original_subtotal'    => 0,
-                    'modified_subtotal'    => $discountOrder['royalty_obligation'],
-                    'promo_code'           => trim(explode(':', $discountOrder['modification_reason'])[1] ?? ''),
-                ];
-                $this->inserter->insertOnlineDiscountProgramData([$OnlineDiscountProgramArray]);
+            $odpRows = $this->OnlineDiscountProgram($OrderRows, $store, $selectedDate);
+            if (!empty($odpRows)) {
+                $this->inserter->insertOnlineDiscountProgramData($odpRows);
             }
+            // Log::info('Online Discount Program');
+            // $discountOrders = $OrderRows
+            //     ->where('employee', '')
+            //     ->where('modification_reason', '<>', '');
+
+            // foreach ($discountOrders as $discountOrder) {
+            //     $OnlineDiscountProgramArray = [
+            //         'franchise_store'      => $store,
+            //         'business_date'        => $selectedDate,
+            //         'order_id'             => $discountOrder['order_id'],
+            //         'pay_type'             => $discountOrder['payment_methods'],
+            //         'original_subtotal'    => 0,
+            //         'modified_subtotal'    => $discountOrder['royalty_obligation'],
+            //         'promo_code'           => trim(explode(':', $discountOrder['modification_reason'])[1] ?? ''),
+            //     ];
+            //     $this->inserter->insertOnlineDiscountProgramData([$OnlineDiscountProgramArray]);
+            // }
             //******* End Of Online Discount Program *********//
 
             //******* Delivery Order Summary *********//
@@ -920,5 +874,29 @@ class LogicsAndQueriesServices
             'other_pizza_order'       => $OtherPizzaOrderCount,
             'other_pizza_with_bread'  => $OtherPizzaWithBreadCount,
         ];
+    }
+
+    public function OnlineDiscountProgram(Collection $orderRows, string $store, string $selectedDate): array
+    {
+        Log::info('Online Discount Program');
+        $rows = [];
+
+        $discountOrders = $orderRows
+            ->where('employee', '')
+            ->where('modification_reason', '<>', '');
+
+        foreach ($discountOrders as $discountOrder) {
+            $rows[] = [
+                'franchise_store'    => $store,
+                'business_date'      => $selectedDate,
+                'order_id'           => $discountOrder['order_id'],
+                'pay_type'           => $discountOrder['payment_methods'],
+                'original_subtotal'  => 0,
+                'modified_subtotal'  => $discountOrder['royalty_obligation'],
+                'promo_code'         => trim(explode(':', $discountOrder['modification_reason'])[1] ?? ''),
+            ];
+        }
+
+        return $rows;
     }
 }
