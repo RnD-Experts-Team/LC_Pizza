@@ -270,66 +270,45 @@ class LogicsAndQueriesServices
 
     public function DeliveryOrderSummary(Collection $OrderRows, string $store, string $selectedDate): array{
          Log::info('Delivery Order Summary');
-        $placed = ['Mobile', 'Website'];
 
-        $Oreders_count = $OrderRows
-            ->whereIn('order_placed_method', $placed)
-            ->where('order_fulfilled_method', 'Delivery')
+        $placedOnline =$OrderRows
+            ->whereIn('order_placed_method', ['Mobile', 'Website'])
+            ->where('order_fulfilled_method', 'Delivery');
+
+        $Oreders_count = $placedOnline
             ->Count();
 
-        $RO = $OrderRows
-            ->whereIn('order_placed_method', $placed)
-            ->where('order_fulfilled_method', 'Delivery')
+        $RO = $placedOnline
             ->Sum('royalty_obligation');
 
-        $occupational_tax = $OrderRows
-            ->whereIn('order_placed_method', $placed)
-            ->where('order_fulfilled_method', 'Delivery')
+        $occupational_tax = $placedOnline
             ->Sum('occupational_tax');
 
-        $delivery_charges = $OrderRows
-            ->whereIn('order_placed_method', $placed)
-            ->where('order_fulfilled_method', 'Delivery')
+        $delivery_charges = $placedOnline
             ->Sum('delivery_fee');
 
-        $delivery_charges_Taxes = $OrderRows
-            ->whereIn('order_placed_method', $placed)
-            ->where('order_fulfilled_method', 'Delivery')
+        $delivery_charges_Taxes = $placedOnline
             ->Sum('delivery_fee_tax');
 
-        $delivery_Service_charges = $OrderRows
-            ->whereIn('order_placed_method', $placed)
-            ->where('order_fulfilled_method', 'Delivery')
+        $delivery_Service_charges = $placedOnline
             ->Sum('delivery_service_fee');
 
-        $delivery_Service_charges_Tax = $OrderRows
-            ->whereIn('order_placed_method', $placed)
-            ->where('order_fulfilled_method', 'Delivery')
+        $delivery_Service_charges_Tax = $placedOnline
             ->Sum('delivery_service_fee_tax');
 
-        $delivery_small_order_charge = $OrderRows
-            ->whereIn('order_placed_method', $placed)
-            ->where('order_fulfilled_method', 'Delivery')
+        $delivery_small_order_charge = $placedOnline
             ->Sum('delivery_small_order_fee');
 
-        $delivery_small_order_charge_Tax = $OrderRows
-            ->whereIn('order_placed_method', $placed)
-            ->where('order_fulfilled_method', 'Delivery')
+        $delivery_small_order_charge_Tax = $placedOnline
             ->Sum('delivery_small_order_fee_tax');
 
-        $Delivery_Tip_Summary = $OrderRows
-            ->whereIn('order_placed_method', $placed)
-            ->where('order_fulfilled_method', 'Delivery')
+        $Delivery_Tip_Summary = $placedOnline
             ->Sum('delivery_tip');
 
-        $Delivery_Tip_Tax_Summary = $OrderRows
-            ->whereIn('order_placed_method', $placed)
-            ->where('order_fulfilled_method', 'Delivery')
+        $Delivery_Tip_Tax_Summary = $placedOnline
             ->Sum('delivery_tip_tax');
 
-        $total_taxes = $OrderRows
-            ->whereIn('order_placed_method', $placed)
-            ->where('order_fulfilled_method', 'Delivery')
+        $total_taxes = $placedOnline
             ->Sum('sales_tax');
         // sales tax       delivery_service_fee_tax 4.57    -  delivery_fee_tax 0.9     0.48
         $tax = $total_taxes - $delivery_Service_charges_Tax - $delivery_charges_Taxes - $delivery_small_order_charge_Tax;
@@ -340,7 +319,7 @@ class LogicsAndQueriesServices
 
             $lateCount = $OrderRows
             ->where('delivery_fee', '!=', 0)
-            ->whereIn('order_placed_method', $placed)
+            ->whereIn('order_placed_method', ['Mobile', 'Website'])
             ->where('order_fulfilled_method', 'Delivery')
             ->filter(function ($order) {
             $loadedRaw  = trim((string)($order['time_loaded_into_portal'] ?? ''));
@@ -485,6 +464,7 @@ class LogicsAndQueriesServices
 
             $Sales_Tax_Delivery = $OrderRows
                 ->where('order_fulfilled_method', 'Delivery')
+                ->whereIn('order_placed_method', ['Mobile', 'Website','SoundHoundAgent'])
                 ->sum('sales_tax');
 
 
@@ -546,26 +526,28 @@ class LogicsAndQueriesServices
                 ->count();
             $DoorDash_Order_Total = $OrderRows
                 ->where('order_placed_method', 'DoorDash')
-                ->sum('royalty_obligation');
+                ->sum('gross_sales');
 
             $Grubhub_Quantity = $OrderRows
                 ->where('order_placed_method', 'Grubhub')
                 ->count();
             $Grubhub_Order_Total = $OrderRows
                 ->where('order_placed_method', 'Grubhub')
-                ->sum('royalty_obligation');
+                ->sum('gross_sales');
 
             $Uber_Eats_Quantity = $OrderRows
                 ->where('order_placed_method', 'UberEats')
                 ->count();
             $Uber_Eats_Order_Total = $OrderRows
                 ->where('order_placed_method', 'UberEats')
-                ->sum('royalty_obligation');
+                ->sum('gross_sales');
 
             $ONLINE_ORDERING_Mobile_Order_Quantity = $OrderRows
-                ->where('order_placed_method', 'Mobile')
-                ->where('royalty_obligation', '!=', 0)
-                ->Count();
+            ->where('order_placed_method', 'Mobile')
+            ->where('payment_methods','EPay')
+            ->reject(fn ($row) =>$row['royalty_obligation'] == 0 && $row['refunded'] === 'Yes')
+            ->count();
+
             $ONLINE_ORDERING_Online_Order_Quantity = $OrderRows
                 ->where('order_placed_method', 'Website')
                 ->where('royalty_obligation', '!=', 0)
@@ -654,7 +636,11 @@ class LogicsAndQueriesServices
                 ->where('sub_account', 'Tip Drop Total')
                 ->sum('amount');
 
+            $tOTAL_Cash_Sales = $financeRows
+                ->where('sub_account', 'Total Cash Sales')
+                ->sum('amount');
 
+            $Over_Short_New = $tOTAL_Cash_Sales-$Cash_Drop;
 
             $Over_Short = $financeRows
                 ->where('sub_account', 'Over-Short-Operating')
@@ -728,7 +714,7 @@ class LogicsAndQueriesServices
                 'Non_Cash_Payments'=>$Non_Cash_Payments,
                 'Cash_Sales'=>$Cash_Sales,
                 'Cash_Drop_Total'=>$Cash_Drop_Total,
-                'Over_Short'=>$Over_Short,
+                'Over_Short'=>$Over_Short_New,
                 'Payouts'=>$Payouts,
             ];
     }
@@ -958,7 +944,6 @@ class LogicsAndQueriesServices
             }
         });
     }
-
     private function makeHourlySalesRow(Collection $hourOrders,string $store,string $selectedDate,int $hour): array {
         return [
             'franchise_store'   => $store,

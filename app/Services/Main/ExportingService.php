@@ -3,6 +3,7 @@
 namespace App\Services\Main;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -19,7 +20,7 @@ class ExportingService
      */
 
     /*Export any Eloquent model as CSV.*/
-    public function exportCSV(Request $request, string $modelClass, $startDateParam = null, $endDateParam = null, $franchiseStoreParam = null): StreamedResponse
+    public function exportCSV(Request $request, string $modelClass, $startDateParam = null, $endDateParam = null, $hoursParam = null, $franchiseStoreParam = null): StreamedResponse
     {
         Log::info("{$modelClass} CSV export requested", [
             'ip'         => $request->ip(),
@@ -30,17 +31,33 @@ class ExportingService
         $startDate       = $startDateParam ?? $request->query('start_date');
         $endDate         = $endDateParam   ?? $request->query('end_date');
         $franchiseStores = $this->parseStores($request, $franchiseStoreParam);
+        $hours           = $this->parseHours($request, $hoursParam);
 
         Log::debug("Export parameters for {$modelClass}", compact('startDate','endDate','franchiseStores'));
 
-        // Build and execute query
+        // start and end date
         $query = $modelClass::query();
         if ($startDate && $endDate) {
             $query->whereBetween('business_date', [$startDate, $endDate]);
         }
+        //stores
         if (!empty($franchiseStores)) {
             $query->whereIn('franchise_store', $franchiseStores);
         }
+        //hours
+        $tableHasHour = false;
+        try {
+            $model = new $modelClass;
+            $table = $model->getTable();
+            $tableHasHour = Schema::hasColumn($table, 'hour');
+        } catch (\Throwable $e) {
+            $tableHasHour = false;
+        }
+
+        if (!empty($hours) && $tableHasHour) {
+            $query = $this->safeWhereIn($query, 'hour', $hours);
+        }
+
         $data = $query->get();
         $count = $data->count();
 
@@ -68,7 +85,7 @@ class ExportingService
     }
 
     /*Export any Eloquent model as JSON.*/
-    public function exportJson(Request $request, string $modelClass, $startDateParam = null, $endDateParam = null, $franchiseStoreParam = null)
+    public function exportJson(Request $request, string $modelClass, $startDateParam = null, $endDateParam = null, $hoursParam = null, $franchiseStoreParam = null)
     {
         Log::info("{$modelClass} JSON export requested", [
             'ip'         => $request->ip(),
@@ -78,14 +95,29 @@ class ExportingService
         $startDate = $startDateParam ?? $request->query('start_date');
         $endDate   = $endDateParam   ?? $request->query('end_date');
         $franchiseStores = $this->parseStores($request, $franchiseStoreParam);
-
+        $hours           = $this->parseHours($request, $hoursParam);
+        //start and end date filter
         $query = $modelClass::query();
         if ($startDate && $endDate) {
             $query->whereBetween('business_date', [$startDate, $endDate]);
         }
+        //store filter
         if (!empty($franchiseStores)) {
             $query->whereIn('franchise_store', $franchiseStores);
         }
+        //hour filter
+        $tableHasHour = false;
+        try {
+            $model = new $modelClass;
+            $table = $model->getTable();
+            $tableHasHour = Schema::hasColumn($table, 'hour');
+        } catch (\Throwable $e) {
+            $tableHasHour = false;
+        }
+        if (!empty($hours) && $tableHasHour) {
+            $query = $this->safeWhereIn($query, 'hour', $hours);
+        }
+
         $data  = $query->get();
         $count = $data->count();
 
@@ -95,6 +127,9 @@ class ExportingService
             'data'         => $data,
         ]);
     }
+
+
+    /****helpers */
 
     /** Parse franchise_store list */
     protected function parseStores(Request $request, $param): array
@@ -106,6 +141,35 @@ class ExportingService
             $list = strpos($q, ',') !== false ? explode(',', $q) : [$q];
         }
         return array_filter(array_map('trim', $list), fn($v) => $v && $v !== 'null' && $v !== 'undefined');
+    }
+
+    protected function parseHours(Request $request, $param): array
+    {
+        $vals = [];
+        if ($param !== null) {
+            $vals = explode(',', (string)$param);
+        } elseif (($q = $request->query('hours')) !== null) {
+            $vals = strpos($q, ',') !== false ? explode(',', $q) : [$q];
+        } elseif (($q1 = $request->query('hour')) !== null) {
+            $vals = strpos($q1, ',') !== false ? explode(',', $q1) : [$q1];
+        }
+
+        $vals = array_map('trim', $vals);
+        $vals = array_filter($vals, fn($v) => $v !== '' && is_numeric($v));
+        $vals = array_map('intval', $vals);
+        // keep within 0..23
+        $vals = array_filter($vals, fn($v) => $v >= 0 && $v <= 23);
+        return array_values(array_unique($vals));
+    }
+
+    /** Safe WHERE IN with bound placeholders */
+    protected function safeWhereIn($query, string $column, array $values)
+    {
+        if (empty($values)) {
+            return $query;
+        }
+        $placeholders = implode(',', array_fill(0, count($values), '?'));
+        return $query->whereRaw("$column IN ($placeholders)", $values);
     }
 
     /** Build filename */

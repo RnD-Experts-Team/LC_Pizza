@@ -23,7 +23,7 @@ class ExportingController extends Controller
     {
         return in_array(ucfirst($model), $this->restrictedModels);
     }
-    public function exportCSV(Request $request, string $model, $start = null, $end = null, $stores = null)
+    public function exportCSV(Request $request, string $model, $start = null, $end = null,$hours = null, $stores = null)
     {
         if ($this->isRestricted($model)) {
             return response()->json(['error' => 'Exporting this model is not allowed.'], 403);
@@ -31,15 +31,15 @@ class ExportingController extends Controller
         // Resolve the full Model class (adjust namespace as needed)
         $modelClass = '\\App\\Models\\' . ucfirst($model);
 
-        return $this->exporting->exportCSV($request, $modelClass, $start, $end, $stores);
+        return $this->exporting->exportCSV($request, $modelClass, $start, $end, $hours , $stores);
     }
 
-    public function exportJson(Request $request, string $model, $start = null, $end = null, $stores = null)
+    public function exportJson(Request $request, string $model, $start = null, $end = null,$hours = null, $stores = null)
     {
         if ($this->isRestricted($model)) {
             return response()->json(['error' => 'Exporting this model is not allowed.'], 403);
         }
         $modelClass = '\\App\\Models\\' . ucfirst($model);
-        return $this->exporting->exportJson($request, $modelClass, $start, $end, $stores);
+        return $this->exporting->exportJson($request, $modelClass, $start, $end, $hours , $stores);
     }
 }
