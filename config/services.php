@@ -44,4 +44,15 @@ return [
         'hmac_key'      => env('LC_GATEWAY_HMAC_KEY'),
       ],
 
+    'auth_server' => [
+        'base_url'     => env('AUTH_SERVER_BASE_URL', 'http://localhost'),
+        'verify_path'  => env('AUTH_TOKEN_VERIFY_PATH', '/auth/token-verify'),
+        'service_name' => env('SERVICE_NAME', 'data'),
+        'call_token'   => env('SERVICE_CALL_TOKEN'),
+
+        'timeout'   => (int) env('AUTH_TIMEOUT_SECONDS', 2),
+        'retries'   => (int) env('AUTH_RETRIES', 2),
+        'retry_ms'  => (int) env('AUTH_RETRY_BACKOFF_MS', 100),
+        'cache_ttl' => (int) env('AUTH_DECISION_CACHE_TTL', 30),
+    ],
 ];

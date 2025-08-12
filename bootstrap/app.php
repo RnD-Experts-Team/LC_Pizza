@@ -7,6 +7,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use App\Http\Middleware\ApiKeyMiddleware;
+use App\Http\Middleware\AuthCheckingForToken;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -27,7 +28,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // Register the API key middleware as an alias
         $middleware->alias([
             'api.key' => ApiKeyMiddleware::class,
+            'auth.verify' => AuthCheckingForToken::class,
         ]);
+
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

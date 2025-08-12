@@ -325,7 +325,7 @@ class InsertDataServices{
         ],
         'channel_data' => [
             'model'      => \App\Models\ChannelData::class,
-            'unique'     => ['store','business_date','category','sub_category','order_placed_method','order_fulfilled_method'],
+            'unique'     => ['franchise_store','business_date','category','sub_category','order_placed_method','order_fulfilled_method'],
             'updateCols' => ['amount']
         ],
         'hourly_sales' => [

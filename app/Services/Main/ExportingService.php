@@ -54,8 +54,8 @@ class ExportingService
             $tableHasHour = false;
         }
 
-        if (!empty($hours) && $tableHasHour) {
-            $query = $this->safeWhereIn($query, 'hour', $hours);
+        if (!empty($hours) && $this->modelHasColumn($modelClass, 'hour')) {
+            $query->whereIn('hour', $hours);
         }
 
         $data = $query->get();
@@ -114,8 +114,8 @@ class ExportingService
         } catch (\Throwable $e) {
             $tableHasHour = false;
         }
-        if (!empty($hours) && $tableHasHour) {
-            $query = $this->safeWhereIn($query, 'hour', $hours);
+        if (!empty($hours) && $this->modelHasColumn($modelClass, 'hour')) {
+            $query->whereIn('hour', $hours);
         }
 
         $data  = $query->get();
@@ -180,6 +180,16 @@ class ExportingService
             $name .= '_stores_' . count($stores);
         }
         return "{$name}.{$ext}";
+    }
+    protected function modelHasColumn(string $modelClass, string $column): bool
+    {
+        try {
+            $model = new $modelClass;
+            return Schema::hasColumn($model->getTable(), $column);
+        } catch (\Throwable $e) {
+            Log::warning("Column check failed for {$modelClass}.{$column}", ['e' => $e->getMessage()]);
+            return false;
+        }
     }
 
 }

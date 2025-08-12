@@ -183,7 +183,7 @@ class LogicsAndQueriesServices
 
                     if ($amount != 0) {
                         $rows[] = [
-                            'store'                 => $store,
+                            'franchise_store'                 => $store,
                             'business_date'         => $selectedDate,
                             'category'              => $category,
                             'sub_category'          => $subcat,
