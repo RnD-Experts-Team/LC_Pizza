@@ -23,9 +23,10 @@ class AuthCheckingForToken
         $cfg = config('services.auth_server');
         $url = rtrim($cfg['base_url'], '/') . '/' . ltrim($cfg['verify_path'], '/');
 
-        // short cache to reduce latency
-        $ctxKey   = ($request->route()?->getName()) ?: ($request->method() . ' ' . $request->getPathInfo());
-        $cacheKey = 'verify:v1:' . hash('sha256', $userToken) . ':' . md5($ctxKey) . ':' . ($cfg['service_name'] ?? 'svc');
+        // context keys for caching
+        $routeName = $request->route()?->getName();
+        $ctxKey    = $routeName ?: ($request->method() . ' ' . $request->getPathInfo());
+        $cacheKey  = 'verify:v1:' . hash('sha256', $userToken) . ':' . md5($ctxKey) . ':' . ($cfg['service_name'] ?? 'svc');
 
         if ($cached = Cache::get($cacheKey)) {
             return $this->apply($cached, $request, $next);
@@ -36,11 +37,18 @@ class AuthCheckingForToken
             ->retry($cfg['retries'], $cfg['retry_ms'])
             ->withToken($cfg['call_token']); // proves which service is calling
 
+        // Payload expected by the auth server
+        $payload = [
+            'service'    => $cfg['service_name'],
+            'token'      => $userToken,
+            'method'     => $request->method(),
+            'path'       => $request->getPathInfo(),   // e.g. "/api/export/ChannelData/json/"
+            'route_name' => $routeName,                // null if unnamed
+        ];
+
         try {
-            $resp = $http->asForm()->post($url, [
-                'service' => $cfg['service_name'],
-                'token'   => $userToken,
-            ]);
+            // Send JSON (no asForm())
+            $resp = $http->post($url, $payload);
         } catch (\Throwable $e) {
             return response()->json([
                 'ok' => false,
@@ -56,23 +64,36 @@ class AuthCheckingForToken
 
         $data = $resp->json();
 
+        // 1) Token must be active
         if (!($data['active'] ?? false)) {
             return response()->json(['ok' => false, 'error' => 'Unauthorized (inactive token).', 'status' => 401], 401);
         }
 
-        // attach user
+        // 2) This request must be authorized for this token
+        $authorized = (bool)($data['ext']['authorized'] ?? false);
+        if (!$authorized) {
+            $required = $data['ext']['required_permissions'] ?? [];
+            return response()->json([
+                'ok' => false,
+                'error' => 'Forbidden (token not authorized for this route).',
+                'required_permissions' => config('app.debug') ? $required : null,
+                'status' => 403,
+            ], 403);
+        }
+
+        // attach user (optional for your app, kept for convenience)
         $userArr = (array) ($data['user'] ?? []);
         if (!array_key_exists('id', $userArr)) {
             return response()->json(['ok' => false, 'error' => 'Auth payload missing user id.', 'status' => 401], 401);
         }
-
+        // Note: your auth service already enforced permissions; we set them only for convenience
         $userArr['roles']       = $data['roles'] ?? [];
         $userArr['permissions'] = $data['permissions'] ?? [];
 
         $genericUser = new GenericUser($userArr);
         Auth::setUser($genericUser);
 
-        // cache (bounded by token exp if present)
+        // cache (bounded by token exp if present; exp may be null)
         $ttl = max(1, (int) ($cfg['cache_ttl'] ?? 30));
         if (isset($data['exp']) && is_int($data['exp'])) {
             $secondsLeft = $data['exp'] - time();
@@ -87,6 +108,17 @@ class AuthCheckingForToken
     {
         if (!($data['active'] ?? false)) {
             return response()->json(['ok' => false, 'error' => 'Unauthorized (inactive token).', 'status' => 401], 401);
+        }
+
+        $authorized = (bool)($data['ext']['authorized'] ?? false);
+        if (!$authorized) {
+            $required = $data['ext']['required_permissions'] ?? [];
+            return response()->json([
+                'ok' => false,
+                'error' => 'Forbidden (token not authorized for this route).',
+                'required_permissions' => config('app.debug') ? $required : null,
+                'status' => 403,
+            ], 403);
         }
 
         $userArr = (array) ($data['user'] ?? []);
