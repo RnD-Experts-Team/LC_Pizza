@@ -12,10 +12,10 @@ return new class extends Migration
             $table->id();
             $table->string('store',20);
             $table->date('date');
-            $table->string('category',30);
-            $table->string('sub_category',50);
-            $table->string('order_placed_method',30);
-            $table->string('order_fulfilled_method',20);
+            $table->string('category');
+            $table->string('sub_category');
+            $table->string('order_placed_method');
+            $table->string('order_fulfilled_method');
             $table->decimal('amount', 10, 2);
             $table->timestamps();
 
