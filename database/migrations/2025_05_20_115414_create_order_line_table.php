@@ -22,25 +22,25 @@ class CreateOrderLineTable extends Migration
             $table->integer('quantity')->nullable();
 
 
-            $table->string('royalty_item',5)->nullable();
-            $table->string('taxable_item',5)->nullable();
+            $table->string('royalty_item',10)->nullable();
+            $table->string('taxable_item',10)->nullable();
 
-            $table->string('order_id',10)->nullable();
-            $table->string('item_id',10)->nullable();
+            $table->string('order_id',20)->nullable();
+            $table->string('item_id',20)->nullable();
             $table->string('menu_item_name')->nullable();
             $table->string('menu_item_account')->nullable();
             $table->string('bundle_name')->nullable();
 
-            $table->string('employee',50)->nullable();
-            $table->string('override_approval_employee',50)->nullable();
+            $table->string('employee')->nullable();
+            $table->string('override_approval_employee')->nullable();
 
-            $table->string('order_placed_method',20)->nullable();
-            $table->string('order_fulfilled_method',20)->nullable();
+            $table->string('order_placed_method',50)->nullable();
+            $table->string('order_fulfilled_method',50)->nullable();
 
             $table->decimal('modified_order_amount', 15, 2)->nullable();
             $table->string('modification_reason')->nullable();
-            $table->string('payment_methods',30)->nullable();
-            $table->string('refunded',20)->nullable();
+            $table->string('payment_methods',50)->nullable();
+            $table->string('refunded',50)->nullable();
             $table->decimal('tax_included_amount', 15, 2)->nullable();
 
             $table->timestamps();

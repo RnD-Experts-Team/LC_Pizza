@@ -13,8 +13,8 @@ class CreateSummaryTransactionsTable extends Migration
             $table->id();
             $table->string('franchise_store',20)->index();
             $table->date('business_date')->index();
-            $table->string('payment_method',20)->nullable();
-            $table->string('sub_payment_method',25)->nullable();
+            $table->string('payment_method',50)->nullable();
+            $table->string('sub_payment_method',50)->nullable();
             $table->decimal('total_amount', 15, 2)->nullable();
             $table->integer('saf_qty')->nullable();
             $table->decimal('saf_total', 15, 2)->nullable();

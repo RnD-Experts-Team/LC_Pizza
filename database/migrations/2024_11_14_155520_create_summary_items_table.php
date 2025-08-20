@@ -15,7 +15,7 @@ class CreateSummaryItemsTable extends Migration
             $table->date('business_date')->index();
             $table->string('menu_item_name')->nullable();
             $table->string('menu_item_account')->nullable();
-            $table->string('item_id',10)->nullable();
+            $table->string('item_id',20)->nullable();
             $table->integer('item_quantity')->nullable();
             $table->decimal('royalty_obligation', 15, 2)->nullable();
             $table->decimal('taxable_amount', 15, 2)->nullable();

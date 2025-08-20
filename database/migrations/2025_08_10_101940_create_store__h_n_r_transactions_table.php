@@ -13,7 +13,7 @@ class CreateStoreHNRTransactionsTable extends Migration
             $table->string('franchise_store',20);
             $table->date('business_date');
             $table->string('item_id',10);
-            $table->string('item_name',50);
+            $table->string('item_name');
             $table->integer('transactions')->default(0);
             $table->integer('promise_met_transactions')->default(0);
             $table->decimal('promise_met_percentage', 5, 2)->default(0.00);

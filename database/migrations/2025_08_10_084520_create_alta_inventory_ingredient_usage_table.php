@@ -12,10 +12,10 @@ class CreateAltaInventoryIngredientUsageTable extends Migration
             $table->id();
             $table->string('franchise_store',20)->nullable();
             $table->date('business_date')->nullable();
-            $table->string('count_period',5)->nullable();
-            $table->string('ingredient_id',30)->nullable();
-            $table->string('ingredient_description',50)->nullable();
-            $table->string('ingredient_category',50)->nullable();
+            $table->string('count_period',20)->nullable();
+            $table->string('ingredient_id',50)->nullable();
+            $table->string('ingredient_description')->nullable();
+            $table->string('ingredient_category')->nullable();
             $table->string('ingredient_unit',20)->nullable();
             $table->decimal('ingredient_unit_cost', 10, 2)->default(0);
             $table->decimal('starting_inventory_qty', 10, 2)->default(0);

@@ -19,7 +19,7 @@ return new class extends Migration
             $table->string('pay_type',20)->nullable();
             $table->decimal('original_subtotal', 10, 2)->nullable();
             $table->decimal('modified_subtotal', 10, 2)->nullable();
-            $table->string('promo_code',50)->nullable();
+            $table->string('promo_code')->nullable();
             $table->timestamps();
         });
     }

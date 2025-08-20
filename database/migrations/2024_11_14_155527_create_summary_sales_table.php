@@ -37,8 +37,8 @@ class CreateSummarySalesTable extends Migration
             $table->decimal('prepaid_in_store_tip_amount', 15, 2)->nullable();
             $table->decimal('over_short', 15, 2)->nullable();
             $table->decimal('previous_day_refunds', 15, 2)->nullable();
-            $table->string('saf',20)->nullable();
-            $table->string('manager_notes',20)->nullable();
+            $table->string('saf',50)->nullable();
+            $table->string('manager_notes',50)->nullable();
             $table->timestamps();
             $table->index(['franchise_store', 'business_date']);
 

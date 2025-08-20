@@ -15,7 +15,7 @@ return new class extends Migration {
             $table->boolean('expired')->nullable();
             $table->timestamp('waste_date_time')->nullable();
             $table->timestamp('produce_date_time')->nullable();
-            $table->string('waste_reason',30)->nullable();
+            $table->string('waste_reason')->nullable();
             $table->string('cv_order_id',10)->nullable();
             $table->string('waste_type',20)->nullable();
             $table->decimal('item_cost', 8, 4)->nullable();

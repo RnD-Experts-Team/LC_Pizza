@@ -12,8 +12,8 @@ class CreateAltaInventoryCogsTable extends Migration
             $table->id();
             $table->string('franchise_store',20)->nullable();
             $table->date('business_date')->nullable();
-            $table->string('count_period',5)->nullable();
-            $table->string('inventory_category',50)->nullable();
+            $table->string('count_period',20)->nullable();
+            $table->string('inventory_category')->nullable();
             $table->decimal('starting_value', 10, 2)->default(0);
             $table->decimal('received_value', 10, 2)->default(0);
             $table->decimal('net_transfer_value', 10, 2)->default(0);
