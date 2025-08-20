@@ -11,7 +11,7 @@ return new class extends Migration {
             $table->date('business_date')->index();
             $table->string('franchise_store',20)->index();
             $table->string('cv_item_id',10)->nullable();
-            $table->string('menu_item_name',50)->nullable();
+            $table->string('menu_item_name')->nullable();
             $table->boolean('expired')->nullable();
             $table->timestamp('waste_date_time')->nullable();
             $table->timestamp('produce_date_time')->nullable();

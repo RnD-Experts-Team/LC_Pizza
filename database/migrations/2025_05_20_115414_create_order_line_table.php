@@ -28,7 +28,7 @@ class CreateOrderLineTable extends Migration
             $table->string('order_id',10)->nullable();
             $table->string('item_id',10)->nullable();
             $table->string('menu_item_name')->nullable();
-            $table->string('menu_item_account',30)->nullable();
+            $table->string('menu_item_account')->nullable();
             $table->string('bundle_name')->nullable();
 
             $table->string('employee',50)->nullable();
