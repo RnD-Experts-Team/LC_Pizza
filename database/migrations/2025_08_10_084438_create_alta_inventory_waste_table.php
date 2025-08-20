@@ -10,11 +10,11 @@ class CreateAltaInventoryWasteTable extends Migration
     {
         Schema::create('alta_inventory_waste', function (Blueprint $table) {
             $table->id();
-            $table->string('franchise_store')->nullable();
+            $table->string('franchise_store',20)->nullable();
             $table->date('business_date')->nullable();
-            $table->string('item_id')->nullable();
-            $table->string('item_description')->nullable();
-            $table->string('waste_reason')->nullable();
+            $table->string('item_id',10)->nullable();
+            $table->string('item_description',50)->nullable();
+            $table->string('waste_reason',30)->nullable();
             $table->decimal('unit_food_cost', 10, 2)->default(0);
             $table->decimal('qty', 10, 2)->default(0);
             $table->timestamps();

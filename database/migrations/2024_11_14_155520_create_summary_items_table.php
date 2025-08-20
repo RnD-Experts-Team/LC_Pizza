@@ -13,9 +13,9 @@ class CreateSummaryItemsTable extends Migration
             $table->id();
             $table->string('franchise_store',20)->index();
             $table->date('business_date')->index();
-            $table->string('menu_item_name')->nullable();
-            $table->string('menu_item_account')->nullable();
-            $table->string('item_id')->nullable();
+            $table->string('menu_item_name',60)->nullable();
+            $table->string('menu_item_account',25)->nullable();
+            $table->string('item_id',10)->nullable();
             $table->integer('item_quantity')->nullable();
             $table->decimal('royalty_obligation', 15, 2)->nullable();
             $table->decimal('taxable_amount', 15, 2)->nullable();
@@ -34,6 +34,6 @@ class CreateSummaryItemsTable extends Migration
     {
 
         Schema::dropIfExists('summary_items');
-        
+
     }
 }

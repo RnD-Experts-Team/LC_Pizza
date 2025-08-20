@@ -12,8 +12,8 @@ class CreateFinancialViewsTable extends Migration
             $table->id();
             $table->string('franchise_store',20)->index();
             $table->date('business_date')->index();
-            $table->string('area')->nullable();
-            $table->string('sub_account')->nullable();
+            $table->string('area',50)->nullable();
+            $table->string('sub_account',50)->nullable();
             $table->decimal('amount', 15, 2)->nullable();
             $table->timestamps();
 

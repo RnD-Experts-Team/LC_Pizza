@@ -14,13 +14,13 @@ class CreateCashManagementTable extends Migration
             $table->date('business_date')->index();
             $table->dateTime('create_datetime')->nullable();
             $table->dateTime('verified_datetime')->nullable();
-            $table->string('till')->nullable();
-            $table->string('check_type')->nullable();
+            $table->string('till',15)->nullable();
+            $table->string('check_type',15)->nullable();
             $table->decimal('system_totals', 15, 2)->nullable();
             $table->decimal('verified', 15, 2)->nullable();
             $table->decimal('variance', 15, 2)->nullable();
-            $table->string('created_by')->nullable();
-            $table->string('verified_by')->nullable();
+            $table->string('created_by',50)->nullable();
+            $table->string('verified_by',50)->nullable();
             $table->timestamps();
 
             $table->index(['franchise_store', 'business_date']);

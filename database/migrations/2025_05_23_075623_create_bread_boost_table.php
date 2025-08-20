@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('bread_boost', function (Blueprint $table) {
             $table->id();
             $table->date('date')->nullable();
-            $table->string('franchise_store')->nullable();
+            $table->string('franchise_store',20)->nullable();
             $table->integer('classic_order')->nullable();
             $table->integer('classic_with_bread')->nullable();
             $table->integer('other_pizza_order')->nullable();

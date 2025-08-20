@@ -16,10 +16,10 @@ return new class extends Migration
             $table->string('franchise_store',20)->nullable();
             $table->bigInteger('order_id')->nullable();
             $table->date('date')->nullable();
-            $table->string('pay_type')->nullable();
+            $table->string('pay_type',20)->nullable();
             $table->decimal('original_subtotal', 10, 2)->nullable();
             $table->decimal('modified_subtotal', 10, 2)->nullable();
-            $table->string('promo_code')->nullable();
+            $table->string('promo_code',50)->nullable();
             $table->timestamps();
         });
     }

@@ -10,15 +10,15 @@ class CreateAltaInventoryIngredientOrdersTable extends Migration
     {
         Schema::create('alta_inventory_ingredient_orders', function (Blueprint $table) {
             $table->id();
-            $table->string('franchise_store')->nullable();
+            $table->string('franchise_store',20)->nullable();
             $table->date('business_date')->nullable();
-            $table->string('supplier')->nullable();
-            $table->string('invoice_number')->nullable();
-            $table->string('purchase_order_number')->nullable();
-            $table->string('ingredient_id')->nullable();
-            $table->string('ingredient_description')->nullable();
-            $table->string('ingredient_category')->nullable();
-            $table->string('ingredient_unit')->nullable();
+            $table->string('supplier',30)->nullable();
+            $table->string('invoice_number',20)->nullable();
+            $table->string('purchase_order_number',20)->nullable();
+            $table->string('ingredient_id',30)->nullable();
+            $table->string('ingredient_description',50)->nullable();
+            $table->string('ingredient_category',50)->nullable();
+            $table->string('ingredient_unit',50)->nullable();
             $table->decimal('unit_price', 10, 2)->default(0);
             $table->decimal('order_qty', 10, 2)->default(0);
             $table->decimal('sent_qty', 10, 2)->default(0);
