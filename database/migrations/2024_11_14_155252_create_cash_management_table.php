@@ -15,7 +15,7 @@ class CreateCashManagementTable extends Migration
             $table->dateTime('create_datetime')->nullable();
             $table->dateTime('verified_datetime')->nullable();
             $table->string('till',15)->nullable();
-            $table->string('check_type',15)->nullable();
+            $table->string('check_type',50)->nullable();
             $table->decimal('system_totals', 15, 2)->nullable();
             $table->decimal('verified', 15, 2)->nullable();
             $table->decimal('variance', 15, 2)->nullable();
