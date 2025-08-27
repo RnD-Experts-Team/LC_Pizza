@@ -75,7 +75,7 @@ class LogicsAndQueriesServices
         ])->unique();
 
 
-
+        $allChannelRows = [];
         $allChannelRows = [];
 
         Log::info('Started the store loop');
@@ -88,6 +88,7 @@ class LogicsAndQueriesServices
 
 
             //******* Bread Boost Summary *********//
+
             $breadBoostRow = $this->BreadBoost($storeOrderLines, $store, $selectedDate);
             if (!empty($breadBoostRow)) {
                 $this->inserter->insertBreadBoostData([$breadBoostRow]);
@@ -878,6 +879,7 @@ class LogicsAndQueriesServices
                 'drive_thru_sales'  => $hourOrders->where('order_placed_method', 'Drive Thru')->sum('royalty_obligation'),
                 'website_sales'     => $hourOrders->where('order_placed_method', 'Website')->sum('royalty_obligation'),
                 'mobile_sales'      => $hourOrders->where('order_placed_method', 'Mobile')->sum('royalty_obligation'),
+
                 'order_count'       => $hourOrders->count(),
             ];
         }
@@ -932,7 +934,7 @@ class LogicsAndQueriesServices
         }
         return $rows;
     }
-    private function groupOrdersByHour(Collection $orders): Collection
+    public function groupOrdersByHour(Collection $orders): Collection
     {
         return $orders->groupBy(function ($order) {
             $raw = $order['promise_date'] ?? null;
@@ -944,7 +946,7 @@ class LogicsAndQueriesServices
             }
         });
     }
-    private function makeHourlySalesRow(Collection $hourOrders,string $store,string $selectedDate,int $hour): array {
+    public function makeHourlySalesRow(Collection $hourOrders,string $store,string $selectedDate,int $hour): array {
         return [
             'franchise_store'   => $store,
             'business_date'     => $selectedDate,
@@ -959,7 +961,7 @@ class LogicsAndQueriesServices
         ];
     }
 
-    private function makeHourHnrRow(Collection $hourOrders, string $store, string $selectedDate, int $hour): array {
+    public function makeHourHnrRow(Collection $hourOrders, string $store, string $selectedDate, int $hour): array {
         $transactions = $hourOrders->where('hnrOrder', 'Yes')->count();
 
         $promiseBroken = $hourOrders
