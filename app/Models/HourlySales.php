@@ -18,6 +18,11 @@ class HourlySales extends Model
         'drive_thru_sales',
         'website_sales',
         'mobile_sales',
+        'website_sales_delivery',
+        'mobile_sales_delivery',
+        'doordash_sales',
+        'ubereats_sales',
+        'grubhub_sales',
         'order_count',
     ];
 }
