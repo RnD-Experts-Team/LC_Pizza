@@ -76,7 +76,6 @@ class LogicsAndQueriesServices
 
 
         $allChannelRows = [];
-        $allChannelRows = [];
 
         Log::info('Started the store loop');
         foreach ($allFranchiseStores as $store) {
