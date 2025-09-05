@@ -14,12 +14,16 @@ Artisan::command('inspire', function () {
 
 
 
-Artisan::command('lc:import-report-data', function () {
+Artisan::command('lc:import-report-data {--date=}', function () {
     $this->info('Starting the import of LC Report Data.');
 
 
    // $date = Carbon::yesterday()->format('Y-m-d');
-    $date = '2025-08-20';
+    // $date = '2025-09-03';
+
+    $date = $this->option('date')
+        ? Carbon::parse($this->option('date'))->format('Y-m-d')
+        : Carbon::yesterday()->format('Y-m-d');
 
     $this->info('Importing data for date: ' . $date);
 
