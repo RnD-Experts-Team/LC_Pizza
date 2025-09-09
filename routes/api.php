@@ -2,6 +2,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Data\ExportingController;
 
+use App\Http\Controllers\DSPR_Controller;
 
 Route::middleware('api.key')->group(function () {
     // exporting route csv and excel
@@ -13,3 +14,6 @@ Route::middleware('auth.verify')->group(function () {
     Route::get('/export/{model}/json/{start?}/{end?}/{hour?}/{stores?}', [ExportingController::class, 'exportJson'])
     ->name('export.json');
 });
+
+Route::get('/dspr-report/{store}/{date}', [DSPR_Controller::class, 'index'])
+    ->name('dspr-report');
