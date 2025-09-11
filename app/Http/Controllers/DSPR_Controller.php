@@ -9,6 +9,7 @@ use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Collection;
 
 class DSPR_Controller extends Controller
 {
@@ -55,16 +56,21 @@ class DSPR_Controller extends Controller
             ->whereBetween('business_date', [$startValue, $endValue])
             ->get();
 
-        $lookbackStartValue = $start->copy()->subDays(84)->toDateString();
+        $lookbackStart      = $day->copy()->subDays(84)->startOfDay(); // 84 days before $date
+        $lookbackStartValue = $lookbackStart->toDateString();
+
+        // Calculate the end of the previous week (before current week starts)
+        $currentWeekStart = $start->copy(); // Tuesday of current week
+        $lookbackEnd = $currentWeekStart->copy()->subDay()->endOfDay(); // Monday before current week
+        $lookbackEndValue = $lookbackEnd->toDateString();
 
         $lookbackSummaryItems = SummaryItem::where('franchise_store', $store)
-            ->whereBetween('business_date', [$lookbackStartValue, $endValue])
+            ->whereBetween('business_date', [$lookbackStartValue, $lookbackEndValue])
             ->get();
 
         $lookbackFinalSummaries = FinalSummary::where('franchise_store', $store)
-            ->whereBetween('business_date', [$lookbackStartValue, $endValue])
+            ->whereBetween('business_date', [$lookbackStartValue, $lookbackEndValue])
             ->get();
-
 
         // External deposit/delivery
 
@@ -97,18 +103,22 @@ class DSPR_Controller extends Controller
         $dailyDSQR = $this->dailyDsqr(dailyDepositDelivery: $dailyDepositDelivery);
 
         $dailyHourlySalesReport = $this->dailyHourlySales($dailyHourlySales);
+
+        //customer service
+        $customerServiceReport= $this->customerService($lookbackFinalSummaries, $weeklyFinalSummaries);
         //return the data
         return response()->json([
             'store'       => $store,
             'anchor_date' => $date,
             'week_start'  => $startValue,
             'week_end'    => $endValue,
-
+            '84 back value' =>$lookbackStartValue,
+            'lookbackFinalSummaries' =>$lookbackFinalSummaries,
             'dailyDSQR'   => $dailyDSQR,
-            'daily'       => $dailyDSPR,
-            'weekly'      => $weeklyDSPR,
-            'dailyHourlySales' => $dailyHourlySales,
+            'dailyDSPR'       => $dailyDSPR,
+            'weeklyDSPR'      => $weeklyDSPR,
             'dailyHourlySalesReport' =>$dailyHourlySalesReport,
+            'customerServiceReport' =>$customerServiceReport
         ]);
 
     }
@@ -140,7 +150,7 @@ class DSPR_Controller extends Controller
         $daily_totalSales = $sum($dailyFinalSummaries, 'total_sales');
         $daily_cashSales  = $sum($dailyFinalSummaries, 'cash_sales');
 
-        $daily_labor = $daily_totalSales > 0 ? ($daily_WH * 16) / $daily_totalSales : null;
+        $daily_labor = $daily_totalSales > 0 ? (float)(($daily_WH * 16) / $daily_totalSales) : null;
 
         $daily_wasteGateway  = $sum($dailyFinalSummaries, 'total_waste_cost');
         $daily_overShort     = $daily_deposit - $daily_cashSales;
@@ -222,14 +232,7 @@ class DSPR_Controller extends Controller
         $weekly_totalSales = (float) $weeklyFinalSummaries->sum('total_sales');
         $weekly_cashSales  = (float) $weeklyFinalSummaries->sum('cash_sales');
 
-
-        $dailyLabors = collect($weekDates)->map(function ($d) use ($weeklyFinalSummaries, $weeklyDepositDelivery, $DD) {
-            $salesForDay = (float) $weeklyFinalSummaries->where('business_date', $d)->sum('total_sales');
-            $hoursForDay = (float) $weeklyDepositDelivery->where('HookWorkDaysDate', $d)->sum($DD['hours']);
-            return $salesForDay > 0 ? ($hoursForDay * 16) / $salesForDay : null; // null -> exclude from avg
-        })->filter(fn ($v) => $v !== null);
-
-        $weekly_labor = $dailyLabors->count() ? $dailyLabors->avg() : null;
+        $weekly_labor =$weekly_totalSales > 0 ? $weekly_WH*16 / $weekly_totalSales : null;
 
         $weekly_wasteGateway            = (float) $weeklyFinalSummaries->sum('total_waste_cost');
 
@@ -248,10 +251,10 @@ class DSPR_Controller extends Controller
         $weekly_mobile                  = (float) $weeklyFinalSummaries->sum('mobile_sales');
 
 
-        $weekly_digitalSalesPercentSum  = (float) $weeklyFinalSummaries->sum('digital_sales_percent');
+        $weekly_digitalSalesPercentSum  = (float) $weeklyFinalSummaries->avg('digital_sales_percent');
         $weekly_portalTransactions      = (int)   $weeklyFinalSummaries->sum('portal_transactions');
-        $weekly_portalUsedPercentSum    = (float) $weeklyFinalSummaries->sum('portal_used_percent');
-        $weekly_inPortalOnTimePercentSum= (float) $weeklyFinalSummaries->sum('in_portal_on_time_percent');
+        $weekly_portalUsedPercentSum    = (float) $weeklyFinalSummaries->avg('portal_used_percent');
+        $weekly_inPortalOnTimePercentSum= (float) $weeklyFinalSummaries->avg('in_portal_on_time_percent');
 
         $weekly_driveThruSales          = (float) $weeklyFinalSummaries->sum('drive_thru_sales');
         $weekly_wasteAlta               = (float) $weeklyDepositDelivery->sum($DD['waste']);
@@ -406,5 +409,61 @@ class DSPR_Controller extends Controller
             ->values()
             ->all();
     }
+
+   public function customerService($lookbackFinalSummaries, $weeklyFinalSummaries)
+{
+    // Normalize to collections
+    $toCollection = fn($x) => $x instanceof Collection ? $x : collect($x);
+
+    $lookback = $toCollection($lookbackFinalSummaries);
+    $weekly   = $toCollection($weeklyFinalSummaries);
+
+    // Weekday labels in your desired order (Tue..Mon)
+    $labels = ['Tue','Wed','Thu','Fri','Sat','Sun','Mon'];
+
+    // Safe accessors (works for arrays or Eloquent models)
+    $getDate = fn($r) => is_array($r) ? ($r['business_date'] ?? null) : ($r->business_date ?? null);
+    $getCust = fn($r) => (float) (is_array($r) ? ($r['customer_count'] ?? 0) : ($r->customer_count ?? 0));
+
+    // Map a record to a weekday label
+    $labelOf = function ($r) use ($getDate) {
+        $dow = Carbon::parse($getDate($r))->dayOfWeek; // 0=Sun .. 6=Sat
+        return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][$dow];
+    };
+
+    // --- current week: just take the value (sum in case there are multiple rows for a day) ---
+    $weeklyByDay = collect($labels)->mapWithKeys(function ($lab) use ($weekly, $labelOf, $getCust) {
+        $val = $weekly->filter(fn($r) => $labelOf($r) === $lab)->sum($getCust);
+        return [$lab => $val === 0.0 ? null : $val];
+    });
+
+    $weeklyAvg = $weeklyByDay->filter(fn($v) => $v !== null)->avg();
+
+    // --- lookback: average customer_count across ALL 84 days for each weekday ---
+    $lookbackByDay = collect($labels)->mapWithKeys(function ($lab) use ($lookback, $labelOf, $getCust) {
+        $subset = $lookback->filter(fn($r) => $labelOf($r) === $lab);
+
+        if ($subset->count() === 0) {
+            return [$lab => null];
+        }
+
+        $avg = $subset->avg($getCust);
+        return [$lab => $avg];
+    });
+
+    $lookbackAvg = $lookbackByDay->filter(fn($v) => $v !== null)->avg();
+
+    return [
+        'lookback' => [
+            'by_day'         => $lookbackByDay,   // Tue..Mon averages over 84 days
+            'weekly_average' => $lookbackAvg,     // average of available days
+        ],
+        'current_week' => [
+            'by_day'         => $weeklyByDay,     // Tue..Mon values for the week
+            'weekly_average' => $weeklyAvg,       // average of available days
+        ],
+    ];
+}
+
 
 }

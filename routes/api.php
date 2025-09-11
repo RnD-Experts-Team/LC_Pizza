@@ -17,3 +17,4 @@ Route::middleware('auth.verify')->group(function () {
 
 Route::get('/dspr-report/{store}/{date}', [DSPR_Controller::class, 'index'])
     ->name('dspr-report');
+
