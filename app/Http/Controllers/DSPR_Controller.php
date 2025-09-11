@@ -106,6 +106,9 @@ class DSPR_Controller extends Controller
 
         //customer service
         $customerServiceReport= $this->customerService($lookbackFinalSummaries, $weeklyFinalSummaries);
+
+        $upsellingReport = $this->upselling($lookbackSummaryItems,$weeklySummaryItems);
+
         //return the data
         return response()->json([
             'store'       => $store,
@@ -118,7 +121,8 @@ class DSPR_Controller extends Controller
             'dailyDSPR'       => $dailyDSPR,
             'weeklyDSPR'      => $weeklyDSPR,
             'dailyHourlySalesReport' =>$dailyHourlySalesReport,
-            'customerServiceReport' =>$customerServiceReport
+            'customerServiceReport' =>$customerServiceReport,
+            'upsellingReport' =>$upsellingReport
         ]);
 
     }
@@ -463,7 +467,110 @@ class DSPR_Controller extends Controller
             'weekly_average' => $weeklyAvg,       // average of available days
         ],
     ];
+    }
+
+
+public function upselling($lookbackSummaryItems, $weeklySummaryItems)
+{
+    // Normalize to collections
+    $toCollection = fn($x) => $x instanceof Collection ? $x : collect($x);
+
+    $lookback = $toCollection($lookbackSummaryItems);
+    $weekly   = $toCollection($weeklySummaryItems);
+
+    // Define allowed menu items for upselling
+    $allowedMenuItems = [
+        'Crazy Bread',
+        'EMB Cheese',
+        'EMB Pepperoni',
+        'Caesar Wings',
+        'Crazy Sauce',
+        'Pepperoni Crazy PuffsÂ®',
+        '3 Cheese and Herb Crazy PuffsÂ®',
+        '4 Cheese Crazy Puffs®',
+        'Bacon & Cheese Crazy Puffs®'
+    ];
+
+    // Filter data to only include allowed menu items
+    $filterByMenuItem = function($data) use ($allowedMenuItems) {
+        return $data->filter(function($record) use ($allowedMenuItems) {
+            $menuItem = is_array($record) ? ($record['menu_item_name'] ?? null) : ($record->menu_item_name ?? null);
+            return in_array($menuItem, $allowedMenuItems);
+        });
+    };
+
+    // Apply menu item filter
+    $lookback = $filterByMenuItem($lookback);
+    $weekly = $filterByMenuItem($weekly);
+
+    // Weekday labels in your desired order (Tue..Mon)
+    $labels = ['Tue','Wed','Thu','Fri','Sat','Sun','Mon'];
+
+    // Safe accessors (works for arrays or Eloquent models)
+    $getDate = fn($r) => is_array($r) ? ($r['business_date'] ?? null) : ($r->business_date ?? null);
+    $getRoyalty = fn($r) => (float) (is_array($r) ? ($r['royalty_obligation'] ?? 0) : ($r->royalty_obligation ?? 0));
+
+    // Map a record to a weekday label
+    $labelOf = function ($r) use ($getDate) {
+        $dow = Carbon::parse($getDate($r))->dayOfWeek; // 0=Sun .. 6=Sat
+        return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][$dow];
+    };
+
+    // Helper function to calculate daily averages first, then weekday averages
+    $calculateWeekdayAverages = function($data) use ($labels, $getDate, $getRoyalty, $labelOf) {
+        // Step 1: Group by business_date and calculate average for each date
+        $dailyAverages = $data->groupBy($getDate)->map(function($recordsForDate) use ($getRoyalty) {
+            return $recordsForDate->avg($getRoyalty); // Average all records for same date
+        });
+
+        // Step 2: Group daily averages by weekday and calculate weekday averages
+        $weekdayData = collect($labels)->mapWithKeys(function ($lab) use ($dailyAverages) {
+            // Get all dates that fall on this weekday
+            $weekdayAverages = $dailyAverages->filter(function($avg, $date) use ($lab) {
+                $dow = Carbon::parse($date)->dayOfWeek;
+                $dayLabel = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][$dow];
+                return $dayLabel === $lab;
+            });
+
+            if ($weekdayAverages->count() === 0) {
+                return [$lab => null];
+            }
+
+            // Average all the daily averages for this weekday
+            return [$lab => $weekdayAverages->avg()];
+        });
+
+        return $weekdayData;
+    };
+
+    // --- current week: average by date, then by weekday ---
+    $weeklyByDay = $calculateWeekdayAverages($weekly);
+    $weeklyAvg = $weeklyByDay->filter(fn($v) => $v !== null)->avg();
+
+    // --- lookback: average by date, then by weekday (excluding current week) ---
+    $currentWeekDates = $weekly->map($getDate)->unique()->toArray();
+    $filteredLookback = $lookback->filter(function($record) use ($currentWeekDates, $getDate) {
+        return !in_array($getDate($record), $currentWeekDates);
+    });
+
+    $lookbackByDay = $calculateWeekdayAverages($filteredLookback);
+    $lookbackAvg = $lookbackByDay->filter(fn($v) => $v !== null)->avg();
+
+    return [
+        'lookback' => [
+            'by_day'         => $lookbackByDay,   // Tue..Mon averages over lookback period
+            'weekly_average' => $lookbackAvg,     // average of available days
+        ],
+        'current_week' => [
+            'by_day'         => $weeklyByDay,     // Tue..Mon averages for the week
+            'weekly_average' => $weeklyAvg,       // average of available days
+        ],
+    ];
 }
+
+
+
+
 
 
 }
