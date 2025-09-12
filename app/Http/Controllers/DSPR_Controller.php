@@ -116,6 +116,7 @@ class DSPR_Controller extends Controller
             'week_start'  => $startValue,
             'week_end'    => $endValue,
             '84 back value' =>$lookbackStartValue,
+
             'lookbackFinalSummaries' =>$lookbackFinalSummaries,
             'dailyDSQR'   => $dailyDSQR,
             'dailyDSPR'       => $dailyDSPR,
@@ -516,38 +517,38 @@ public function upselling($lookbackSummaryItems, $weeklySummaryItems)
         return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][$dow];
     };
 
-    // Helper function to calculate daily averages first, then weekday averages
+    // Helper function to calculate daily SUMS first, then weekday averages
     $calculateWeekdayAverages = function($data) use ($labels, $getDate, $getRoyalty, $labelOf) {
-        // Step 1: Group by business_date and calculate average for each date
-        $dailyAverages = $data->groupBy($getDate)->map(function($recordsForDate) use ($getRoyalty) {
-            return $recordsForDate->avg($getRoyalty); // Average all records for same date
+        // Step 1: Group by business_date and SUM all royalty_obligation for each date
+        $dailyTotals = $data->groupBy($getDate)->map(function($recordsForDate) use ($getRoyalty) {
+            return $recordsForDate->sum($getRoyalty); // SUM all records for same date (not average)
         });
 
-        // Step 2: Group daily averages by weekday and calculate weekday averages
-        $weekdayData = collect($labels)->mapWithKeys(function ($lab) use ($dailyAverages) {
-            // Get all dates that fall on this weekday
-            $weekdayAverages = $dailyAverages->filter(function($avg, $date) use ($lab) {
+        // Step 2: Group daily totals by weekday and calculate weekday averages
+        $weekdayData = collect($labels)->mapWithKeys(function ($lab) use ($dailyTotals) {
+            // Get all date totals that fall on this weekday
+            $weekdayTotals = $dailyTotals->filter(function($total, $date) use ($lab) {
                 $dow = Carbon::parse($date)->dayOfWeek;
                 $dayLabel = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][$dow];
                 return $dayLabel === $lab;
             });
 
-            if ($weekdayAverages->count() === 0) {
+            if ($weekdayTotals->count() === 0) {
                 return [$lab => null];
             }
 
-            // Average all the daily averages for this weekday
-            return [$lab => $weekdayAverages->avg()];
+            // Average the daily totals for this weekday
+            return [$lab => $weekdayTotals->avg()];
         });
 
         return $weekdayData;
     };
 
-    // --- current week: average by date, then by weekday ---
+    // --- current week: sum by date, then average by weekday ---
     $weeklyByDay = $calculateWeekdayAverages($weekly);
     $weeklyAvg = $weeklyByDay->filter(fn($v) => $v !== null)->avg();
 
-    // --- lookback: average by date, then by weekday (excluding current week) ---
+    // --- lookback: sum by date, then average by weekday (excluding current week) ---
     $currentWeekDates = $weekly->map($getDate)->unique()->toArray();
     $filteredLookback = $lookback->filter(function($record) use ($currentWeekDates, $getDate) {
         return !in_array($getDate($record), $currentWeekDates);
@@ -567,6 +568,7 @@ public function upselling($lookbackSummaryItems, $weeklySummaryItems)
         ],
     ];
 }
+
 
 
 
