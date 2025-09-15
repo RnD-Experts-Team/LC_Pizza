@@ -853,66 +853,7 @@ class LogicsAndQueriesServices
                 'total_waste_cost'            => $totalWasteCost,
             ];
     }
-    // public function HourlySales(Collection $OrderRows, string $store, string $selectedDate): array
-    // {
-    //     $rows = [];
 
-    //     $ordersByHour = $OrderRows->groupBy(function ($order) {
-    //         $raw = $order['promise_date'] ?? null;
-    //         if (!$raw) return '00';
-    //         try {
-    //             return Carbon::parse($raw)->format('H');
-    //         } catch (\Throwable $e) {
-    //             return '00';
-    //         }
-    //     });
-
-    //     foreach ($ordersByHour as $hour => $hourOrders) {
-    //         $rows[] = [
-    //             'franchise_store'   => $store,
-    //             'business_date'     => $selectedDate,
-    //             'hour'              => (int)$hour,
-    //             'total_sales'       => $hourOrders->sum('royalty_obligation'),
-    //             'phone_sales'       => $hourOrders->where('order_placed_method', 'Phone')->sum('royalty_obligation'),
-    //             'call_center_sales' => $hourOrders->where('order_placed_method', 'SoundHoundAgent')->sum('royalty_obligation'),
-    //             'drive_thru_sales'  => $hourOrders->where('order_placed_method', 'Drive Thru')->sum('royalty_obligation'),
-
-    //             'website_sales'     => $hourOrders
-    //                 ->where('order_placed_method', 'Website')
-    //                 ->whereIn('order_fulfilled_method',['Register','Drive-Thru'])
-    //                 ->sum('royalty_obligation'),
-    //             'mobile_sales'      => $hourOrders
-    //                 ->where('order_placed_method', 'Mobile')
-    //                 ->whereIn('order_fulfilled_method',['Register','Drive-Thru'])
-    //                 ->sum('royalty_obligation'),
-
-    //             'website_sales_delivery'   => $hourOrders
-    //                 ->where('order_placed_method', 'Website')
-    //                 ->where('order_fulfilled_method', 'Delivery')
-    //                 ->sum('royalty_obligation'),
-    //             'mobile_sales_delivery'    => $hourOrders
-    //                 ->where('order_placed_method', 'Mobile')
-    //                 ->where('order_fulfilled_method', 'Delivery')
-    //                 ->sum('royalty_obligation'),
-    //             'doordash_sales'           => $hourOrders
-    //                 ->where('order_placed_method', 'DoorDash')
-    //                 ->where('order_fulfilled_method', 'Delivery')
-    //                 ->sum('royalty_obligation'),
-    //             'ubereats_sales'           => $hourOrders
-    //                 ->where('order_placed_method', 'UberEats')
-    //                 ->where('order_fulfilled_method', 'Delivery')
-    //                 ->sum('royalty_obligation'),
-    //             'grubhub_sales'            => $hourOrders
-    //                 ->where('order_placed_method', 'Grubhub')
-    //                 ->where('order_fulfilled_method', 'Delivery')
-    //                 ->sum('royalty_obligation'),
-
-    //             'order_count'              => $hourOrders->count(),
-    //         ];
-    //     }
-
-    //     return $rows;
-    // }
 
     public function StoreHotNReadyTransaction(Collection $OrderRows, Collection $orderLine, string $store, string $selectedDate){
 
@@ -929,7 +870,7 @@ class LogicsAndQueriesServices
         $groupedItems = $hnrOrderLines->groupBy(function ($item) {
             return $item['item_id'] . '|' . $item['menu_item_name'];
         });
-
+         $rows = [];
         foreach ($groupedItems as $itemKey => $lines) {
             [$itemId, $itemName] = explode('|', $itemKey);
 
