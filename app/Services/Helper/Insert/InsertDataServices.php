@@ -416,6 +416,10 @@ class InsertDataServices{
                 'transactions',
                 'promise_met_transactions',
                 'promise_met_percentage',
+
+                'transactions_with_CC',
+                'promise_met_transactions_cc',
+                'promise_met_percentage_cc'
             ]
         ],
         'hour_hnr_transactions' => [

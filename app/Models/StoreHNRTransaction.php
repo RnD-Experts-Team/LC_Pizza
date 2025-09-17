@@ -17,6 +17,7 @@ class StoreHNRTransaction extends Model
         'item_id',
         'item_name',
         'transactions',
+        'transactions_with_CC',
         'promise_met_transactions',
         'promise_met_percentage',
     ];

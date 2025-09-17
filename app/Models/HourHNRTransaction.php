@@ -16,7 +16,7 @@ class HourHNRTransaction extends Model
         'business_date',
         'hour',
         'transactions',
-        'promise_broken_transactions',
+        'transactions_with_CC',
         'promise_broken_percentage',
     ];
 

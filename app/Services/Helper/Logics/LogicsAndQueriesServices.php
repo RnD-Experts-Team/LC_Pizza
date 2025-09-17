@@ -874,11 +874,14 @@ class LogicsAndQueriesServices
         foreach ($groupedItems as $itemKey => $lines) {
             [$itemId, $itemName] = explode('|', $itemKey);
 
+            $transactions_with_CC = 0;
             // Count all item-level occurrences
             if ($itemId == '105001'){
                 $transactions =$lines->pluck('order_id')->unique()->count();
+
             }else{
                 $transactions = $lines->count();
+                $transactions_with_CC = $lines-> where('bundle_name', 'Crazy Combo')->count();
             }
             // Filter lines where the parent order has broken_promise == 'No'
             $promiseMetTransactions = $lines->filter(function ($line) use ($hnrOrders) {
@@ -886,9 +889,21 @@ class LogicsAndQueriesServices
                 return $order && strtolower($order['broken_promise']) === 'no';
             })->count();
 
+            $promiseMetTransactionsCC = $lines
+            -> where('bundle_name', 'Crazy Combo')
+            ->filter(function ($line) use ($hnrOrders) {
+                $order = $hnrOrders->firstWhere('order_id', $line['order_id']);
+                return $order && strtolower($order['broken_promise']) === 'no';
+            })->count();
+
+
             $percentage = $transactions > 0
                 ? round(($promiseMetTransactions / $transactions) * 100, 2)
                 : 0;
+
+            $percentageCC = $transactions_with_CC > 0
+            ? round(($promiseMetTransactions / $transactions_with_CC) * 100, 2)
+            : 0;
 
             $rows[] =[
                     'franchise_store' => $store,
@@ -898,6 +913,10 @@ class LogicsAndQueriesServices
                     'transactions' => $transactions,
                     'promise_met_transactions' => $promiseMetTransactions,
                     'promise_met_percentage' => $percentage,
+
+                    'transactions_with_CC' =>$transactions_with_CC,
+                    'promise_met_transactions_cc' =>$promiseMetTransactionsCC,
+                    'promise_met_percentage_cc'=>$percentageCC,
                 ];
 
         }

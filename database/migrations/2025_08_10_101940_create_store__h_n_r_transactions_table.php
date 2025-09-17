@@ -17,6 +17,10 @@ class CreateStoreHNRTransactionsTable extends Migration
             $table->integer('transactions')->default(0);
             $table->integer('promise_met_transactions')->default(0);
             $table->decimal('promise_met_percentage', 5, 2)->default(0.00);
+
+            $table->integer('transactions_with_CC')->default(0);
+            $table->integer('promise_met_transactions_cc')->default(0);
+            $table->decimal('promise_met_percentage_cc', 5, 2)->default(0.00);
             $table->timestamps();
 
             $table->unique(['franchise_store', 'business_date', 'item_id'], 'store_hnr_unique');
