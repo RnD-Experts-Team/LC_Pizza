@@ -13,15 +13,19 @@ use Illuminate\Support\Collection;
 
 class DSPR_Controller extends Controller
 {
-    public function index($store, $date)
+    public function index($store, $date, $items = null)
     {
         // --- guards ---
         if (empty($store) || empty($date)) {
             return response()->noContent();
         }
-        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-            return response()->json(['error' => 'Invalid date format, expected YYYY-MM-DD'], 400);
+        if (!preg_match('/^\d{4}-\d{1,2}-\d{1,2}$/', $date)) {
+            return response()->json(['error' => 'Invalid date format, expected YYYY-MM-DD or YYYY-M-D'], 400);
         }
+
+        // URL decode the items parameter
+        $decodedItems = $items ? urldecode($items) : null;
+        $itemsArray = $decodedItems ? $this->parseItemsString($decodedItems) : [];
 
         // --- compute custom week [Tue..Mon] ---
         try {
@@ -39,18 +43,22 @@ class DSPR_Controller extends Controller
         for ($d = $start->copy(); $d->lte($end); $d->addDay()) {
             $weekDates[] = $d->toDateString();
         }
+
         // HourlySales: ONLY $date
         $dailyHourlySales = HourlySales::where('franchise_store', $store)
             ->where('business_date', $date)
             ->get();
 
-
         $weeklyHourlySales = $dailyHourlySales;
 
+        // SummaryItem queries - filter by items if provided
+        $weeklySummaryQuery = SummaryItem::where('franchise_store', $store)
+            ->whereBetween('business_date', [$startValue, $endValue]);
 
-        $weeklySummaryItems = SummaryItem::where('franchise_store', $store)
-            ->whereBetween('business_date', [$startValue, $endValue])
-            ->get();
+        if (!empty($itemsArray)) {
+            $weeklySummaryQuery->whereIn('menu_item_name', $itemsArray);
+        }
+        $weeklySummaryItems = $weeklySummaryQuery->get();
 
         $weeklyFinalSummaries = FinalSummary::where('franchise_store', $store)
             ->whereBetween('business_date', [$startValue, $endValue])
@@ -64,16 +72,20 @@ class DSPR_Controller extends Controller
         $lookbackEnd = $currentWeekStart->copy()->subDay()->endOfDay(); // Monday before current week
         $lookbackEndValue = $lookbackEnd->toDateString();
 
-        $lookbackSummaryItems = SummaryItem::where('franchise_store', $store)
-            ->whereBetween('business_date', [$lookbackStartValue, $lookbackEndValue])
-            ->get();
+        // Lookback SummaryItem queries - filter by items if provided
+        $lookbackSummaryQuery = SummaryItem::where('franchise_store', $store)
+            ->whereBetween('business_date', [$lookbackStartValue, $lookbackEndValue]);
+
+        if (!empty($itemsArray)) {
+            $lookbackSummaryQuery->whereIn('menu_item_name', $itemsArray);
+        }
+        $lookbackSummaryItems = $lookbackSummaryQuery->get();
 
         $lookbackFinalSummaries = FinalSummary::where('franchise_store', $store)
             ->whereBetween('business_date', [$lookbackStartValue, $lookbackEndValue])
             ->get();
 
         // External deposit/delivery
-
         $base = rtrim('https://hook.pneunited.com/api/deposit-delivery-dsqr', '/');
         $url  = $base.'/'.rawurlencode($store).'/'.rawurlencode($date);
 
@@ -81,25 +93,17 @@ class DSPR_Controller extends Controller
         $weeklyDepositDelivery = collect($resp->successful() ? $resp->json('weeklyDepositDelivery') : []);
         $dailyDepositDelivery  = $weeklyDepositDelivery->where('HookWorkDaysDate', $date)->values();
 
-
         // Daily slices (for KPIs)
-
         $dailySummaryItems    = $weeklySummaryItems->where('business_date', $date)->values();
         $dailyFinalSummaries  = $weeklyFinalSummaries->where('business_date', $date)->values();
 
-
         // Daily DSPR logic (KPIs)
-
         $dailyDSPR = $this->dailyDspr($dailyFinalSummaries, $dailyDepositDelivery);
 
-
         // Weekly DSPR logic (KPIs)
-
         $weeklyDSPR = $this->weeklyDspr($weekDates,$weeklyFinalSummaries, $weeklyDepositDelivery);
 
-
         // Weekly DSQR logics
-
         $dailyDSQR = $this->dailyDsqr(dailyDepositDelivery: $dailyDepositDelivery);
 
         $dailyHourlySalesReport = $this->dailyHourlySales($dailyHourlySales);
@@ -107,16 +111,18 @@ class DSPR_Controller extends Controller
         //customer service
         $customerServiceReport= $this->customerService($lookbackFinalSummaries, $weeklyFinalSummaries);
 
-        $upsellingReport = $this->upselling($lookbackSummaryItems,$weeklySummaryItems);
+        // Updated upselling report with items filtering
+        $upsellingReport = $this->upselling($lookbackSummaryItems, $weeklySummaryItems);
 
         //return the data
         return response()->json([
             'store'       => $store,
             'anchor_date' => $date,
+            'items_filter' => $decodedItems,
+            'items_count' => count($itemsArray),
             'week_start'  => $startValue,
             'week_end'    => $endValue,
             '84 back value' =>$lookbackStartValue,
-
             'lookbackFinalSummaries' =>$lookbackFinalSummaries,
             'dailyDSQR'   => $dailyDSQR,
             'dailyDSPR'       => $dailyDSPR,
@@ -125,13 +131,141 @@ class DSPR_Controller extends Controller
             'customerServiceReport' =>$customerServiceReport,
             'upsellingReport' =>$upsellingReport
         ]);
-
     }
 
+    /**
+     * Parse comma-separated items string to array
+     */
+    private function parseItemsString(string $items): array
+    {
+        return array_filter(
+            array_map('trim', explode(',', $items)),
+            fn($item) => !empty($item)
+        );
+    }
+
+    /**
+     * Fixed upselling method using the same approach as DSPR controller
+     */
+    public function upselling($lookbackSummaryItems, $weeklySummaryItems)
+    {
+        // Convert to collections if needed
+        $lookbackCollection = $lookbackSummaryItems instanceof Collection ? $lookbackSummaryItems : collect($lookbackSummaryItems);
+        $weeklyCollection = $weeklySummaryItems instanceof Collection ? $weeklySummaryItems : collect($weeklySummaryItems);
+
+        // Process weekly averages (current week)
+        $weeklyAverages = $this->calculateWeeklyAverages($weeklyCollection);
+
+        // Process lookback averages (past 84 days)
+        $lookbackAverages = $this->calculateLookbackAverages($lookbackCollection);
+
+        return [
+            'weekly' => $weeklyAverages,
+            'lookback' => $lookbackAverages
+        ];
+    }
+
+    /**
+     * Calculate daily averages for current week collection
+     */
+    private function calculateWeeklyAverages(Collection $collection): array
+    {
+        // Group by day of week (Tuesday = 2, Monday = 1 in Carbon)
+        $groupedByDay = $collection->groupBy(function ($item) {
+            $date = is_array($item) ? ($item['business_date'] ?? null) : ($item->business_date ?? null);
+            return Carbon::parse($date)->dayOfWeek;
+        });
+
+        // Map Carbon day numbers to readable names (Tuesday first)
+        $dayMapping = [
+            2 => 'Tue',  // Tuesday
+            3 => 'Wed',  // Wednesday
+            4 => 'Thu',  // Thursday
+            5 => 'Fri',  // Friday
+            6 => 'Sat',  // Saturday
+            0 => 'Sun',  // Sunday
+            1 => 'Mon'   // Monday
+        ];
+
+        $dailyAverages = [];
+        $validDayAverages = [];
+
+        // Calculate average for each day
+        foreach ($dayMapping as $dayNumber => $dayName) {
+            if ($groupedByDay->has($dayNumber)) {
+                $dayItems = $groupedByDay->get($dayNumber);
+                $average = $dayItems->avg(function ($item) {
+                    return is_array($item) ? ($item['royalty_obligation'] ?? 0) : ($item->royalty_obligation ?? 0);
+                });
+                $dailyAverages[$dayName] = round($average, 2);
+                $validDayAverages[] = $average;
+            } else {
+                $dailyAverages[$dayName] = null;
+            }
+        }
+
+        // Calculate weekly average (only for days with values)
+        $weeklyAverage = !empty($validDayAverages)
+            ? round(array_sum($validDayAverages) / count($validDayAverages), 2)
+            : null;
+
+        $dailyAverages['weeklyAvr'] = $weeklyAverage;
+
+        return $dailyAverages;
+    }
+
+    /**
+     * Calculate lookback averages for past 84 days collection
+     */
+    private function calculateLookbackAverages(Collection $collection): array
+    {
+        // Group by day of week
+        $groupedByDay = $collection->groupBy(function ($item) {
+            $date = is_array($item) ? ($item['business_date'] ?? null) : ($item->business_date ?? null);
+            return Carbon::parse($date)->dayOfWeek;
+        });
+
+        // Map Carbon day numbers to readable names (Tuesday first)
+        $dayMapping = [
+            2 => 'Tue',  // Tuesday
+            3 => 'Wed',  // Wednesday
+            4 => 'Thu',  // Thursday
+            5 => 'Fri',  // Friday
+            6 => 'Sat',  // Saturday
+            0 => 'Sun',  // Sunday
+            1 => 'Mon'   // Monday
+        ];
+
+        $dailyAverages = [];
+        $validDayAverages = [];
+
+        // Calculate average for each day of the week across all weeks in lookback period
+        foreach ($dayMapping as $dayNumber => $dayName) {
+            if ($groupedByDay->has($dayNumber)) {
+                $dayItems = $groupedByDay->get($dayNumber);
+                $average = $dayItems->avg(function ($item) {
+                    return is_array($item) ? ($item['royalty_obligation'] ?? 0) : ($item->royalty_obligation ?? 0);
+                });
+                $dailyAverages[$dayName] = round($average, 2);
+                $validDayAverages[] = $average;
+            } else {
+                $dailyAverages[$dayName] = null;
+            }
+        }
+
+        // Calculate lookback average (average of all days that have values)
+        $lookbackAverage = !empty($validDayAverages)
+            ? round(array_sum($validDayAverages) / count($validDayAverages), 2)
+            : null;
+
+        $dailyAverages['lookBackAvr'] = $lookbackAverage;
+
+        return $dailyAverages;
+    }
+
+    // Keep all your existing methods unchanged...
     public function dailyDspr($dailyFinalSummaries, $dailyDepositDelivery){
-        // ============================
-        // Daily DSPR logic (KPIs)
-        // ============================
+        // Your existing code remains the same
         $sum = function ($collection, string $key) {
             return $collection->sum(function ($row) use ($key) {
                 $v = is_array($row) ? ($row[$key] ?? 0) : ($row->{$key} ?? 0);
@@ -216,6 +350,7 @@ class DSPR_Controller extends Controller
 
         return $daily_DSPR;
     }
+
 
     public function weeklyDspr($weekDates, $weeklyFinalSummaries, $weeklyDepositDelivery)
     {
@@ -471,103 +606,6 @@ class DSPR_Controller extends Controller
     }
 
 
-public function upselling($lookbackSummaryItems, $weeklySummaryItems)
-{
-    // Normalize to collections
-    $toCollection = fn($x) => $x instanceof Collection ? $x : collect($x);
-
-    $lookback = $toCollection($lookbackSummaryItems);
-    $weekly   = $toCollection($weeklySummaryItems);
-
-    // Define allowed menu items for upselling
-    $allowedMenuItems = [
-        'Crazy Bread',
-        'EMB Cheese',
-        'EMB Pepperoni',
-        'Caesar Wings',
-        'Crazy Sauce',
-        'Pepperoni Crazy PuffsÂ®',
-        '3 Cheese and Herb Crazy PuffsÂ®',
-        '4 Cheese Crazy Puffs®',
-        'Bacon & Cheese Crazy Puffs®'
-    ];
-
-    // Filter data to only include allowed menu items
-    $filterByMenuItem = function($data) use ($allowedMenuItems) {
-        return $data->filter(function($record) use ($allowedMenuItems) {
-            $menuItem = is_array($record) ? ($record['menu_item_name'] ?? null) : ($record->menu_item_name ?? null);
-            return in_array($menuItem, $allowedMenuItems);
-        });
-    };
-
-    // Apply menu item filter
-    $lookback = $filterByMenuItem($lookback);
-    $weekly = $filterByMenuItem($weekly);
-
-    // Weekday labels in your desired order (Tue..Mon)
-    $labels = ['Tue','Wed','Thu','Fri','Sat','Sun','Mon'];
-
-    // Safe accessors (works for arrays or Eloquent models)
-    $getDate = fn($r) => is_array($r) ? ($r['business_date'] ?? null) : ($r->business_date ?? null);
-    $getRoyalty = fn($r) => (float) (is_array($r) ? ($r['royalty_obligation'] ?? 0) : ($r->royalty_obligation ?? 0));
-
-    // Map a record to a weekday label
-    $labelOf = function ($r) use ($getDate) {
-        $dow = Carbon::parse($getDate($r))->dayOfWeek; // 0=Sun .. 6=Sat
-        return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][$dow];
-    };
-
-    // Helper function to calculate daily SUMS first, then weekday averages
-    $calculateWeekdayAverages = function($data) use ($labels, $getDate, $getRoyalty, $labelOf) {
-        // Step 1: Group by business_date and SUM all royalty_obligation for each date
-        $dailyTotals = $data->groupBy($getDate)->map(function($recordsForDate) use ($getRoyalty) {
-            return $recordsForDate->sum($getRoyalty); // SUM all records for same date (not average)
-        });
-
-        // Step 2: Group daily totals by weekday and calculate weekday averages
-        $weekdayData = collect($labels)->mapWithKeys(function ($lab) use ($dailyTotals) {
-            // Get all date totals that fall on this weekday
-            $weekdayTotals = $dailyTotals->filter(function($total, $date) use ($lab) {
-                $dow = Carbon::parse($date)->dayOfWeek;
-                $dayLabel = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][$dow];
-                return $dayLabel === $lab;
-            });
-
-            if ($weekdayTotals->count() === 0) {
-                return [$lab => null];
-            }
-
-            // Average the daily totals for this weekday
-            return [$lab => $weekdayTotals->avg()];
-        });
-
-        return $weekdayData;
-    };
-
-    // --- current week: sum by date, then average by weekday ---
-    $weeklyByDay = $calculateWeekdayAverages($weekly);
-    $weeklyAvg = $weeklyByDay->filter(fn($v) => $v !== null)->avg();
-
-    // --- lookback: sum by date, then average by weekday (excluding current week) ---
-    $currentWeekDates = $weekly->map($getDate)->unique()->toArray();
-    $filteredLookback = $lookback->filter(function($record) use ($currentWeekDates, $getDate) {
-        return !in_array($getDate($record), $currentWeekDates);
-    });
-
-    $lookbackByDay = $calculateWeekdayAverages($filteredLookback);
-    $lookbackAvg = $lookbackByDay->filter(fn($v) => $v !== null)->avg();
-
-    return [
-        'lookback' => [
-            'by_day'         => $lookbackByDay,   // Tue..Mon averages over lookback period
-            'weekly_average' => $lookbackAvg,     // average of available days
-        ],
-        'current_week' => [
-            'by_day'         => $weeklyByDay,     // Tue..Mon averages for the week
-            'weekly_average' => $weeklyAvg,       // average of available days
-        ],
-    ];
-}
 
 
 
