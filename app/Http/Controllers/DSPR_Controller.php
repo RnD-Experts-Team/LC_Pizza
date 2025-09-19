@@ -26,6 +26,7 @@ class DSPR_Controller extends Controller
         /***dates Used**/
         $givenDate = Carbon::parse($date);
         $usedDate = CarbonImmutable::parse($givenDate);
+        $dayName = $givenDate->dayName;
         //for week
         $weekNumber = $usedDate->isoWeek;
         $weekStartDate = $usedDate->startOfWeek(Carbon::TUESDAY);
@@ -135,6 +136,7 @@ class DSPR_Controller extends Controller
 
         $WeeklyDSPRData=$this->WeeklyDSPRReport($weeklyFinalSummaryCollection,$weeklyDepositDeliveryCollection);
 
+        $customerService=$this->CustomerService($weeklyFinalSummaryCollection,$lookBackFinalSummaryCollection);
         return [
             'Filtering Values'=>[
                 'date'                  =>$date,
@@ -156,6 +158,9 @@ class DSPR_Controller extends Controller
                 ],
                 'weekly'=>[
                     'weeklyDepositDeliveryCollection'=>$weeklyDepositDeliveryCollection
+                ],
+                'lookBack'=>[
+                    'lookBackFinalSummary'=>$lookBackFinalSummaryCollection
                 ]
             ],
             'reports'=>[
@@ -165,7 +170,8 @@ class DSPR_Controller extends Controller
                     'dailyDSPRData' =>$dailyDSPRData
                 ],
                 'weekly'=>[
-                    'DSPRData' =>$WeeklyDSPRData
+                    'DSPRData' =>$WeeklyDSPRData,
+                    'customerService'=>$customerService
                 ]
             ]
 
@@ -319,56 +325,163 @@ class DSPR_Controller extends Controller
         ];
     }
 
-    public function WeeklyDSPRReport($weeklyFinalSummaryCollection,$weeklyDepositDeliveryCollection){
+    public function WeeklyDSPRReport($weeklyFinalSummaryCollection, $weeklyDepositDeliveryCollection)
+{
+    if ($weeklyFinalSummaryCollection->isEmpty()) {
+        return "No Final Summary data available.";
+    }
+    if ($weeklyDepositDeliveryCollection->isEmpty()) {
+        return "No deposit delivery data available.";
+    }
+
+    // Group by day name
+    $finalSummaryByDay = $weeklyFinalSummaryCollection->groupBy(function ($item) {
+        return Carbon::parse($item['business_date'])->dayName; // e.g., 'Thursday'
+    });
+
+    $depositDeliveryByDay = $weeklyDepositDeliveryCollection->groupBy(function ($item) {
+        return Carbon::parse($item['HookWorkDaysDate'])->dayName;
+    });
+
+    // How many days have FinalSummary entries
+    $finalSummaryDaysCount = $finalSummaryByDay->count();
+
+    $laborForEachDay = [];
+
+    foreach ($finalSummaryByDay as $day => $fsRecords) {
+        // Sum total sales for that day (don’t assume [0])
+        $totalSales = (float) $fsRecords->sum('total_sales');
+
+        // Get the deposit/delivery records for this day safely
+        $ddRecords = $depositDeliveryByDay->get($day, collect());
+
+        // Sum hours; if day missing → 0
+        $employeesWorkingHours = (float) $ddRecords->sum('HookEmployeesWorkingHours');
+
+        if ($totalSales > 0 && $employeesWorkingHours > 0) {
+            $laborForEachDay[$day] = ($employeesWorkingHours * 16) / $totalSales;
+        }
+        // else: either side missing/zero → skip or set null (your choice)
+        // $laborForEachDay[$day] = null;
+    }
+
+    $sumOfAllLabors = array_sum($laborForEachDay);
+    $totalLabors = $finalSummaryDaysCount > 0 ? $sumOfAllLabors / $finalSummaryDaysCount : 0.0;
+
+    $workingHours = (float) $weeklyDepositDeliveryCollection->sum('HookEmployeesWorkingHours');
+    $deposit      = (float) $weeklyDepositDeliveryCollection->sum('HookDepositAmount');
+    $totalSales   = (float) $weeklyFinalSummaryCollection->sum('total_sales');
+
+    $cashSales    = (float) $weeklyFinalSummaryCollection->sum('cash_sales');
+    $customerCount= (float) $weeklyFinalSummaryCollection->sum('customer_count');
+
+    $tipsFinalSummary   = (float) $weeklyFinalSummaryCollection->sum('total_tips');
+    $tipsDepositDelivery= (float) $weeklyDepositDeliveryCollection->sum('HookHowMuchTips');
+
+    return [
+        'helpers' => [
+            'WH'        => $workingHours,
+            'deposit'   => $deposit,
+            'totalSales'=> $totalSales,
+            'cashSales' => $cashSales,
+        ],
+        'data' => [
+            'labor'                          => $totalLabors,
+            'waste_gateway'                  => (float) $weeklyFinalSummaryCollection->sum('total_waste_cost'),
+            'over_short'                     => $deposit - $cashSales,
+            'Refunded_order_Qty'             => (float) $weeklyFinalSummaryCollection->sum('refunded_order_qty'),
+            'Total_Cash_Sales'               => $cashSales,
+            'Total_Sales'                    => $totalSales,
+            'Waste_Alta'                     => (float) $weeklyDepositDeliveryCollection->sum('HookAltimetricWaste'),
+            'Modified_Order_Qty'             => (float) $weeklyFinalSummaryCollection->sum('modified_order_qty'),
+            'Total_TIPS'                     => $tipsFinalSummary + $tipsDepositDelivery,
+            'Customer_count'                 => $customerCount,
+            'DoorDash_Sales'                 => (float) $weeklyFinalSummaryCollection->sum('doordash_sales'),
+            'UberEats_Sales'                 => (float) $weeklyFinalSummaryCollection->sum('ubereats_sales'),
+            'GrubHub_Sales'                  => (float) $weeklyFinalSummaryCollection->sum('grubhub_sales'),
+            'Phone'                          => (float) $weeklyFinalSummaryCollection->sum('phone_sales'),
+            'Call_Center_Agent'              => (float) $weeklyFinalSummaryCollection->sum('call_center_sales'),
+            'Website'                        => (float) $weeklyFinalSummaryCollection->sum('website_sales'),
+            'Mobile'                         => (float) $weeklyFinalSummaryCollection->sum('mobile_sales'),
+            'Digital_Sales_Percent'          => $finalSummaryDaysCount ? (float) $weeklyFinalSummaryCollection->sum('digital_sales_percent') / $finalSummaryDaysCount : 0.0,
+            'Total_Portal_Eligible_Transactions' => (float) $weeklyFinalSummaryCollection->sum('portal_transactions'),
+            'Put_into_Portal_Percent'        => $finalSummaryDaysCount ? (float) $weeklyFinalSummaryCollection->sum('portal_used_percent') / $finalSummaryDaysCount : 0.0,
+            'In_Portal_on_Time_Percent'      => $finalSummaryDaysCount ? (float) $weeklyFinalSummaryCollection->sum('in_portal_on_time_percent') / $finalSummaryDaysCount : 0.0,
+            'Drive_Thru_Sales'               => (float) $weeklyFinalSummaryCollection->sum('drive_thru_sales'),
+            'Upselling'                      => null,
+            'Cash_Sales_Vs_Deposite_Difference' => $finalSummaryDaysCount ? ($deposit - $cashSales) / $finalSummaryDaysCount : 0.0,
+            'Avrage_ticket'                  => $customerCount > 0 ? $totalSales / $customerCount : 0.0,
+        ]
+    ];
+}
+
+
+    public function CustomerService($weeklyFinalSummaryCollection,$lookBackFinalSummaryCollection){
+        // check if collections are empty
         if ($weeklyFinalSummaryCollection->isEmpty()) {
-            return "No Final Summary data available.";
+            return "No weeklyFinalSummaryCollection data available.";
         }
-        if ($weeklyDepositDeliveryCollection->isEmpty()) {
-            return "No deposit delivery data available.";
+        if ($lookBackFinalSummaryCollection->isEmpty()) {
+            return "No lookBackFinalSummaryCollection data available.";
         }
 
-        $workingHours = $weeklyDepositDeliveryCollection ->sum('HookEmployeesWorkingHours');
-        $deposit =$weeklyDepositDeliveryCollection ->sum('HookDepositAmount');
-        $totalSales =$weeklyFinalSummaryCollection ->sum('total_sales');
+        //weeklyfinalSummary by day
+        $weeklyFinalSummaryDataByDay = $weeklyFinalSummaryCollection->groupBy(function ($item) {
+            return Carbon::parse($item['business_date'])->dayName;
+        })->map(function ($records) {
+            return $records->pluck('customer_count');
+        });
 
-        $cashSales =$weeklyFinalSummaryCollection ->sum('cash_sales');
-        $customerCount =$weeklyFinalSummaryCollection->sum('customer_count');
+        //days count
+        $weeklyFinalSummarydaysCount =$weeklyFinalSummaryDataByDay->count();
+
+        //lookBackfinalSummary by day
+        $lookBackfinalSummaryDataByDay = $lookBackFinalSummaryCollection->groupBy(function ($item) {
+            return Carbon::parse($item['business_date'])->dayName;
+        })->map(function ($dayRecords) {
+            return (float) $dayRecords->sum('customer_count');
+        });
+
+        //days count
+        $lookBackfinalSummarydaysCount =$lookBackfinalSummaryDataByDay->count();
+        $lookBackdailyCounts = $lookBackFinalSummaryCollection
+        ->groupBy(function ($item) {
+            return Carbon::parse($item['business_date'])->dayName;
+        })
+        ->map(function ($dayRecords) {
+            return $dayRecords->count(); // occurrences of that weekday
+        });
+
+
+        $weeklyTotal =  $weeklyFinalSummaryDataByDay->map(function ($values) {
+            return $values->sum();
+        })->sum();
+        $lookBackTotal =  $weeklyFinalSummaryDataByDay->map(function ($values) {
+            return $values->sum();   // sum inside each weekday
+        })->sum();
+
+        $weeklyAvr = $weeklyTotal /$weeklyFinalSummarydaysCount;
+        $lookBackAvr = $lookBackTotal /$lookBackfinalSummarydaysCount;
+
         return[
-            'helpers'=>[
-                'WH' =>$workingHours,
-                'deposit' =>$deposit,
-                'totalSales' =>$totalSales,
-                'cashSales' =>$cashSales,
-            ],
-            'data'=>[
-                'labor'=> $workingHours * 16 /$totalSales,
-                'waste_gateway' =>$weeklyFinalSummaryCollection->sum('total_waste_cost'),
-                'over_short' => $deposit - $cashSales,
-                'Refunded_order_Qty'=>$weeklyFinalSummaryCollection->sum('refunded_order_qty'),
-                'Total_Cash_Sales'=>$cashSales,
-                'Total_Sales'=>$totalSales,
-                'Waste_Alta'=>$weeklyDepositDeliveryCollection->sum('HookAltimetricWaste'),
-                'Modified_Order_Qty'=>$weeklyFinalSummaryCollection->sum('modified_order_qty'),
-                'Total_TIPS'=> $weeklyFinalSummaryCollection->sum('total_tips') + $weeklyDepositDeliveryCollection->sum('HookHowMuchTips'),
-                'Customer_count'=>$customerCount,
-                'DoorDash_Sales'=>$weeklyFinalSummaryCollection->sum('doordash_sales'),
-                'UberEats_Sales'=>$weeklyFinalSummaryCollection->sum('ubereats_sales'),
-                'GrubHub_Sales'=>$weeklyFinalSummaryCollection->sum('grubhub_sales'),
-                'Phone'=>$weeklyFinalSummaryCollection->sum('phone_sales'),
-                'Call_Center_Agent'=>$weeklyFinalSummaryCollection->sum('call_center_sales'),
-                'Website'=>$weeklyFinalSummaryCollection->sum('website_sales'),
-                'Mobile'=>$weeklyFinalSummaryCollection->sum('mobile_sales'),
-                'Digital_Sales_Percent'=>$weeklyFinalSummaryCollection->sum('digital_sales_percent'),
-                'Total_Portal_Eligible_Transactions'=>$weeklyFinalSummaryCollection->sum('portal_transactions'),
-                'Put_into_Portal_Percent'=>$weeklyFinalSummaryCollection->sum('portal_used_percent'),
-                'In_Portal_on_Time_Percent'=>$weeklyFinalSummaryCollection->sum('in_portal_on_time_percent'),
-                'Drive_Thru_Sales'=>$weeklyFinalSummaryCollection->sum('drive_thru_sales'),
-                'Upselling'=>null,
-                'Cash_Sales_Vs_Deposite_Difference'=>$deposit - $cashSales,
-                'Avrage_ticket'=>$totalSales/$customerCount
-
-
-            ]
+                [
+            'weeklyFinalSummaryDataByDay'=>$weeklyFinalSummaryDataByDay,
+            'weeklyFinalSummarydaysCount'=>$weeklyFinalSummarydaysCount,
+                ],
+                [
+            'lookBackfinalSummaryDataByDay'=>$lookBackfinalSummaryDataByDay,
+            'lookBackfinalSummarydaysCount'=>$lookBackfinalSummarydaysCount,
+            'lookBackdailyCounts' =>$lookBackdailyCounts
+                ],
+                [
+                    '$weeklyTotal' =>$weeklyTotal,
+                    '$lookBackTotal'=>$lookBackTotal
+                ],
+                [
+                   'weeklyAvr' => $weeklyAvr,
+                   'lookBackAvr' =>$lookBackAvr
+                ]
         ];
     }
+
 }
