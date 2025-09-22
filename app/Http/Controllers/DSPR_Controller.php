@@ -157,7 +157,11 @@ $WeeklyDSPRData['data']['Customer_Service'] = (
 }
 
         $upselling =$this->Upselling($dayName,$weeklySummaryItemCollection,$lookBackSummaryItemCollection);
+        if (is_array($upselling) && isset($upselling[5]['dailyScore'], $upselling[5]['weeklyScore'])) {
+    $dailyDSPRData['data']['Upselling']  = (float) ($upselling[5]['dailyScore']);
+    $WeeklyDSPRData['data']['Upselling'] = (float) ($upselling[5]['weeklyScore']);
 
+        }
 
         return [
             'Filtering Values'=>[
@@ -589,8 +593,8 @@ $WeeklyDSPRData['data']['Customer_Service'] = (
         $dailyFinalValue =($dailyForWeekly -$dailyForLookback)/$dailyForLookback;
 
         //final scores
-        $dailyScore = $this->score($dailyFinalValue);
-        $weeklyScore = $this->score($weeklyFinalValue);
+        $dailyScore = $this->score($dailyFinalValue)/100;
+        $weeklyScore = $this->score($weeklyFinalValue)/100;
 
         return[
                 [
