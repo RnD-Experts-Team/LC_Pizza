@@ -175,20 +175,20 @@ $WeeklyDSPRData['data']['Customer_Service'] = (
                 'look back end'         =>$lookBackEndDate,
                 'depositDeliveryUrl'    =>$url,
                 ],
-            'collections'=>[
-                'daily'=>[
-                    'dailyDepositDeliveryCollection'     =>$dailyDepositDeliveryCollection,
-                    'dailyFinalSummaryCollection'   =>$dailyFinalSummaryCollection,
-                    'dailySummaryItemCollection'    =>$dailySummaryItemCollection,
-                    'dailyHourlySalesCollection'    =>$dailyHourlySalesCollection,
-                ],
-                'weekly'=>[
-                    'weeklyDepositDeliveryCollection'=>$weeklyDepositDeliveryCollection
-                ],
-                'lookBack'=>[
-                    'lookBackFinalSummary'=>$lookBackFinalSummaryCollection
-                ]
-            ],
+            // 'collections'=>[
+            //     'daily'=>[
+            //         'dailyDepositDeliveryCollection'     =>$dailyDepositDeliveryCollection,
+            //         'dailyFinalSummaryCollection'   =>$dailyFinalSummaryCollection,
+            //         'dailySummaryItemCollection'    =>$dailySummaryItemCollection,
+            //         'dailyHourlySalesCollection'    =>$dailyHourlySalesCollection,
+            //     ],
+            //     'weekly'=>[
+            //         'weeklyDepositDeliveryCollection'=>$weeklyDepositDeliveryCollection
+            //     ],
+            //     'lookBack'=>[
+            //         'lookBackFinalSummary'=>$lookBackFinalSummaryCollection
+            //     ]
+            // ],
             'reports'=>[
                 'daily'=>[
                     'dailyHourlySales'  =>$dailyHourlySalesData,
