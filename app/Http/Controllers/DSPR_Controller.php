@@ -136,7 +136,11 @@ class DSPR_Controller extends Controller
 
         $WeeklyDSPRData=$this->WeeklyDSPRReport($weeklyFinalSummaryCollection,$weeklyDepositDeliveryCollection);
 
-        $customerService=$this->CustomerService($weeklyFinalSummaryCollection,$lookBackFinalSummaryCollection);
+        $customerService=$this->CustomerService($dayName,$weeklyFinalSummaryCollection,$lookBackFinalSummaryCollection);
+
+        $upselling =$this->Upselling($dayName,$weeklySummaryItemCollection,$lookBackSummaryItemCollection);
+
+
         return [
             'Filtering Values'=>[
                 'date'                  =>$date,
@@ -171,7 +175,8 @@ class DSPR_Controller extends Controller
                 ],
                 'weekly'=>[
                     'DSPRData' =>$WeeklyDSPRData,
-                    'customerService'=>$customerService
+                    // 'customerService'=>$customerService,
+                    'upselling'=>$upselling
                 ]
             ]
 
@@ -416,7 +421,7 @@ class DSPR_Controller extends Controller
 }
 
 
-    public function CustomerService($weeklyFinalSummaryCollection,$lookBackFinalSummaryCollection){
+    public function CustomerService($dayName,$weeklyFinalSummaryCollection,$lookBackFinalSummaryCollection){
         // check if collections are empty
         if ($weeklyFinalSummaryCollection->isEmpty()) {
             return "No weeklyFinalSummaryCollection data available.";
@@ -439,7 +444,7 @@ class DSPR_Controller extends Controller
         $lookBackfinalSummaryDataByDay = $lookBackFinalSummaryCollection->groupBy(function ($item) {
             return Carbon::parse($item['business_date'])->dayName;
         })->map(function ($dayRecords) {
-            return (float) $dayRecords->sum('customer_count');
+            return (float) $dayRecords->avg('customer_count');
         });
 
         //days count
@@ -457,21 +462,36 @@ class DSPR_Controller extends Controller
             return $values->sum();
         })->sum();
         $lookBackTotal =  $weeklyFinalSummaryDataByDay->map(function ($values) {
-            return $values->sum();   // sum inside each weekday
+            return $values->avg();   // sum inside each weekday
         })->sum();
 
         $weeklyAvr = $weeklyTotal /$weeklyFinalSummarydaysCount;
-        $lookBackAvr = $lookBackTotal /$lookBackfinalSummarydaysCount;
+        $lookBackAvr = $lookBackfinalSummaryDataByDay->avg();
+
+        //finals
+        //for weekly customer service
+        $weeklyFinalValue= ($weeklyAvr - $lookBackAvr)/$lookBackAvr;
+
+        //for daily customer service
+        $dailyForLookback = $lookBackfinalSummaryDataByDay->get($dayName);
+        $dailyForWeekly = $weeklyFinalSummaryDataByDay->get($dayName)[0];
+        
+        $dailyFinalValue =($dailyForWeekly -$dailyForLookback)/$dailyForLookback;
+
+        //final scores
+        $dailyScore = $this->score($dailyFinalValue);
+        $weeklyScore = $this->score($weeklyFinalValue);
 
         return[
                 [
             'weeklyFinalSummaryDataByDay'=>$weeklyFinalSummaryDataByDay,
             'weeklyFinalSummarydaysCount'=>$weeklyFinalSummarydaysCount,
-                ],
+                ],  
                 [
             'lookBackfinalSummaryDataByDay'=>$lookBackfinalSummaryDataByDay,
             'lookBackfinalSummarydaysCount'=>$lookBackfinalSummarydaysCount,
             'lookBackdailyCounts' =>$lookBackdailyCounts
+            
                 ],
                 [
                     '$weeklyTotal' =>$weeklyTotal,
@@ -480,8 +500,129 @@ class DSPR_Controller extends Controller
                 [
                    'weeklyAvr' => $weeklyAvr,
                    'lookBackAvr' =>$lookBackAvr
+                ],
+                [
+                     '$dailyFinalValue'=>$dailyFinalValue,
+                    '$weeklyFinalValue'=>$weeklyFinalValue,
+                ],
+                [
+                    'dailyScore' =>$dailyScore,
+                    'weeklyScore'=>$weeklyScore,
+                   
                 ]
         ];
+    }
+
+    public function Upselling($dayName,$weeklyFinalSummaryCollection,$lookBackFinalSummaryCollection){
+        // check if collections are empty
+        if ($weeklyFinalSummaryCollection->isEmpty()) {
+            return "No weeklyFinalSummaryCollection data available.";
+        }
+        if ($lookBackFinalSummaryCollection->isEmpty()) {
+            return "No lookBackFinalSummaryCollection data available.";
+        }
+
+        //weeklyfinalSummary by day
+        $weeklyFinalSummaryDataByDay = $weeklyFinalSummaryCollection->groupBy(function ($item) {
+            return Carbon::parse($item['business_date'])->dayName;
+        })->map(function ($records) {
+            return $records->pluck('royalty_obligation');
+        });
+
+        //days count
+        $weeklyFinalSummarydaysCount =$weeklyFinalSummaryDataByDay->count();
+
+        //lookBackfinalSummary by day
+        $lookBackfinalSummaryDataByDay = $lookBackFinalSummaryCollection->groupBy(function ($item) {
+            return Carbon::parse($item['business_date'])->dayName;
+        })->map(function ($dayRecords) {
+            return (float) $dayRecords->avg('royalty_obligation');
+        });
+
+        //days count
+        
+        $lookBackfinalSummarydaysCount =$lookBackfinalSummaryDataByDay->count();
+        $lookBackdailyCounts = $lookBackFinalSummaryCollection
+        ->groupBy(function ($item) {
+            return Carbon::parse($item['business_date'])->dayName;
+        })
+        ->map(function ($dayRecords) {
+            return $dayRecords->count(); // occurrences of that weekday
+        });
+
+
+        $weeklyTotal =  $weeklyFinalSummaryDataByDay->map(function ($values) {
+            return $values->sum();
+        })->sum();
+        $lookBackTotal =  $weeklyFinalSummaryDataByDay->map(function ($values) {
+            return $values->avg();   // sum inside each weekday
+        })->sum();
+
+        $weeklyAvr = $weeklyTotal /$weeklyFinalSummarydaysCount;
+        $lookBackAvr = $lookBackfinalSummaryDataByDay->avg();
+
+        //finals
+        //for weekly customer service
+        $weeklyFinalValue= ($weeklyAvr - $lookBackAvr)/$lookBackAvr;
+
+        //for daily customer service
+        $dailyForLookback = $lookBackfinalSummaryDataByDay->get($dayName);
+        $dailyForWeekly = $weeklyFinalSummaryDataByDay->get($dayName)[0];
+        
+        $dailyFinalValue =($dailyForWeekly -$dailyForLookback)/$dailyForLookback;
+
+        //final scores
+        $dailyScore = $this->score($dailyFinalValue);
+        $weeklyScore = $this->score($weeklyFinalValue);
+
+        return[
+                [
+            'weeklyFinalSummaryDataByDay'=>$weeklyFinalSummaryDataByDay,
+            'weeklyFinalSummarydaysCount'=>$weeklyFinalSummarydaysCount,
+                ],  
+                [
+            'lookBackfinalSummaryDataByDay'=>$lookBackfinalSummaryDataByDay,
+            'lookBackfinalSummarydaysCount'=>$lookBackfinalSummarydaysCount,
+            'lookBackdailyCounts' =>$lookBackdailyCounts
+            
+                ],
+                [
+                    '$weeklyTotal' =>$weeklyTotal,
+                    '$lookBackTotal'=>$lookBackTotal
+                ],
+                [
+                   'weeklyAvr' => $weeklyAvr,
+                   'lookBackAvr' =>$lookBackAvr
+                ],
+                [
+                     '$dailyFinalValue'=>$dailyFinalValue,
+                    '$weeklyFinalValue'=>$weeklyFinalValue,
+                ],
+                [
+                    'dailyScore' =>$dailyScore,
+                    'weeklyScore'=>$weeklyScore,
+                   
+                ]
+        ];
+    }
+
+    public function score ($value){
+        $score = 0;
+        if ($value >= -1.00 && $value <= -0.1001) {
+            $score = 75;
+        } elseif ($value >= -0.10 && $value <= -0.0401) {
+            $score = 80;
+        } elseif ($value >= -0.04 && $value <= -0.0001) {
+            $score = 85;
+        } elseif ($value >= 0.00 && $value <= 0.0399) {
+            $score = 90;
+        } elseif ($value >= 0.04 && $value <= 0.0699) {
+            $score = 95;
+        } elseif ($value >= 0.07 && $value <= 1.00) {
+            $score = 100;
+        }
+
+        return $score;
     }
 
 }
