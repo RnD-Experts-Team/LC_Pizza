@@ -502,13 +502,12 @@ class DSPR_Controller extends Controller
                    'lookBackAvr' =>$lookBackAvr
                 ],
                 [
-                     '$dailyFinalValue'=>$dailyFinalValue,
+                    '$dailyFinalValue'=>$dailyFinalValue,
                     '$weeklyFinalValue'=>$weeklyFinalValue,
                 ],
                 [
                     'dailyScore' =>$dailyScore,
                     'weeklyScore'=>$weeklyScore,
-                   
                 ]
         ];
     }

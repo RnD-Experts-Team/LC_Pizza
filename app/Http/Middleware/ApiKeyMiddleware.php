@@ -18,7 +18,7 @@ class ApiKeyMiddleware
     public function handle(Request $request, Closure $next): Response
     {
         $apiKey = $request->header('X-Secret-Key');
-        $validApiKey = env('X_SECRET_KEY');
+        $validApiKey = config('services.X_SECRET_KEY');
 
         if (!$apiKey || $apiKey !== $validApiKey) {
             return response()->json([

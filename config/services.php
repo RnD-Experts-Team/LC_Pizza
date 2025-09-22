@@ -55,4 +55,5 @@ return [
         'retry_ms'  => (int) env('AUTH_RETRY_BACKOFF_MS', 100),
         'cache_ttl' => (int) env('AUTH_DECISION_CACHE_TTL', 30),
     ],
+    'X_SECRET_KEY' => env('X_SECRET_KEY'),
 ];
