@@ -137,11 +137,25 @@ class DSPR_Controller extends Controller
         $WeeklyDSPRData=$this->WeeklyDSPRReport($weeklyFinalSummaryCollection,$weeklyDepositDeliveryCollection);
 
         $customerService=$this->CustomerService($dayName,$weeklyFinalSummaryCollection,$lookBackFinalSummaryCollection);
-        $dailyDSPRData['date']['Customer_count_percent']=$customerService[5]['dailyScore'];
-        $WeeklyDSPRData['data']['Customer_count_percent']=$customerService[5]['weeklyScore'];
-        $dailyDSPRData['data']['Customer_Service']=($dailyDSPRData['date']['Customer_count_percent']+$dailyDSPRData['date']['Put_into_Portal_Percent']+$dailyDSPRData['date']['In_Portal_on_Time_Percent'])/3;
-        $WeeklyDSPRData['data']['Customer_Service']=($WeeklyDSPRData['data']['Customer_count_percent']+$WeeklyDSPRData['data']['Put_into_Portal_Percent']+$WeeklyDSPRData['data']['In_Portal_on_Time_Percent'])/3;
-        
+        if (is_array($customerService) && isset($customerService[5]['dailyScore'], $customerService[5]['weeklyScore'])) {
+    // after you build $dailyDSPRData and $WeeklyDSPRData:
+$dailyDSPRData['data']['Customer_count_percent']  = (float) ($customerService[5]['dailyScore']);
+$WeeklyDSPRData['data']['Customer_count_percent'] = (float) ($customerService[5]['weeklyScore']);
+
+$dailyDSPRData['data']['Customer_Service'] = (
+    (float) $dailyDSPRData['data']['Customer_count_percent'] +
+    (float) $dailyDSPRData['data']['Put_into_Portal_Percent'] +
+    (float) $dailyDSPRData['data']['In_Portal_on_Time_Percent']
+) / 3;
+
+$WeeklyDSPRData['data']['Customer_Service'] = (
+    (float) $WeeklyDSPRData['data']['Customer_count_percent'] +
+    (float) $WeeklyDSPRData['data']['Put_into_Portal_Percent'] +
+    (float) $WeeklyDSPRData['data']['In_Portal_on_Time_Percent']
+) / 3;
+
+}
+
         $upselling =$this->Upselling($dayName,$weeklySummaryItemCollection,$lookBackSummaryItemCollection);
 
 
