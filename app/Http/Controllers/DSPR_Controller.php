@@ -137,9 +137,31 @@ class DSPR_Controller extends Controller
         $WeeklyDSPRData=$this->WeeklyDSPRReport($weeklyFinalSummaryCollection,$weeklyDepositDeliveryCollection);
 
         $customerService=$this->CustomerService($dayName,$weeklyFinalSummaryCollection,$lookBackFinalSummaryCollection);
+        if (is_array($customerService) && isset($customerService[5]['dailyScore'], $customerService[5]['weeklyScore'])) {
+    // after you build $dailyDSPRData and $WeeklyDSPRData:
+$dailyDSPRData['data']['Customer_count_percent']  = (float) ($customerService[5]['dailyScore']);
+$WeeklyDSPRData['data']['Customer_count_percent'] = (float) ($customerService[5]['weeklyScore']);
+
+$dailyDSPRData['data']['Customer_Service'] = (
+    (float) $dailyDSPRData['data']['Customer_count_percent'] +
+    (float) $dailyDSPRData['data']['Put_into_Portal_Percent'] +
+    (float) $dailyDSPRData['data']['In_Portal_on_Time_Percent']
+) / 3;
+
+$WeeklyDSPRData['data']['Customer_Service'] = (
+    (float) $WeeklyDSPRData['data']['Customer_count_percent'] +
+    (float) $WeeklyDSPRData['data']['Put_into_Portal_Percent'] +
+    (float) $WeeklyDSPRData['data']['In_Portal_on_Time_Percent']
+) / 3;
+
+}
 
         $upselling =$this->Upselling($dayName,$weeklySummaryItemCollection,$lookBackSummaryItemCollection);
+        if (is_array($upselling) && isset($upselling[5]['dailyScore'], $upselling[5]['weeklyScore'])) {
+    $dailyDSPRData['data']['Upselling']  = (float) ($upselling[5]['dailyScore']);
+    $WeeklyDSPRData['data']['Upselling'] = (float) ($upselling[5]['weeklyScore']);
 
+        }
 
         return [
             'Filtering Values'=>[
@@ -153,20 +175,20 @@ class DSPR_Controller extends Controller
                 'look back end'         =>$lookBackEndDate,
                 'depositDeliveryUrl'    =>$url,
                 ],
-            'collections'=>[
-                'daily'=>[
-                    'dailyDepositDeliveryCollection'     =>$dailyDepositDeliveryCollection,
-                    'dailyFinalSummaryCollection'   =>$dailyFinalSummaryCollection,
-                    'dailySummaryItemCollection'    =>$dailySummaryItemCollection,
-                    'dailyHourlySalesCollection'    =>$dailyHourlySalesCollection,
-                ],
-                'weekly'=>[
-                    'weeklyDepositDeliveryCollection'=>$weeklyDepositDeliveryCollection
-                ],
-                'lookBack'=>[
-                    'lookBackFinalSummary'=>$lookBackFinalSummaryCollection
-                ]
-            ],
+            // 'collections'=>[
+            //     'daily'=>[
+            //         'dailyDepositDeliveryCollection'     =>$dailyDepositDeliveryCollection,
+            //         'dailyFinalSummaryCollection'   =>$dailyFinalSummaryCollection,
+            //         'dailySummaryItemCollection'    =>$dailySummaryItemCollection,
+            //         'dailyHourlySalesCollection'    =>$dailyHourlySalesCollection,
+            //     ],
+            //     'weekly'=>[
+            //         'weeklyDepositDeliveryCollection'=>$weeklyDepositDeliveryCollection
+            //     ],
+            //     'lookBack'=>[
+            //         'lookBackFinalSummary'=>$lookBackFinalSummaryCollection
+            //     ]
+            // ],
             'reports'=>[
                 'daily'=>[
                     'dailyHourlySales'  =>$dailyHourlySalesData,
@@ -176,7 +198,7 @@ class DSPR_Controller extends Controller
                 'weekly'=>[
                     'DSPRData' =>$WeeklyDSPRData,
                     // 'customerService'=>$customerService,
-                    'upselling'=>$upselling
+                    // 'upselling'=>$upselling
                 ]
             ]
 
@@ -479,8 +501,8 @@ class DSPR_Controller extends Controller
         $dailyFinalValue =($dailyForWeekly -$dailyForLookback)/$dailyForLookback;
 
         //final scores
-        $dailyScore = $this->score($dailyFinalValue);
-        $weeklyScore = $this->score($weeklyFinalValue);
+        $dailyScore = $this->score($dailyFinalValue)/100;
+        $weeklyScore = $this->score($weeklyFinalValue)/100;
 
         return[
                 [
@@ -502,13 +524,12 @@ class DSPR_Controller extends Controller
                    'lookBackAvr' =>$lookBackAvr
                 ],
                 [
-                     '$dailyFinalValue'=>$dailyFinalValue,
+                    '$dailyFinalValue'=>$dailyFinalValue,
                     '$weeklyFinalValue'=>$weeklyFinalValue,
                 ],
                 [
                     'dailyScore' =>$dailyScore,
                     'weeklyScore'=>$weeklyScore,
-                   
                 ]
         ];
     }
@@ -572,8 +593,8 @@ class DSPR_Controller extends Controller
         $dailyFinalValue =($dailyForWeekly -$dailyForLookback)/$dailyForLookback;
 
         //final scores
-        $dailyScore = $this->score($dailyFinalValue);
-        $weeklyScore = $this->score($weeklyFinalValue);
+        $dailyScore = $this->score($dailyFinalValue)/100;
+        $weeklyScore = $this->score($weeklyFinalValue)/100;
 
         return[
                 [
