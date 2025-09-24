@@ -668,29 +668,38 @@ $WeeklyDSPRData['data']['Customer_Service'] = (
      * NEW: catalog endpoint returning one row per item_id with its latest known menu_item_name.
      * Useful for the frontend to render names while we submit IDs in requests.
      */
-    public function items($store)
+public function items($store)
 {
-    // Subquery with window function to get latest row per item_id for the store
-    $sub = DB::table('summary_items')
-        ->select([
-            'item_id',
-            'menu_item_name',
-            DB::raw('ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY business_date DESC, id DESC) AS rn'),
-        ])
-        ->where('franchise_store', '=', $store)
-        ->whereNotNull('item_id');
+    $rows = DB::table('summary_items as si')
+        ->select('si.item_id', 'si.menu_item_name')
+        ->where('si.franchise_store', $store)
+        ->whereNotNull('si.item_id')
 
-    // Filter rn = 1 (latest), then order for UI
-    $rows = DB::query()
-        ->fromSub($sub, 't')
-        ->where('t.rn', '=', 1)
-        ->orderBy('t.menu_item_name')
-        ->get(['item_id', 'menu_item_name']);
+        // Latest business_date per (store, item_id)
+        ->whereRaw('si.business_date = (
+            SELECT MAX(si2.business_date)
+            FROM summary_items as si2
+            WHERE si2.franchise_store = si.franchise_store
+              AND si2.item_id = si.item_id
+        )')
+
+        // Tie-break when multiple rows share that latest date: pick highest id
+        ->whereRaw('si.id = (
+            SELECT MAX(si3.id)
+            FROM summary_items as si3
+            WHERE si3.franchise_store = si.franchise_store
+              AND si3.item_id = si.item_id
+              AND si3.business_date = si.business_date
+        )')
+
+        ->orderBy('si.menu_item_name')
+        ->get();
 
     return response()->json([
         'store' => $store,
         'count' => $rows->count(),
-        'items' => $rows, // each row: { item_id, menu_item_name }
+        'items' => $rows,
     ]);
 }
+
 }
