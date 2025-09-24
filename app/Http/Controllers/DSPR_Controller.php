@@ -11,9 +11,12 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Collection;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
 class DSPR_Controller extends Controller
 {
-    public function index($store, $date, $items = null)
+    public function index(Request $request,$store, $date)
     {
         // --- guards ---
         if (empty($store) || empty($date)) {
@@ -22,7 +25,13 @@ class DSPR_Controller extends Controller
         if (!preg_match('/^\d{4}-\d{1,2}-\d{1,2}$/', $date)) {
             return response()->json(['error' => 'Invalid date format, expected YYYY-MM-DD or YYYY-M-D'], 400);
         }
-
+        $validated = $request->validate([
+            'items' => ['required', 'array', 'min:1'],
+            // accept strings or ints; keep it loose
+            'items.*' => ['interger'], // or 'integer' if all numeric
+        ]);
+        // De-duplicate
+        $itemIds = array_values(array_unique($validated['items']));
         /***dates Used**/
         $givenDate = Carbon::parse($date);
         $usedDate = CarbonImmutable::parse($givenDate);
@@ -35,9 +44,6 @@ class DSPR_Controller extends Controller
         $lookBackStartDate=$usedDate->subDays(84);
         $lookBackEndDate=$usedDate;
 
-        //items parameter
-        $decodedItems = $items ? urldecode($items) : null;
-        $Itemslist = explode(',', $decodedItems);
 
 
         $startStr = $weekStartDate->toDateString();
@@ -84,11 +90,11 @@ class DSPR_Controller extends Controller
             ->where('business_date','=',$usedDate)
             ->get();
 
-        $dailySummaryItemCollection = SummaryItem::
-            where('franchise_store', '=',$store )
-            ->where('business_date','=',$usedDate)
-            ->whereIn('menu_item_name',$Itemslist)
-            ->get();
+        // $dailySummaryItemCollection = SummaryItem::
+        //     where('franchise_store', '=',$store )
+        //     ->where('business_date','=',$usedDate)
+        //     ->whereIn('menu_item_name',$Itemslist)
+        //     ->get();
 
         $dailyHourlySalesCollection = HourlySales::
         where('franchise_store', $store )
@@ -104,13 +110,13 @@ class DSPR_Controller extends Controller
         $weeklySummaryItemCollection = SummaryItem::
             where('franchise_store', '=',$store )
             ->whereBetween('business_date', [$weekStartDate, $weekEndDate])
-            ->whereIn('menu_item_name',$Itemslist)
+            ->whereIn('item_id', $itemIds)
             ->get();
 
-        $weeklyHourlySalesCollection = HourlySales::
-        where('franchise_store', '=',$store )
-        ->whereBetween('business_date', [$weekStartDate, $weekEndDate])
-        ->get();
+        // $weeklyHourlySalesCollection = HourlySales::
+        // where('franchise_store', '=',$store )
+        // ->whereBetween('business_date', [$weekStartDate, $weekEndDate])
+        // ->get();
 
         //lookback
         $lookBackFinalSummaryCollection = FinalSummary::
@@ -121,13 +127,13 @@ class DSPR_Controller extends Controller
         $lookBackSummaryItemCollection = SummaryItem::
             where('franchise_store', '=',$store )
             ->whereBetween('business_date', [$lookBackStartDate, $lookBackEndDate])
-            ->whereIn('menu_item_name',$Itemslist)
+            ->whereIn('item_id', $itemIds)
             ->get();
 
-        $lookBackHourlySalesCollection = HourlySales::
-        where('franchise_store', '=',$store )
-        ->whereBetween('business_date', [$lookBackStartDate, $lookBackEndDate])
-        ->get();
+        // $lookBackHourlySalesCollection = HourlySales::
+        // where('franchise_store', '=',$store )
+        // ->whereBetween('business_date', [$lookBackStartDate, $lookBackEndDate])
+        // ->get();
 
         //calling the methods for the data
         $dailyHourlySalesData=$this->DailyHourlySalesReport($dailyHourlySalesCollection);
@@ -167,7 +173,7 @@ $WeeklyDSPRData['data']['Customer_Service'] = (
             'Filtering Values'=>[
                 'date'                  =>$date,
                 'store'                 =>$store,
-                'items'                 =>$Itemslist,
+                'items'                 =>$itemIds,,
                 'week'                  =>$weekNumber,
                 'weekStartDate'         =>$weekStartDate,
                 'weekEndDate'           =>$weekEndDate,
@@ -658,4 +664,33 @@ $WeeklyDSPRData['data']['Customer_Service'] = (
         return $score;
     }
 
+    /**
+     * NEW: catalog endpoint returning one row per item_id with its latest known menu_item_name.
+     * Useful for the frontend to render names while we submit IDs in requests.
+     */
+    public function items($store)
+{
+    // Subquery with window function to get latest row per item_id for the store
+    $sub = DB::table('summary_items')
+        ->select([
+            'item_id',
+            'menu_item_name',
+            DB::raw('ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY business_date DESC, id DESC) AS rn'),
+        ])
+        ->where('franchise_store', '=', $store)
+        ->whereNotNull('item_id');
+
+    // Filter rn = 1 (latest), then order for UI
+    $rows = DB::query()
+        ->fromSub($sub, 't')
+        ->where('t.rn', '=', 1)
+        ->orderBy('t.menu_item_name')
+        ->get(['item_id', 'menu_item_name']);
+
+    return response()->json([
+        'store' => $store,
+        'count' => $rows->count(),
+        'items' => $rows, // each row: { item_id, menu_item_name }
+    ]);
+}
 }

@@ -16,6 +16,10 @@ Route::middleware('auth.verify')->group(function () {
     ->name('export.json');
 });
 
-Route::get('/dspr-report/{store}/{date}/{items?}', [DSPR_Controller::class, 'index'])
+Route::post('/dspr-report/{store}/{date}', [DSPR_Controller::class, 'index'])
     ->name('dspr-report');
+
+// New: catalog of unique items (for populating the UI selector)
+Route::get('/dspr-items/{store}', [DSPR_Controller::class, 'items'])
+    ->name('dspr-items');
 
