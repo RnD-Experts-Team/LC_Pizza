@@ -28,7 +28,7 @@ class DSPR_Controller extends Controller
         $validated = $request->validate([
             'items' => ['required', 'array', 'min:1'],
             // accept strings or ints; keep it loose
-            'items.*' => ['interger'], // or 'integer' if all numeric
+            'items.*' => ['integer'], // or 'integer' if all numeric
         ]);
         // De-duplicate
         $itemIds = array_values(array_unique($validated['items']));
@@ -173,7 +173,7 @@ $WeeklyDSPRData['data']['Customer_Service'] = (
             'Filtering Values'=>[
                 'date'                  =>$date,
                 'store'                 =>$store,
-                'items'                 =>$itemIds,,
+                'items'                 =>$itemIds,
                 'week'                  =>$weekNumber,
                 'weekStartDate'         =>$weekStartDate,
                 'weekEndDate'           =>$weekEndDate,
