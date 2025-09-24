@@ -210,40 +210,52 @@ $WeeklyDSPRData['data']['Customer_Service'] = (
 
     }
 
-    public function DailyHourlySalesReport($dailyHourlySalesCollection){
-        // for if the collection is empty
-        if ($dailyHourlySalesCollection->isEmpty()) {
-            return "No sales data available.";
-        }
-
-        $rows=[];
-
-        foreach($dailyHourlySalesCollection as $record){
-            $hour = $record->hour;
-            $store = $record->franchise_store;
-            $date = $record->business_date;
-
-            $data = $record ->where('hour',$hour)-> where('business_date',$date)-> where('franchise_store',$store);
-               $rows[] =[
-                'franchise_store'=>$store,
-                'business_date'=>$date,
-                'Hour'=>$hour,
-                'Total_Sales'=>(float)($data ->sum('total_sales')),
-                'Total_Sales2'=>(float)($data ->sum('total_sales')),
-                'Phone_Sales'=>(float)($data ->sum('phone_sales')),
-                'Call_Center_Agent'=>(float)($data ->sum('call_center_sales')),
-                'Drive_Thru'=>(float)($data  ->sum('drive_thru_sales')),
-                'Website'=>(float)($data ->sum('website_sales')),
-                'Mobile'=>(float)($data ->sum('mobile_sales')),
-                'Order_Count'=>(float)($data ->sum('order_count'))
-                ,];
-
-        }
-
-
-        return $rows;
-
+    public function DailyHourlySalesReport($dailyHourlySalesCollection)
+{
+    // If empty, keep the new shape but mark hours as empty
+    if ($dailyHourlySalesCollection->isEmpty()) {
+        return [
+            'franchise_store' => null,
+            'business_date'   => null,
+            'hours'           => array_fill_keys(range(0, 23), (object)[]),
+        ];
     }
+
+    // Derive store/date from the first record in the collection
+    $first = $dailyHourlySalesCollection->first();
+    $store = $first->franchise_store ?? null;
+    $date  = $first->business_date ?? null;
+
+    // Pre-build the hours map 0..23
+    $hours = [];
+    for ($h = 0; $h <= 23; $h++) {
+        // Filter the in-memory collection for this hour
+        $subset = $dailyHourlySalesCollection->where('hour', $h);
+
+        if ($subset->isEmpty()) {
+            $hours[$h] = (object)[];  // empty object for missing hour
+            continue;
+        }
+
+        // Aggregate
+        $hours[$h] = [
+            'Total_Sales'       => (float) $subset->sum('total_sales'),
+            'Phone_Sales'       => (float) $subset->sum('phone_sales'),
+            'Call_Center_Agent' => (float) $subset->sum('call_center_sales'),
+            'Drive_Thru'        => (float) $subset->sum('drive_thru_sales'),
+            'Website'           => (float) $subset->sum('website_sales'),
+            'Mobile'            => (float) $subset->sum('mobile_sales'),
+            'Order_Count'       => (int)   $subset->sum('order_count'),
+        ];
+    }
+
+    return [
+        'franchise_store' => $store,
+        'business_date'   => $date,
+        'hours'           => $hours,
+    ];
+}
+
 
     public function DailyDSQRReport($depositDeliveryCollection){
 
