@@ -226,8 +226,32 @@ $WeeklyDSPRData['Customer_Service'] = round((
 
         ];
 
-        return $this->roundArray($response, 2);
+        return $this->jsonRoundedResponse($response, 2);
     }
+
+    protected function jsonRoundedResponse(array $payload, int $precision = 2)
+{
+    // 1) round all numerics
+    $payload = $this->roundArray($payload, $precision);
+
+    // 2) snapshot current INI
+    $oldSerialize = ini_get('serialize_precision');
+    $oldPrecision = ini_get('precision');
+
+    // 3) tame float output only for this encode
+    ini_set('serialize_precision', '-1'); // PHP 7.1+ recommended to avoid float noise
+    ini_set('precision', '14');
+
+    // 4) encode (keep .00 when applicable, still numbers — not strings)
+    $json = json_encode($payload, JSON_PRESERVE_ZERO_FRACTION);
+
+    // 5) restore INI immediately
+    ini_set('serialize_precision', $oldSerialize === false ? '17' : $oldSerialize);
+    ini_set('precision', $oldPrecision === false ? '14' : $oldPrecision);
+
+    // 6) return raw JSON response
+    return response($json, 200)->header('Content-Type', 'application/json');
+}
 
     public function DSQRReport(){
 
