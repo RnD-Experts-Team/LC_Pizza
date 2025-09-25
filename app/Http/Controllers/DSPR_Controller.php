@@ -145,27 +145,27 @@ class DSPR_Controller extends Controller
         $customerService=$this->CustomerService($dayName,$weeklyFinalSummaryCollection,$lookBackFinalSummaryCollection);
         if (is_array($customerService) && isset($customerService[5]['dailyScore'], $customerService[5]['weeklyScore'])) {
     // after you build $dailyDSPRData and $WeeklyDSPRData:
-$dailyDSPRData['data']['Customer_count_percent']  = round((float) ($customerService[5]['dailyScore']),2);
-$WeeklyDSPRData['data']['Customer_count_percent'] = round((float) ($customerService[5]['weeklyScore']),2);
+$dailyDSPRData['Customer_count_percent']  = round((float) ($customerService[5]['dailyScore']),2);
+$WeeklyDSPRData['Customer_count_percent'] = round((float) ($customerService[5]['weeklyScore']),2);
 
-$dailyDSPRData['data']['Customer_Service'] = round((
-    (float) $dailyDSPRData['data']['Customer_count_percent'] +
-    (float) $dailyDSPRData['data']['Put_into_Portal_Percent'] +
-    (float) $dailyDSPRData['data']['In_Portal_on_Time_Percent']
+$dailyDSPRData['Customer_Service'] = round((
+    (float) $dailyDSPRData['Customer_count_percent'] +
+    (float) $dailyDSPRData['Put_into_Portal_Percent'] +
+    (float) $dailyDSPRData['In_Portal_on_Time_Percent']
 ) / 3,2);
 
-$WeeklyDSPRData['data']['Customer_Service'] = round((
-    (float) $WeeklyDSPRData['data']['Customer_count_percent'] +
-    (float) $WeeklyDSPRData['data']['Put_into_Portal_Percent'] +
-    (float) $WeeklyDSPRData['data']['In_Portal_on_Time_Percent']
+$WeeklyDSPRData['Customer_Service'] = round((
+    (float) $WeeklyDSPRData['Customer_count_percent'] +
+    (float) $WeeklyDSPRData['Put_into_Portal_Percent'] +
+    (float) $WeeklyDSPRData['In_Portal_on_Time_Percent']
 ) / 3,2);
 
 }
 
         $upselling =$this->Upselling($dayName,$weeklySummaryItemCollection,$lookBackSummaryItemCollection);
         if (is_array($upselling) && isset($upselling[5]['dailyScore'], $upselling[5]['weeklyScore'])) {
-    $dailyDSPRData['data']['Upselling']  = round((float) ($upselling[5]['dailyScore']),2);
-    $WeeklyDSPRData['data']['Upselling'] = round((float) ($upselling[5]['weeklyScore']),2);
+    $dailyDSPRData['Upselling']  = round((float) ($upselling[5]['dailyScore']),2);
+    $WeeklyDSPRData['Upselling'] = round((float) ($upselling[5]['weeklyScore']),2);
 
         }
 
