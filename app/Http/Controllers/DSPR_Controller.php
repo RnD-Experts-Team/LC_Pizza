@@ -332,13 +332,13 @@ $WeeklyDSPRData['data']['Customer_Service'] = (
         $cashSales =$dailyFinalSummaryCollection ->sum('cash_sales');
         $customerCount =$dailyFinalSummaryCollection->sum('customer_count');
         return[
-            'helpers'=>[
-                'WH' =>$workingHours,
-                'deposit' =>$deposit,
-                'totalSales' =>$totalSales,
-                'cashSales' =>$cashSales,
-            ],
-            'data'=>[
+            // 'helpers'=>[
+            //     'WH' =>$workingHours,
+            //     'deposit' =>$deposit,
+            //     'totalSales' =>$totalSales,
+            //     'cashSales' =>$cashSales,
+            // ],
+            // 'data'=>[
                 'labor'=> $workingHours * 16 /$totalSales,
                 'waste_gateway' =>$dailyFinalSummaryCollection->sum('total_waste_cost'),
                 'over_short' => $deposit - $cashSales,
@@ -366,7 +366,7 @@ $WeeklyDSPRData['data']['Customer_Service'] = (
                 'Avrage_ticket'=>$totalSales/$customerCount
 
 
-            ]
+            // ]
         ];
     }
 
@@ -424,13 +424,13 @@ $WeeklyDSPRData['data']['Customer_Service'] = (
     $tipsDepositDelivery= (float) $weeklyDepositDeliveryCollection->sum('HookHowMuchTips');
 
     return [
-        'helpers' => [
-            'WH'        => $workingHours,
-            'deposit'   => $deposit,
-            'totalSales'=> $totalSales,
-            'cashSales' => $cashSales,
-        ],
-        'data' => [
+        // 'helpers' => [
+        //     'WH'        => $workingHours,
+        //     'deposit'   => $deposit,
+        //     'totalSales'=> $totalSales,
+        //     'cashSales' => $cashSales,
+        // ],
+        // 'data' => [
             'labor'                          => $totalLabors,
             'waste_gateway'                  => (float) $weeklyFinalSummaryCollection->sum('total_waste_cost'),
             'over_short'                     => $deposit - $cashSales,
@@ -456,7 +456,7 @@ $WeeklyDSPRData['data']['Customer_Service'] = (
             'Upselling'                      => null,
             'Cash_Sales_Vs_Deposite_Difference' => $finalSummaryDaysCount ? ($deposit - $cashSales) / $finalSummaryDaysCount : 0.0,
             'Avrage_ticket'                  => $customerCount > 0 ? $totalSales / $customerCount : 0.0,
-        ]
+        // ]
     ];
 }
 

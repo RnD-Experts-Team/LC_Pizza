@@ -349,8 +349,10 @@ class ProcessCsvServices {
         $transformers = [
         'date_time_placed'   => fn($v) => $this->parseDateTime($v),
         'date_time_fulfilled' => fn($v) => $this->parseDateTime($v),];
+
         $rows =$this->mapCsvToRows($filePath,$columnMap, $transformers);
-         $this->inserter->insertOrderLine($rows);
+        
+        $this->inserter->replaceOrderLinePartitionKeepAll($rows, 1000);
 
         return $rows;
     }

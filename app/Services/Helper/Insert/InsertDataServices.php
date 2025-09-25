@@ -2,6 +2,8 @@
 namespace App\Services\Helper\Insert;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\OrderLine;
+use Illuminate\Support\Facades\DB;
 
 //just inserting functions using models in the db
 
@@ -542,7 +544,36 @@ class InsertDataServices{
 }
 
 
+ public function replaceOrderLinePartitionKeepAll(array $rows, int $chunkSize = 1000): void
+    {
+        if (empty($rows)) return;
 
+        // group by (franchise_store, business_date)
+        $byPartition = [];
+        foreach ($rows as $r) {
+            $key = ($r['franchise_store'] ?? '') . '|' . ($r['business_date'] ?? '');
+            $byPartition[$key][] = $r;
+        }
+
+        foreach ($byPartition as $partitionRows) {
+            if (empty($partitionRows)) continue;
+
+            DB::transaction(function () use ($partitionRows, $chunkSize) {
+                $store = $partitionRows[0]['franchise_store'];
+                $date  = $partitionRows[0]['business_date'];
+
+                // fast, indexed delete of the partition
+                OrderLine::where('franchise_store', $store)
+                    ->where('business_date', $date)
+                    ->delete();
+
+                // bulk insert everything from the CSV (including identical 4-keys)
+                foreach (array_chunk($partitionRows, $chunkSize) as $batch) {
+                    OrderLine::insert($batch);
+                }
+            });
+        }
+    }
 
 
 }
