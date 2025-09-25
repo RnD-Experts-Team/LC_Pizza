@@ -16,6 +16,21 @@ use Illuminate\Support\Facades\DB;
 
 class DSPR_Controller extends Controller
 {
+
+    protected function roundArray($data, int $precision = 2)
+    {
+        if (is_array($data)) {
+            return array_map(fn($v) => $this->roundArray($v, $precision), $data);
+        }
+        if ($data instanceof \Illuminate\Support\Collection) {
+            return $data->map(fn($v) => $this->roundArray($v, $precision));
+        }
+        if (is_numeric($data)) {
+            return round((float)$data, $precision);
+        }
+        return $data;
+    }
+
     public function index(Request $request,$store, $date)
     {
         // --- guards ---
@@ -169,7 +184,7 @@ $WeeklyDSPRData['Customer_Service'] = round((
 
         }
 
-        return [
+        $response = [
             'Filtering Values'=>[
                 'date'                  =>$date,
                 'store'                 =>$store,
@@ -210,6 +225,8 @@ $WeeklyDSPRData['Customer_Service'] = round((
 
 
         ];
+
+        return $this->roundArray($response, 2);
     }
 
     public function DSQRReport(){
