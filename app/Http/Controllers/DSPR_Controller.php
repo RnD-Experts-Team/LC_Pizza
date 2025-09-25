@@ -145,27 +145,27 @@ class DSPR_Controller extends Controller
         $customerService=$this->CustomerService($dayName,$weeklyFinalSummaryCollection,$lookBackFinalSummaryCollection);
         if (is_array($customerService) && isset($customerService[5]['dailyScore'], $customerService[5]['weeklyScore'])) {
     // after you build $dailyDSPRData and $WeeklyDSPRData:
-$dailyDSPRData['data']['Customer_count_percent']  = (float) ($customerService[5]['dailyScore']);
-$WeeklyDSPRData['data']['Customer_count_percent'] = (float) ($customerService[5]['weeklyScore']);
+$dailyDSPRData['data']['Customer_count_percent']  = round((float) ($customerService[5]['dailyScore']),2);
+$WeeklyDSPRData['data']['Customer_count_percent'] = round((float) ($customerService[5]['weeklyScore']),2);
 
-$dailyDSPRData['data']['Customer_Service'] = (
+$dailyDSPRData['data']['Customer_Service'] = round((
     (float) $dailyDSPRData['data']['Customer_count_percent'] +
     (float) $dailyDSPRData['data']['Put_into_Portal_Percent'] +
     (float) $dailyDSPRData['data']['In_Portal_on_Time_Percent']
-) / 3;
+) / 3,2);
 
-$WeeklyDSPRData['data']['Customer_Service'] = (
+$WeeklyDSPRData['data']['Customer_Service'] = round((
     (float) $WeeklyDSPRData['data']['Customer_count_percent'] +
     (float) $WeeklyDSPRData['data']['Put_into_Portal_Percent'] +
     (float) $WeeklyDSPRData['data']['In_Portal_on_Time_Percent']
-) / 3;
+) / 3,2);
 
 }
 
         $upselling =$this->Upselling($dayName,$weeklySummaryItemCollection,$lookBackSummaryItemCollection);
         if (is_array($upselling) && isset($upselling[5]['dailyScore'], $upselling[5]['weeklyScore'])) {
-    $dailyDSPRData['data']['Upselling']  = (float) ($upselling[5]['dailyScore']);
-    $WeeklyDSPRData['data']['Upselling'] = (float) ($upselling[5]['weeklyScore']);
+    $dailyDSPRData['data']['Upselling']  = round((float) ($upselling[5]['dailyScore']),2);
+    $WeeklyDSPRData['data']['Upselling'] = round((float) ($upselling[5]['weeklyScore']),2);
 
         }
 
@@ -245,12 +245,12 @@ $WeeklyDSPRData['data']['Customer_Service'] = (
 
         // Aggregate
         $hours[$h] = [
-            'Total_Sales'       => (float) $subset->sum('total_sales'),
-            'Phone_Sales'       => (float) $subset->sum('phone_sales'),
-            'Call_Center_Agent' => (float) $subset->sum('call_center_sales'),
-            'Drive_Thru'        => (float) $subset->sum('drive_thru_sales'),
-            'Website'           => (float) $subset->sum('website_sales'),
-            'Mobile'            => (float) $subset->sum('mobile_sales'),
+            'Total_Sales'       => round((float) $subset->sum('total_sales'),2),
+            'Phone_Sales'       => round((float) $subset->sum('phone_sales'),2),
+            'Call_Center_Agent' => round((float) $subset->sum('call_center_sales'),2),
+            'Drive_Thru'        => round((float) $subset->sum('drive_thru_sales'),2),
+            'Website'           => round((float) $subset->sum('website_sales'),2),
+            'Mobile'            => round((float) $subset->sum('mobile_sales'),2),
             'Order_Count'       => (int)   $subset->sum('order_count'),
         ];
     }
@@ -271,28 +271,28 @@ $WeeklyDSPRData['data']['Customer_Service'] = (
 
         return[
             'score'=>[
-                'DD_Most_Loved_Restaurant'=>(float)($depositDeliveryCollection->value('Hook_MostLovedRestaurant')),
+                'DD_Most_Loved_Restaurant'=>round((float)($depositDeliveryCollection->value('Hook_MostLovedRestaurant')),2),
                 'DD_Optimization_Score'=>$depositDeliveryCollection->value('Hook_OptimizationScore'),
-                'DD_Ratings_Average_Rating'=>(float)($depositDeliveryCollection->value('Hook_RatingsAverageRating')),
-                'DD_Cancellations_Sales_Lost'=>(float)($depositDeliveryCollection->value('Hook_CancellationsSalesLost2')),
-                'DD_Missing_or_Incorrect_Error_Charges'=>(float)($depositDeliveryCollection->value('Hook_MissingOrIncorrectErrorCharges')),
-                'DD_Avoidable_Wait_M-Sec'=>(float)($depositDeliveryCollection->value('Hook_AvoidableWaitMSec2')),
-                'DD_Total_Dasher_Wait_M-Sec'=>(float)($depositDeliveryCollection->value('Hook_TotalDasherWaitMSec')),
-                'DD_number_1_Top_Missing_or_Incorrect_Item'=>(float)($depositDeliveryCollection->value('Hook_1TopMissingOrIncorrectItem')),
-                'DD_Downtime_H-MM'=>(float)($depositDeliveryCollection->value('Hook_DowntimeHMM')),
-                'DD_Reviews_Responded'=>(float)($depositDeliveryCollection->value('Hook_ReviewsResponded')),
+                'DD_Ratings_Average_Rating'=>round((float)($depositDeliveryCollection->value('Hook_RatingsAverageRating')),2),
+                'DD_Cancellations_Sales_Lost'=>round((float)($depositDeliveryCollection->value('Hook_CancellationsSalesLost2')),2),
+                'DD_Missing_or_Incorrect_Error_Charges'=>round((float)($depositDeliveryCollection->value('Hook_MissingOrIncorrectErrorCharges')),2),
+                'DD_Avoidable_Wait_M-Sec'=>round((float)($depositDeliveryCollection->value('Hook_AvoidableWaitMSec2')),2),
+                'DD_Total_Dasher_Wait_M-Sec'=>round((float)($depositDeliveryCollection->value('Hook_TotalDasherWaitMSec')),2),
+                'DD_number_1_Top_Missing_or_Incorrect_Item'=>round((float)($depositDeliveryCollection->value('Hook_1TopMissingOrIncorrectItem')),2),
+                'DD_Downtime_H-MM'=>round((float)($depositDeliveryCollection->value('Hook_DowntimeHMM')),2),
+                'DD_Reviews_Responded'=>round((float)($depositDeliveryCollection->value('Hook_ReviewsResponded')),2),
 
-                'UE_Customer_reviews_overview'=>(float)($depositDeliveryCollection->value('Hook_CustomerReviewsOverview')),
-                'UE_Cost_of_Refunds'=>(float)($depositDeliveryCollection->value('Hook_CostOfRefunds')),
-                'UE_Unfulfilled_order_rate'=>(float)($depositDeliveryCollection->value('Hook_UnfulfilledOrderRate')),
-                'UE_Time_unavailable_during_open_hours_hh-mm'=>(float)($depositDeliveryCollection->value('Hook_TimeUnavailableDuringOpenHoursHhmm')),
-                'UE_Top_inaccurate_item'=>(float)($depositDeliveryCollection->value('Hook_TopInaccurateItem')),
-                'UE_Reviews_Responded'=>(float)($depositDeliveryCollection->value('Hook_ReviewsResponded_2')),
+                'UE_Customer_reviews_overview'=>round((float)($depositDeliveryCollection->value('Hook_CustomerReviewsOverview')),2),
+                'UE_Cost_of_Refunds'=>round((float)($depositDeliveryCollection->value('Hook_CostOfRefunds')),2),
+                'UE_Unfulfilled_order_rate'=>round((float)($depositDeliveryCollection->value('Hook_UnfulfilledOrderRate')),2),
+                'UE_Time_unavailable_during_open_hours_hh-mm'=>round((float)($depositDeliveryCollection->value('Hook_TimeUnavailableDuringOpenHoursHhmm')),2),
+                'UE_Top_inaccurate_item'=>round((float)($depositDeliveryCollection->value('Hook_TopInaccurateItem')),2),
+                'UE_Reviews_Responded'=>round((float)($depositDeliveryCollection->value('Hook_ReviewsResponded_2')),2),
 
-                'GH_Rating'=>(float)($depositDeliveryCollection->value('Hook_Rating')),
-                'GH_Food_was_good'=>(float)($depositDeliveryCollection->value('Hook_FoodWasGood')),
-                'GH_Delivery_was_on_time'=>(float)($depositDeliveryCollection->value('Hook_DeliveryWasOnTime')),
-                'GH_Order_was_accurate'=>(float)($depositDeliveryCollection->value('Hook_OrderWasAccurate')),
+                'GH_Rating'=>round((float)($depositDeliveryCollection->value('Hook_Rating')),2),
+                'GH_Food_was_good'=>round((float)($depositDeliveryCollection->value('Hook_FoodWasGood')),2),
+                'GH_Delivery_was_on_time'=>round((float)($depositDeliveryCollection->value('Hook_DeliveryWasOnTime')),2),
+                'GH_Order_was_accurate'=>round((float)($depositDeliveryCollection->value('Hook_OrderWasAccurate')),2),
             ],
             'is_on_track'=>[
 
@@ -339,31 +339,31 @@ $WeeklyDSPRData['data']['Customer_Service'] = (
             //     'cashSales' =>$cashSales,
             // ],
             // 'data'=>[
-                'labor'=> $workingHours * 16 /$totalSales,
-                'waste_gateway' =>$dailyFinalSummaryCollection->sum('total_waste_cost'),
-                'over_short' => $deposit - $cashSales,
-                'Refunded_order_Qty'=>$dailyFinalSummaryCollection->sum('refunded_order_qty'),
-                'Total_Cash_Sales'=>$cashSales,
-                'Total_Sales'=>$totalSales,
-                'Waste_Alta'=>$depositDeliveryCollection->sum('HookAltimetricWaste'),
-                'Modified_Order_Qty'=>$dailyFinalSummaryCollection->sum('modified_order_qty'),
-                'Total_TIPS'=> $dailyFinalSummaryCollection->sum('total_tips') + $depositDeliveryCollection->sum('HookHowMuchTips'),
-                'Customer_count'=>$customerCount,
-                'DoorDash_Sales'=>$dailyFinalSummaryCollection->sum('doordash_sales'),
-                'UberEats_Sales'=>$dailyFinalSummaryCollection->sum('ubereats_sales'),
-                'GrubHub_Sales'=>$dailyFinalSummaryCollection->sum('grubhub_sales'),
-                'Phone'=>$dailyFinalSummaryCollection->sum('phone_sales'),
-                'Call_Center_Agent'=>$dailyFinalSummaryCollection->sum('call_center_sales'),
-                'Website'=>$dailyFinalSummaryCollection->sum('website_sales'),
-                'Mobile'=>$dailyFinalSummaryCollection->sum('mobile_sales'),
-                'Digital_Sales_Percent'=>$dailyFinalSummaryCollection->sum('digital_sales_percent'),
-                'Total_Portal_Eligible_Transactions'=>$dailyFinalSummaryCollection->sum('portal_transactions'),
-                'Put_into_Portal_Percent'=>$dailyFinalSummaryCollection->sum('portal_used_percent'),
-                'In_Portal_on_Time_Percent'=>$dailyFinalSummaryCollection->sum('in_portal_on_time_percent'),
-                'Drive_Thru_Sales'=>$dailyFinalSummaryCollection->sum('drive_thru_sales'),
+                'labor'=> round($workingHours * 16 /$totalSales,2),
+                'waste_gateway' =>round($dailyFinalSummaryCollection->sum('total_waste_cost'),2),
+                'over_short' => round($deposit - $cashSales,2),
+                'Refunded_order_Qty'=>round($dailyFinalSummaryCollection->sum('refunded_order_qty'),2),
+                'Total_Cash_Sales'=>round($cashSales,2),
+                'Total_Sales'=>round($totalSales,2),
+                'Waste_Alta'=>round($depositDeliveryCollection->sum('HookAltimetricWaste'),2),
+                'Modified_Order_Qty'=>round($dailyFinalSummaryCollection->sum('modified_order_qty'),2),
+                'Total_TIPS'=> round($dailyFinalSummaryCollection->sum('total_tips') + $depositDeliveryCollection->sum('HookHowMuchTips'),2),
+                'Customer_count'=> round($customerCount,2),
+                'DoorDash_Sales'=>round($dailyFinalSummaryCollection->sum('doordash_sales'),2),
+                'UberEats_Sales'=>round($dailyFinalSummaryCollection->sum('ubereats_sales'),2),
+                'GrubHub_Sales'=>round($dailyFinalSummaryCollection->sum('grubhub_sales'),2),
+                'Phone'=>round($dailyFinalSummaryCollection->sum('phone_sales'),2),
+                'Call_Center_Agent'=>round($dailyFinalSummaryCollection->sum('call_center_sales'),2),
+                'Website'=>round($dailyFinalSummaryCollection->sum('website_sales'),2),
+                'Mobile'=>round($dailyFinalSummaryCollection->sum('mobile_sales'),2),
+                'Digital_Sales_Percent'=>round($dailyFinalSummaryCollection->sum('digital_sales_percent'),2),
+                'Total_Portal_Eligible_Transactions'=>round($dailyFinalSummaryCollection->sum('portal_transactions'),2),
+                'Put_into_Portal_Percent'=>round($dailyFinalSummaryCollection->sum('portal_used_percent'),2),
+                'In_Portal_on_Time_Percent'=>round($dailyFinalSummaryCollection->sum('in_portal_on_time_percent'),2),
+                'Drive_Thru_Sales'=>round($dailyFinalSummaryCollection->sum('drive_thru_sales'),2),
                 'Upselling'=>null,
-                'Cash_Sales_Vs_Deposite_Difference'=>$deposit - $cashSales,
-                'Avrage_ticket'=>$totalSales/$customerCount
+                'Cash_Sales_Vs_Deposite_Difference'=>round($deposit - $cashSales,2),
+                'Avrage_ticket'=>round($totalSales/$customerCount,2)
 
 
             // ]
@@ -431,31 +431,31 @@ $WeeklyDSPRData['data']['Customer_Service'] = (
         //     'cashSales' => $cashSales,
         // ],
         // 'data' => [
-            'labor'                          => $totalLabors,
-            'waste_gateway'                  => (float) $weeklyFinalSummaryCollection->sum('total_waste_cost'),
-            'over_short'                     => $deposit - $cashSales,
-            'Refunded_order_Qty'             => (float) $weeklyFinalSummaryCollection->sum('refunded_order_qty'),
-            'Total_Cash_Sales'               => $cashSales,
-            'Total_Sales'                    => $totalSales,
-            'Waste_Alta'                     => (float) $weeklyDepositDeliveryCollection->sum('HookAltimetricWaste'),
-            'Modified_Order_Qty'             => (float) $weeklyFinalSummaryCollection->sum('modified_order_qty'),
-            'Total_TIPS'                     => $tipsFinalSummary + $tipsDepositDelivery,
-            'Customer_count'                 => $customerCount,
-            'DoorDash_Sales'                 => (float) $weeklyFinalSummaryCollection->sum('doordash_sales'),
-            'UberEats_Sales'                 => (float) $weeklyFinalSummaryCollection->sum('ubereats_sales'),
-            'GrubHub_Sales'                  => (float) $weeklyFinalSummaryCollection->sum('grubhub_sales'),
-            'Phone'                          => (float) $weeklyFinalSummaryCollection->sum('phone_sales'),
-            'Call_Center_Agent'              => (float) $weeklyFinalSummaryCollection->sum('call_center_sales'),
-            'Website'                        => (float) $weeklyFinalSummaryCollection->sum('website_sales'),
-            'Mobile'                         => (float) $weeklyFinalSummaryCollection->sum('mobile_sales'),
-            'Digital_Sales_Percent'          => $finalSummaryDaysCount ? (float) $weeklyFinalSummaryCollection->sum('digital_sales_percent') / $finalSummaryDaysCount : 0.0,
-            'Total_Portal_Eligible_Transactions' => (float) $weeklyFinalSummaryCollection->sum('portal_transactions'),
-            'Put_into_Portal_Percent'        => $finalSummaryDaysCount ? (float) $weeklyFinalSummaryCollection->sum('portal_used_percent') / $finalSummaryDaysCount : 0.0,
-            'In_Portal_on_Time_Percent'      => $finalSummaryDaysCount ? (float) $weeklyFinalSummaryCollection->sum('in_portal_on_time_percent') / $finalSummaryDaysCount : 0.0,
-            'Drive_Thru_Sales'               => (float) $weeklyFinalSummaryCollection->sum('drive_thru_sales'),
+            'labor'                          => round($totalLabors,2),
+            'waste_gateway'                  => round((float) $weeklyFinalSummaryCollection->sum('total_waste_cost'),2),
+            'over_short'                     => round($deposit - $cashSales,2),
+            'Refunded_order_Qty'             => round((float) $weeklyFinalSummaryCollection->sum('refunded_order_qty'),2),
+            'Total_Cash_Sales'               => round($cashSales,2),
+            'Total_Sales'                    => round($totalSales,2),
+            'Waste_Alta'                     => round((float) $weeklyDepositDeliveryCollection->sum('HookAltimetricWaste'),2),
+            'Modified_Order_Qty'             => round((float) $weeklyFinalSummaryCollection->sum('modified_order_qty'),2),
+            'Total_TIPS'                     => round($tipsFinalSummary + $tipsDepositDelivery,2),
+            'Customer_count'                 => round($customerCount,2),
+            'DoorDash_Sales'                 => round((float) $weeklyFinalSummaryCollection->sum('doordash_sales'),2),
+            'UberEats_Sales'                 => round((float) $weeklyFinalSummaryCollection->sum('ubereats_sales'),2),
+            'GrubHub_Sales'                  => round((float) $weeklyFinalSummaryCollection->sum('grubhub_sales'),2),
+            'Phone'                          => round((float) $weeklyFinalSummaryCollection->sum('phone_sales'),2),
+            'Call_Center_Agent'              => round((float) $weeklyFinalSummaryCollection->sum('call_center_sales'),2),
+            'Website'                        => round((float) $weeklyFinalSummaryCollection->sum('website_sales'),2),
+            'Mobile'                         => round((float) $weeklyFinalSummaryCollection->sum('mobile_sales'),2),
+            'Digital_Sales_Percent'          => round($finalSummaryDaysCount ? (float) $weeklyFinalSummaryCollection->sum('digital_sales_percent') / $finalSummaryDaysCount : 0.0,2),
+            'Total_Portal_Eligible_Transactions' => round((float) $weeklyFinalSummaryCollection->sum('portal_transactions'),2),
+            'Put_into_Portal_Percent'        => round($finalSummaryDaysCount ? (float) $weeklyFinalSummaryCollection->sum('portal_used_percent') / $finalSummaryDaysCount : 0.0,2),
+            'In_Portal_on_Time_Percent'      => round($finalSummaryDaysCount ? (float) $weeklyFinalSummaryCollection->sum('in_portal_on_time_percent') / $finalSummaryDaysCount : 0.0,2),
+            'Drive_Thru_Sales'               => round((float) $weeklyFinalSummaryCollection->sum('drive_thru_sales'),2),
             'Upselling'                      => null,
-            'Cash_Sales_Vs_Deposite_Difference' => $finalSummaryDaysCount ? ($deposit - $cashSales) / $finalSummaryDaysCount : 0.0,
-            'Avrage_ticket'                  => $customerCount > 0 ? $totalSales / $customerCount : 0.0,
+            'Cash_Sales_Vs_Deposite_Difference' => round($finalSummaryDaysCount ? ($deposit - $cashSales) / $finalSummaryDaysCount : 0.0,2),
+            'Avrage_ticket'                  => round($customerCount > 0 ? $totalSales / $customerCount : 0.0,2),
         // ]
     ];
 }
