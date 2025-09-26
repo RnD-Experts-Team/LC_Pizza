@@ -785,8 +785,8 @@ class LogicsAndQueriesServices
                 ->where('put_into_portal_before_promise_time', 'Yes')
                 ->count();
 
-            $inPortalPercentage = $portalTransaction > 0
-                ? ($portalOnTime / $portalTransaction)
+            $inPortalPercentage = $putIntoPortal > 0
+                ? ($portalOnTime / $putIntoPortal)
                 : 0;
             // detail_orders (OrderRows) end
 
