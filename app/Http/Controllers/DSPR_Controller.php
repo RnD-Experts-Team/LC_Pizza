@@ -40,13 +40,28 @@ class DSPR_Controller extends Controller
         if (!preg_match('/^\d{4}-\d{1,2}-\d{1,2}$/', $date)) {
             return response()->json(['error' => 'Invalid date format, expected YYYY-MM-DD or YYYY-M-D'], 400);
         }
-        $validated = $request->validate([
-            'items' => ['required', 'array', 'min:1'],
-            // accept strings or ints; keep it loose
-            'items.*' => ['integer'], // or 'integer' if all numeric
-        ]);
-        // De-duplicate
-        $itemIds = array_values(array_unique($validated['items']));
+         // fallback items
+    $defaultItemIds = [
+        103001, // Crazy Bread
+        201128, // EMB Cheese
+        201106, // EMB Pepperoni
+        105001, // Caesar Wings
+        103002, // Crazy Sauce
+        103044, // Pepperoni Crazy Puffs®
+        103033, // 4 Cheese Crazy Puffs®
+        103055, // Bacon & Cheese Crazy Puffs®
+    ];
+
+    // validate items only if provided
+    $validated = $request->validate([
+        'items' => ['sometimes', 'array', 'min:1'],
+        'items.*' => ['integer'],
+    ]);
+
+    // If items not passed → fallback
+    $itemIds = isset($validated['items']) && count($validated['items']) > 0
+        ? array_values(array_unique($validated['items']))
+        : $defaultItemIds;
         /***dates Used**/
         $givenDate = Carbon::parse($date);
         $usedDate = CarbonImmutable::parse($givenDate);
