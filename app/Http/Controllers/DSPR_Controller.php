@@ -199,6 +199,27 @@ $WeeklyDSPRData['Customer_Service'] = round((
 
         }
 
+         // Group weekly FinalSummary rows by exact date ('Y-m-d')
+        $fsByDate = $weeklyFinalSummaryCollection->groupBy(function ($row) {
+            return Carbon::parse($row['business_date'])->toDateString();
+        });
+
+        // Group weekly Deposit/Delivery rows by exact date ('Y-m-d')
+        $ddByDate = $weeklyDepositDeliveryCollection->groupBy(function ($row) {
+            return Carbon::parse($row['HookWorkDaysDate'])->toDateString();
+        });
+
+        // Build a date-keyed map: 'YYYY-MM-DD' => DailyDSPR or message string
+        $dailyDSPRRange = [];
+        for ($d = $weekStartDate; $d->lte($weekEndDate); $d = $d->addDay()) {
+            $key = $d->toDateString();
+            $fs  = $fsByDate->get($key, collect()); // collection (possibly empty)
+            $dd  = $ddByDate->get($key, collect()); // collection (possibly empty)
+
+            // Reuse your existing calculator; it already handles empty collections
+            $dailyDSPRRange[$key] = $this->DailyDSPRReport($fs, $dd);
+        }
+
         $response = [
             'Filtering Values'=>[
                 'date'                  =>$date,
@@ -235,6 +256,7 @@ $WeeklyDSPRData['Customer_Service'] = round((
                     'DSPRData' =>$WeeklyDSPRData,
                     // 'customerService'=>$customerService,
                     // 'upselling'=>$upselling
+                    'DailyDSPRByDate' => $dailyDSPRRange,
                 ]
             ]
 
