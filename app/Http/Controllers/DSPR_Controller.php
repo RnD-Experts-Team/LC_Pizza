@@ -199,7 +199,7 @@ $WeeklyDSPRData['Customer_Service'] = round((
 
         }
 
-         // Group weekly FinalSummary rows by exact date ('Y-m-d')
+       // Group weekly FinalSummary rows by exact date ('Y-m-d')
         $fsByDate = $weeklyFinalSummaryCollection->groupBy(function ($row) {
             return Carbon::parse($row['business_date'])->toDateString();
         });
@@ -209,15 +209,52 @@ $WeeklyDSPRData['Customer_Service'] = round((
             return Carbon::parse($row['HookWorkDaysDate'])->toDateString();
         });
 
-        // Build a date-keyed map: 'YYYY-MM-DD' => DailyDSPR or message string
         $dailyDSPRRange = [];
         for ($d = $weekStartDate; $d->lte($weekEndDate); $d = $d->addDay()) {
             $key = $d->toDateString();
-            $fs  = $fsByDate->get($key, collect()); // collection (possibly empty)
-            $dd  = $ddByDate->get($key, collect()); // collection (possibly empty)
+            $fs  = $fsByDate->get($key, collect()); // per-day FS
+            $dd  = $ddByDate->get($key, collect()); // per-day DD
 
-            // Reuse your existing calculator; it already handles empty collections
-            $dailyDSPRRange[$key] = $this->DailyDSPRReport($fs, $dd);
+            // Base DailyDSPR for this date (your existing method; returns array OR string)
+            $dayDspr = $this->DailyDSPRReport($fs, $dd);
+
+            // Only enrich when we got a proper array back
+            if (is_array($dayDspr)) {
+                // dayName for this specific date
+                $thisDayName = Carbon::parse($key)->dayName;
+
+                // EXACT same methods you already call for the single-day/weekly blocks:
+                $csForDay = $this->CustomerService($thisDayName, $weeklyFinalSummaryCollection, $lookBackFinalSummaryCollection);
+                $upForDay = $this->Upselling($thisDayName, $weeklySummaryItemCollection, $lookBackSummaryItemCollection);
+
+                // Mirror your existing checks and assignments (dailyScore path = [5]['dailyScore'])
+                if (is_array($csForDay) && isset($csForDay[5]['dailyScore'])) {
+                    $dayDspr['Customer_count_percent'] = round((float)$csForDay[5]['dailyScore'], 2);
+                }
+
+                if (is_array($upForDay) && isset($upForDay[5]['dailyScore'])) {
+                    $dayDspr['Upselling'] = round((float)$upForDay[5]['dailyScore'], 2);
+                }
+
+                // Customer_Service = avg(Customer_count_percent, Put_into_Portal_Percent, In_Portal_on_Time_Percent)
+                if (
+                    isset($dayDspr['Customer_count_percent']) &&
+                    isset($dayDspr['Put_into_Portal_Percent']) &&
+                    isset($dayDspr['In_Portal_on_Time_Percent'])
+                ) {
+                    $dayDspr['Customer_Service'] = round((
+                        (float)$dayDspr['Customer_count_percent'] +
+                        (float)$dayDspr['Put_into_Portal_Percent'] +
+                        (float)$dayDspr['In_Portal_on_Time_Percent']
+                    ) / 3, 2);
+                }
+
+                // Save enriched daily record
+                $dailyDSPRRange[$key] = $dayDspr;
+            } else {
+                // If DailyDSPRReport returned a message string, keep it as-is
+                $dailyDSPRRange[$key] = $dayDspr;
+            }
         }
 
         $response = [
