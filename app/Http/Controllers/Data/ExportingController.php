@@ -16,14 +16,14 @@ class ExportingController extends Controller
         $this->exporting = $exporting;
     }
     // using this array for models that i don't want to export their data
-    protected array $restrictedModels = [
+    protected array $restrictedModels = [   
         'User',
     ];
     protected function isRestricted(string $model): bool
     {
         return in_array(ucfirst($model), $this->restrictedModels);
     }
-    public function exportCSV(Request $request, string $model, $start = null, $end = null,$hours = null, $stores = null)
+    public function exportCSV(Request $request, string $model, $start = null, $end = null,$hours = null, $stores = null, $modificationReason = null)
     {
         if ($this->isRestricted($model)) {
             return response()->json(['error' => 'Exporting this model is not allowed.'], 403);
@@ -31,7 +31,7 @@ class ExportingController extends Controller
         // Resolve the full Model class (adjust namespace as needed)
         $modelClass = '\\App\\Models\\' . ucfirst($model);
 
-        return $this->exporting->exportCSV($request, $modelClass, $start, $end, $hours , $stores);
+        return $this->exporting->exportCSV($request, $modelClass, $start, $end, $hours , $stores, $modificationReason );
     }
 
     public function exportJson(Request $request, string $model, $start = null, $end = null,$hours = null, $stores = null)

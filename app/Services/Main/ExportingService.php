@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;                                   // [ADDED]
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Illuminate\Support\Str; // <— ADD
 
 class ExportingService
 {
@@ -22,7 +23,8 @@ class ExportingService
         $startDateParam = null,
         $endDateParam = null,
         $hoursParam = null,
-        $franchiseStoreParam = null
+        $franchiseStoreParam = null,
+        $modificationReasonParam = null
     ): StreamedResponse {
         Log::info("{$modelClass} CSV export requested", [
             'ip'         => $request->ip(),
@@ -39,6 +41,7 @@ class ExportingService
         $hours           = $this->parseHours($request, $hoursParam);
 
         Log::debug("Export parameters for {$modelClass}", compact('startDate','endDate','franchiseStores'));
+        $applyReasonFilter = $this->shouldApplyModificationReasonFilter($request, $modificationReasonParam);
 
         // Build base query (same filters)
         $query = $modelClass::query();
@@ -60,6 +63,16 @@ class ExportingService
         }
         if (!empty($hours) && $this->modelHasColumn($modelClass, 'hour')) {
             $query->whereIn('hour', $hours);
+        }
+
+         if ($applyReasonFilter && $this->isOrderLine($modelClass) && $this->modelHasColumn($modelClass, 'modification_reason')) {
+            $query->whereNotNull('modification_reason')
+                  ->where('modification_reason', '!=', '')
+                  ->whereNotIn('modification_reason', [
+                      'CustomerRelations',
+                      'EmployeeAppreciation',
+                      'Promotional',
+                  ]);
         }
 
         // [REMOVED] $data = $query->get();
@@ -283,6 +296,31 @@ class ExportingService
         } catch (\Throwable $e) {
             Log::warning("Column check failed for {$modelClass}.{$column}", ['e' => $e->getMessage()]);
             return false;
+        }
+    }
+
+      protected function shouldApplyModificationReasonFilter(Request $request, $param = null): bool
+    {
+        // if explicit param passed to method, use it (anything non-empty enables)
+        if ($param !== null && $param !== '' && $param !== '0' && strtolower((string)$param) !== 'false') {
+            return true;
+        }
+        // otherwise look at query (?modification_reason=1 / true / yes / any non-empty)
+        $q = $request->query('modification_reason');
+        if ($q === null) {
+            return false;
+        }
+        $q = strtolower(trim((string)$q));
+        return !in_array($q, ['', '0', 'false', 'no'], true);
+    }
+
+    protected function isOrderLine(string $modelClass): bool
+    {
+        try {
+            $short = (new \ReflectionClass($modelClass))->getShortName();
+            return $short === 'OrderLine';
+        } catch (\Throwable $e) {
+            return Str::endsWith($modelClass, '\\OrderLine') || Str::endsWith($modelClass, 'OrderLine');
         }
     }
 }
