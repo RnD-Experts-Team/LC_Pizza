@@ -17,13 +17,13 @@ Route::middleware('auth.verify')->group(function () {
     Route::get('/export/{model}/json/{start?}/{end?}/{hour?}/{stores?}', [ExportingController::class, 'exportJson'])
     ->name('export.json');
 
+
+});
+
+
     Route::post('/dspr-report/{store}/{date}', [DSPR_Controller::class, 'index'])
     ->name('dspr-report');
 
 // New: catalog of unique items (for populating the UI selector)
     Route::get('/dspr-items/{store}', [DSPR_Controller::class, 'items'])
     ->name('dspr-items');
-});
-
-
-
