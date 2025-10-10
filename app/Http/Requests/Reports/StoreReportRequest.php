@@ -14,7 +14,7 @@ class StoreReportRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'franchise_store' => ['required','string','max:20'],
+            'franchise_store' => ['nullable','string','max:20'],
             'from'            => ['required','date','before_or_equal:to'],
             'to'              => ['required','date','after_or_equal:from'],
         ];

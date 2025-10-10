@@ -5,8 +5,7 @@ namespace App\Http\Controllers\Reports;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Reports\StoreReportRequest;
 use App\Services\Reports\StoreOverviewService;
-use App\Services\Reports\ItemBreakdownService;
-use App\Services\Reports\SoldWithPizzaService;
+use App\Services\Reports\ItemsAndWithPizzaFusedService;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -14,49 +13,49 @@ use Illuminate\Http\JsonResponse;
  *
  * Single endpoint to gather:
  *  - Overview totals (StoreOverviewService)
- *  - Item breakdowns (ItemBreakdownService)
- *  - Sold With Pizza metrics (SoldWithPizzaService)
+ *  - Item breakdowns + Sold With Pizza (ItemsAndWithPizzaFusedService) in one pass per bucket
  *
  * Notes:
  *  - No caching, every call computes fresh data.
- *  - Each service only performs lightweight scalar aggregates (sum/count/exists/first).
- *  - Fully Eloquent-based; zero raw SQL.
- *  - Safe for large datasets (100k+ lines) with low memory usage.
+ *  - All queries are Eloquent/Builder only (no raw SQL).
+ *  - Memory-safe via chunkById + tight projections.
+ *  - Supports "All" (or null) store to aggregate across all stores.
  */
 class StoreReportController extends Controller
 {
     public function __construct(
-        private readonly StoreOverviewService  $overview,
-        private readonly ItemBreakdownService $items,
-        private readonly SoldWithPizzaService $soldWithPizza
+        private readonly StoreOverviewService $overview,
+        private readonly ItemsAndWithPizzaFusedService $fused
     ) {}
 
     /**
      * Handle GET /api/reports/store
      *
      * Query params:
-     *  - franchise_store (string, required)
+     *  - franchise_store (string|null)  e.g. "03795-00016" or "All" or omitted/null
      *  - from (Y-m-d, required)
-     *  - to (Y-m-d, required)
+     *  - to   (Y-m-d, required)
      */
     public function __invoke(StoreReportRequest $request): JsonResponse
     {
-        $store = $request->inputStore();
+        // Allow null/"All" store: we don’t force a value here.
+        // If your FormRequest currently requires a string, loosen it (nullable) or read raw input as below.
+        $store = $request->input('franchise_store'); // nullable
         $from  = $request->inputFrom();
         $to    = $request->inputTo();
 
-        // Build the three report sections
-        $data = [
-            'overview'        => $this->overview->overview($store, $from, $to),
-            'item_breakdown'  => $this->items->breakdown($store, $from, $to),
-            'sold_with_pizza' => $this->soldWithPizza->metrics($store, $from, $to),
-        ];
+        // Build sections
+        $fused = $this->fused->compute($store, $from, $to);
 
         return response()->json([
             'store' => $store,
             'from'  => $from,
             'to'    => $to,
-            'data'  => $data,
+            'data'  => [
+                'overview'        => $this->overview->overview($store, $from, $to),
+                'item_breakdown'  => $fused['item_breakdown'],
+                'sold_with_pizza' => $fused['sold_with_pizza'],
+            ],
         ]);
     }
 }

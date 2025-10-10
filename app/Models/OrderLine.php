@@ -36,4 +36,17 @@ class OrderLine extends Model
         'refunded',
         'tax_included_amount',
     ];
+
+    protected $casts = [
+        'business_date' => 'date',
+        'net_amount'    => 'decimal:2',
+        'quantity'      => 'integer',
+
+        // generated flags:
+        'is_pizza'                  => 'boolean',
+        'is_companion_crazy_bread'  => 'boolean',
+        'is_companion_cookie'       => 'boolean',
+        'is_companion_sauce'        => 'boolean',
+        'is_companion_wings'        => 'boolean',
+    ];
 }
