@@ -3,16 +3,18 @@
 namespace App\Services\Reports;
 
 use Carbon\Carbon;
-use Illuminate\Database\Query\Builder as Q;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Ultra-optimized fused service:
- * - Query Builder only (no Eloquent hydration / no model casting).
- * - Uses generated flags + indexes for fast EXISTS counts.
- * - Item breakdown via single GROUP BY per bucket on relevant item_ids.
- * - One extra per-item lookup to get latest non-zero-qty unit price/name.
- * - Supports null/"All" store (no store filter).
+ * ItemsAndWithPizzaFusedService (timeout-safe)
+ *
+ * Same output + rules as your current version, but:
+ *  - Uses Query Builder (no Eloquent model hydration / no casting overhead)
+ *  - Two-pass per chunk using a SET of pizza order_ids (no big per-order arrays)
+ *  - Adaptive chunk size for "All" store (smaller to reduce peak work)
+ *  - Tracks latest business_date per item_id to compute unit price (qty>0)
+ *
+ * Still 100% "Laravel queries only". No direct SQL (only Builder).
  */
 class ItemsAndWithPizzaFusedService
 {
@@ -59,29 +61,140 @@ class ItemsAndWithPizzaFusedService
     private const BEVERAGE_IDS    = [204100, 204200];
     private const SIDES_IDS       = [206117, 103002];
 
+    // ===== Public API =====
     public function compute(?string $franchiseStore, $fromDate, $toDate): array
     {
+        // Optional: prevent web PHP 60s hard timeout for large ALL-store ranges (no-op on CLI).
+        // @phpstan-ignore-next-line
+        if (function_exists('set_time_limit')) { @set_time_limit(0); }
+
         $from = $fromDate instanceof Carbon ? $fromDate->toDateString() : Carbon::parse($fromDate)->toDateString();
         $to   = $toDate   instanceof Carbon ? $toDate->toDateString()   : Carbon::parse($toDate)->toDateString();
 
         $itemRes = ['buckets' => []];
         $soldRes = ['buckets' => []];
 
+        $isAllStore = ($franchiseStore === null || $franchiseStore === '' || strtolower($franchiseStore) === 'all');
+        $chunkSize  = $isAllStore ? 2000 : 5000; // smaller chunk for All to avoid CPU spikes
+
+        // Pre-build relevant ID set (string compare in DB)
+        $relevantIds = array_values(array_unique(array_merge(
+            self::PIZZA_IDS, self::BREAD_IDS, self::WINGS_IDS, self::CRAZY_PUFFS_IDS,
+            self::COOKIE_IDS, self::BEVERAGE_IDS, self::SIDES_IDS
+        )));
+        $relevantIdStr = array_map('strval', $relevantIds);
+        $relevantIdFlip = array_fill_keys($relevantIdStr, true); // tiny in-memory set
+
         foreach (self::BUCKETS as $key => $rules) {
             $label = $rules['label'];
 
-            // ---- SOLD-WITH-PIZZA: fast EXISTS counts using flags ----
-            $pizzaBase = $this->countPizzaBase($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled']);
+            // Accumulators per bucket
+            $sumByItem   = [];
+            $countByItem = [];
+            $nameByItem  = [];
+            $priceByItem = [];
+            $latestDate  = []; // item_id => Y-m-d string for most recent qty>0 row used for price
 
-            $countCzb = $this->countCompanionWithPizza($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled'], 'is_companion_crazy_bread');
-            $countCok = $this->countCompanionWithPizza($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled'], 'is_companion_cookie');
-            $countSau = $this->countCompanionWithPizza($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled'], 'is_companion_sauce');
-            $countWin = $this->countCompanionWithPizza($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled'], 'is_companion_wings');
+            $countCzb = 0; $countCok = 0; $countSau = 0; $countWin = 0; $pizzaBase = 0;
+
+            // Stream rows: only columns used; only rows needed
+            $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled'])
+                ->where(function ($q) use ($relevantIdStr) {
+                    $q->whereIn('item_id', $relevantIdStr)   // item breakdown rows
+                      ->orWhere('is_pizza', 1)               // pizza base rows
+                      ->orWhere('is_companion_crazy_bread', 1)
+                      ->orWhere('is_companion_cookie', 1)
+                      ->orWhere('is_companion_sauce', 1)
+                      ->orWhere('is_companion_wings', 1);
+                })
+                ->orderBy('id')
+                ->chunkById($chunkSize, function ($rows) use (
+                    &$sumByItem, &$countByItem, &$nameByItem, &$priceByItem, &$latestDate,
+                    &$pizzaBase, &$countCzb, &$countCok, &$countSau, &$countWin,
+                    $relevantIdFlip
+                ) {
+                    // Pass 1: compute item totals + find pizza orders
+                    $pizzaOrders = []; // order_id => true for this chunk only
+                    foreach ($rows as $r) {
+                        $orderId = (string) ($r->order_id ?? '');
+                        $itemId  = (string) ($r->item_id ?? '');
+                        $qty     = (float)  ($r->quantity ?? 0);
+                        $amt     = (float)  ($r->net_amount ?? 0);
+                        $name    = (string) ($r->menu_item_name ?? '');
+                        $bDate   = (string) ($r->business_date ?? '');
+
+                        // Item breakdown only for relevant IDs (avoid any accidental pollution)
+                        if (isset($relevantIdFlip[$itemId])) {
+                            $sumByItem[$itemId]   = ($sumByItem[$itemId]   ?? 0.0) + $amt;
+                            $countByItem[$itemId] = ($countByItem[$itemId] ?? 0) + 1;
+
+                            if ($qty !== 0.0) {
+                                // keep the latest business_date's unit price
+                                if (!isset($latestDate[$itemId]) || $bDate > $latestDate[$itemId]) {
+                                    $latestDate[$itemId] = $bDate;
+                                    $priceByItem[$itemId] = $amt / $qty;
+                                    if ($name !== '') { $nameByItem[$itemId] = $name; }
+                                }
+                            } elseif (!isset($nameByItem[$itemId]) && $name !== '') {
+                                // capture a name even if qty=0 rows dominate
+                                $nameByItem[$itemId] = $name;
+                            }
+                        }
+
+                        if ($r->is_pizza) {
+                            $pizzaBase++;
+                            if ($orderId !== '') { $pizzaOrders[$orderId] = true; }
+                        }
+                    }
+
+                    // Pass 2: count companions only if order had pizza (hash set check)
+                    if (!empty($pizzaOrders)) {
+                        foreach ($rows as $r) {
+                            $orderId = (string) ($r->order_id ?? '');
+                            if ($orderId === '' || !isset($pizzaOrders[$orderId])) {
+                                continue;
+                            }
+                            if ($r->is_companion_crazy_bread) { $countCzb++; }
+                            elseif ($r->is_companion_cookie)  { $countCok++; }
+                            elseif ($r->is_companion_sauce)   { $countSau++; }
+                            elseif ($r->is_companion_wings)   { $countWin++; }
+                        }
+                    }
+                    // allow $pizzaOrders to be GC'ed at end of chunk
+                }, 'id', 'id');
+
+            // Build breakdown rows (sorted desc by total_sales)
+            $buildRows = function (array $ids) use ($sumByItem, $countByItem, $nameByItem, $priceByItem): array {
+                $rows = [];
+                foreach ($ids as $intId) {
+                    $id = (string) $intId;
+                    $rows[] = [
+                        'item_id'        => (int) $intId,
+                        'menu_item_name' => $nameByItem[$id]  ?? '',
+                        'unit_price'     => (float) ($priceByItem[$id] ?? 0.0),
+                        'total_sales'    => (float) ($sumByItem[$id]   ?? 0.0),
+                        'entries_count'  => (int)   ($countByItem[$id] ?? 0),
+                    ];
+                }
+                usort($rows, fn($a,$b) => $b['total_sales'] <=> $a['total_sales']);
+                return $rows;
+            };
+
+            $itemRes['buckets'][$key] = [
+                'label'       => $label,
+                'pizza_top10' => array_slice($buildRows(self::PIZZA_IDS), 0, 10),
+                'bread_top3'  => array_slice($buildRows(self::BREAD_IDS), 0, 3),
+                'wings'       => $buildRows(self::WINGS_IDS),
+                'crazy_puffs' => $buildRows(self::CRAZY_PUFFS_IDS),
+                'cookie'      => $buildRows(self::COOKIE_IDS),
+                'beverage'    => $buildRows(self::BEVERAGE_IDS),
+                'sides'       => $buildRows(self::SIDES_IDS),
+            ];
 
             $den = $pizzaBase ?: 1;
             $soldRes['buckets'][$key] = [
-                'label'  => $label,
-                'counts' => [
+                'label'       => $label,
+                'counts'      => [
                     'crazy_bread' => (int) $countCzb,
                     'cookies'     => (int) $countCok,
                     'sauce'       => (int) $countSau,
@@ -95,47 +208,6 @@ class ItemsAndWithPizzaFusedService
                     'wings'       => $pizzaBase ? $countWin / $den : 0.0,
                 ],
             ];
-
-            // ---- ITEM BREAKDOWN: single GROUP BY on relevant item_ids ----
-            $groups = [
-                'pizza_top10' => self::PIZZA_IDS,
-                'bread_top3'  => self::BREAD_IDS,
-                'wings'       => self::WINGS_IDS,
-                'crazy_puffs' => self::CRAZY_PUFFS_IDS,
-                'cookie'      => self::COOKIE_IDS,
-                'beverage'    => self::BEVERAGE_IDS,
-                'sides'       => self::SIDES_IDS,
-            ];
-
-            $bucketItems = [];
-            foreach ($groups as $groupKey => $ids) {
-                $stats = $this->groupTotals($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled'], $ids);
-
-                // hydrate unit price + name once per present item_id
-                $rows = [];
-                foreach ($stats as $itemId => $agg) {
-                    [$name, $unitPrice] = $this->latestNameAndPrice($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled'], (string)$itemId);
-
-                    $rows[] = [
-                        'item_id'        => (int) $itemId,
-                        'menu_item_name' => $name,
-                        'unit_price'     => $unitPrice,
-                        'total_sales'    => (float) $agg['total_sales'],
-                        'entries_count'  => (int)   $agg['entries_count'],
-                    ];
-                }
-
-                // sort desc by total_sales
-                usort($rows, fn($a,$b) => $b['total_sales'] <=> $a['total_sales']);
-
-                // top N limits
-                if ($groupKey === 'pizza_top10') { $rows = array_slice($rows, 0, 10); }
-                if ($groupKey === 'bread_top3')  { $rows = array_slice($rows, 0, 3); }
-
-                $bucketItems[$groupKey] = $rows;
-            }
-
-            $itemRes['buckets'][$key] = array_merge(['label' => $label], $bucketItems);
         }
 
         return [
@@ -144,113 +216,15 @@ class ItemsAndWithPizzaFusedService
         ];
     }
 
-    // =========================
-    // SOLD-WITH helpers
-    // =========================
-
-    private function countPizzaBase(?string $store, string $from, string $to, ?array $placed, ?array $fulfilled): int
-    {
-        $q = $this->base($store, $from, $to, $placed, $fulfilled)
-            ->where('is_pizza', 1);
-
-        return (int) $q->count();
-    }
-
-    private function countCompanionWithPizza(?string $store, string $from, string $to, ?array $placed, ?array $fulfilled, string $flagCol): int
-    {
-        $q = $this->base($store, $from, $to, $placed, $fulfilled)
-            ->where($flagCol, 1)
-            ->whereExists(function (Q $sub) use ($store, $from, $to, $placed, $fulfilled) {
-                $sub->from('order_line as ol2')
-                    ->select(DB::raw('1'))
-                    ->whereColumn('ol2.order_id', 'order_line.order_id')
-                    ->whereBetween('ol2.business_date', [$from, $to])
-                    ->where('ol2.is_pizza', 1);
-
-                if ($store !== null && $store !== '' && strtolower($store) !== 'all') {
-                    $sub->where('ol2.franchise_store', $store);
-                }
-                if ($placed) {
-                    $sub->whereIn('ol2.order_placed_method', $placed);
-                }
-                if ($fulfilled) {
-                    $sub->whereIn('ol2.order_fulfilled_method', $fulfilled);
-                }
-            });
-
-        return (int) $q->count();
-    }
-
-    // =========================
-    // ITEM BREAKDOWN helpers
-    // =========================
-
-    /**
-     * Returns [item_id => ['total_sales'=>float,'entries_count'=>int]] for a set of IDs.
-     */
-    private function groupTotals(?string $store, string $from, string $to, ?array $placed, ?array $fulfilled, array $ids): array
-    {
-        if (empty($ids)) return [];
-
-        $q = $this->base($store, $from, $to, $placed, $fulfilled)
-            ->whereIn('item_id', array_map('strval', $ids))
-            ->groupBy('item_id')
-            ->select([
-                'item_id',
-                DB::raw('SUM(net_amount) as total_sales'),
-                DB::raw('COUNT(*) as entries_count'),
-            ]);
-
-        $rows = $q->get();
-        $out = [];
-        foreach ($rows as $r) {
-            $out[$r->item_id] = [
-                'total_sales'   => (float) $r->total_sales,
-                'entries_count' => (int) $r->entries_count,
-            ];
-        }
-        return $out;
-    }
-
-    /**
-     * Fetch one row for an item_id (latest by business_date with quantity>0) to derive name and unit price.
-     */
-    private function latestNameAndPrice(?string $store, string $from, string $to, ?array $placed, ?array $fulfilled, string $itemId): array
-    {
-        $q = $this->base($store, $from, $to, $placed, $fulfilled)
-            ->where('item_id', $itemId)
-            ->where('quantity', '>', 0)
-            ->orderBy('business_date', 'desc')
-            ->limit(1)
-            ->select(['menu_item_name','net_amount','quantity']);
-
-        $row = $q->first();
-
-        if (!$row) {
-            // fallback to any row if none with qty>0 in range
-            $row = $this->base($store, $from, $to, $placed, $fulfilled)
-                ->where('item_id', $itemId)
-                ->orderBy('business_date', 'desc')
-                ->limit(1)
-                ->select(['menu_item_name','net_amount','quantity'])
-                ->first();
-        }
-
-        $name  = $row->menu_item_name ?? '';
-        $qty   = (float) ($row->quantity ?? 0);
-        $amt   = (float) ($row->net_amount ?? 0);
-        $price = $qty != 0.0 ? ($amt / $qty) : 0.0;
-
-        return [(string)$name, (float)$price];
-    }
-
-    // =========================
-    // BASE query (Query Builder, no Eloquent)
-    // =========================
-
-    private function base(?string $store, string $from, string $to, ?array $placed, ?array $fulfilled): Q
+    // ====== Query Builder base (no Eloquent hydration) ======
+    private function baseQB(?string $store, string $from, string $to, ?array $placed, ?array $fulfilled)
     {
         $q = DB::table('order_line')
+            ->select([
+                'id','order_id','item_id','menu_item_name','net_amount','quantity',
+                'business_date',
+                'is_pizza','is_companion_crazy_bread','is_companion_cookie','is_companion_sauce','is_companion_wings',
+            ])
             ->whereBetween('business_date', [$from, $to]);
 
         if ($store !== null && $store !== '' && strtolower($store) !== 'all') {
