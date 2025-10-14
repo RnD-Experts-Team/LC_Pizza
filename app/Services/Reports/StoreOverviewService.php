@@ -36,7 +36,7 @@ class StoreOverviewService
         ],
         'lc_delivery' => [
             'label'     => 'LC Delivery',
-            'placed'    => ['Website','Mobile'],
+            'placed'    => ['Website','Mobile','SoundHoundAgent'],
             'fulfilled' => ['Delivery'],
         ],
         'third_party' => [
