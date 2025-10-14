@@ -54,12 +54,12 @@ class ItemsAndWithPizzaFusedService
         202001,201112,101541,202011,201412,101403,201043,101378,101542,201044,201049,201118,201120,201111,201109,
         201140,202212,202003,201426,201058
     ];
-    private const BREAD_IDS = [103044,103003,201343,103001,203004,203003,103033,203010];
-    private const WINGS_IDS       = [105001];
-    private const CRAZY_PUFFS_IDS = [103033, 103044];
-    private const COOKIE_IDS      = [101288, 101289];
-    private const BEVERAGE_IDS    = [204100, 204200];
-    private const SIDES_IDS       = [206117, 103002];
+    private const BREAD_IDS      = [103044,103003,201343,103001,203004,203003,103033,203010];
+    private const WINGS_IDS      = [105001];
+    private const CRAZY_PUFFS_IDS= [103033, 103044];
+    private const COOKIE_IDS     = [101288, 101289];
+    private const BEVERAGE_IDS   = [204100, 204200];
+    private const SIDES_IDS      = [206117, 103002];
 
     // ===== Public API =====
     public function compute(?string $franchiseStore, $fromDate, $toDate): array
@@ -79,10 +79,15 @@ class ItemsAndWithPizzaFusedService
 
         // Pre-build relevant ID set (string compare in DB)
         $relevantIds = array_values(array_unique(array_merge(
-            self::PIZZA_IDS, self::BREAD_IDS, self::WINGS_IDS, self::CRAZY_PUFFS_IDS,
-            self::COOKIE_IDS, self::BEVERAGE_IDS, self::SIDES_IDS
+            self::PIZZA_IDS,
+            self::BREAD_IDS,
+            self::WINGS_IDS,
+            self::CRAZY_PUFFS_IDS,
+            self::COOKIE_IDS,
+            self::BEVERAGE_IDS,
+            self::SIDES_IDS
         )));
-        $relevantIdStr = array_map('strval', $relevantIds);
+        $relevantIdStr  = array_map('strval', $relevantIds);
         $relevantIdFlip = array_fill_keys($relevantIdStr, true); // tiny in-memory set
 
         foreach (self::BUCKETS as $key => $rules) {
@@ -180,17 +185,19 @@ class ItemsAndWithPizzaFusedService
                 return $rows;
             };
 
+            // === Item breakdown payload (with all the sections you want) ===
             $itemRes['buckets'][$key] = [
-                'label'       => $label,
-                'pizza_top10' => array_slice($buildRows(self::PIZZA_IDS), 0, 10),
-                'bread_top3'  => array_slice($buildRows(self::BREAD_IDS), 0, 3),
-                'wings'       => $buildRows(self::WINGS_IDS),
-                'crazy_puffs' => $buildRows(self::CRAZY_PUFFS_IDS),
-                'cookie'      => $buildRows(self::COOKIE_IDS),
-                'beverage'    => $buildRows(self::BEVERAGE_IDS),
-                'sides'       => $buildRows(self::SIDES_IDS),
+                'label'        => $label,
+                'pizza_top10'  => array_slice($buildRows(self::PIZZA_IDS), 0, 10),
+                'bread_top3'   => array_slice($buildRows(self::BREAD_IDS), 0, 3),
+                'wings'        => $buildRows(self::WINGS_IDS),
+                'crazy_puffs'  => $buildRows(self::CRAZY_PUFFS_IDS),
+                'cookies'      => $buildRows(self::COOKIE_IDS),
+                'beverages'    => $buildRows(self::BEVERAGE_IDS),
+                'sides'        => $buildRows(self::SIDES_IDS),
             ];
 
+            // === Sold-with-pizza payload (unchanged) ===
             $den = $pizzaBase ?: 1;
             $soldRes['buckets'][$key] = [
                 'label'       => $label,
