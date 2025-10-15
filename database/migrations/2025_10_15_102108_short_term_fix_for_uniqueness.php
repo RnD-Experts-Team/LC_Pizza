@@ -18,19 +18,27 @@ return new class extends Migration {
             $driver = DB::getDriverName();
 
             if ($driver === 'mysql') {
-                DB::statement(<<<'SQL'
+    // MySQL 5.7-safe: delete any row that has a strictly "newer" twin on the same key
+    DB::statement(<<<'SQL'
 DELETE ol
 FROM order_line ol
-JOIN (
-  SELECT id,
-         ROW_NUMBER() OVER (
-           PARTITION BY franchise_store, business_date, order_id, item_id
-           ORDER BY (created_at IS NULL), created_at DESC, id DESC
-         ) AS rn
-  FROM order_line
-) x ON x.id = ol.id
-WHERE x.rn > 1
+JOIN order_line k
+  ON k.franchise_store = ol.franchise_store
+ AND k.business_date   = ol.business_date
+ AND k.order_id        = ol.order_id
+ AND k.item_id         = ol.item_id
+ AND (
+      /* If ol.created_at is NULL and k.created_at is NOT NULL, k is newer */
+      (ol.created_at IS NULL AND k.created_at IS NOT NULL)
+   OR /* Both non-null: newer timestamp wins */
+      (ol.created_at IS NOT NULL AND k.created_at IS NOT NULL AND k.created_at > ol.created_at)
+   OR /* Same timestamp (including both NULL): higher id wins */
+      ( ( (ol.created_at = k.created_at)
+          OR (ol.created_at IS NULL AND k.created_at IS NULL) )
+        AND k.id > ol.id )
+     )
 SQL);
+
             } elseif ($driver === 'pgsql') {
                 DB::statement(<<<'SQL'
 WITH ranked AS (
