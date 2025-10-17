@@ -7,33 +7,47 @@ use Illuminate\Support\Facades\DB;
 use SplFileObject;
 use DateTime;
 
-class singleCsvImporter extends Command
+class SingleCsvImporter extends Command
 {
     protected $signature = 'singleCsvImporter
         {--path= : Path to CSV (default: public/onetimecsv.csv)}
         {--delimiter= : Force delimiter: comma|tab (auto-detect if omitted)}
         {--skip-header=0 : Use 1 if CSV has no header row}
-        {--encoding=auto : Source text encoding: auto|utf8|cp1252|latin1}';
+        {--encoding=auto : Source encoding: auto|utf8|cp1252|latin1}
+        {--chunk=1000 : Insert chunk size per partition}';
 
-    protected $description = 'Stream a large CSV into order_line (UTF-8 safe, ISO dates, O(1) memory)';
+    protected $description = 'Stream a large CSV into order_line (UTF-8 safe, ISO dates, partitioned delete+insert, O(1) memory)';
 
     public function handle(): int
     {
-        // keep memory flat
+        // Keep memory flat and ensure MySQL session uses utf8mb4
         DB::connection()->disableQueryLog();
-        // ensure MySQL session is utf8mb4
         DB::statement("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
 
-        $path = $this->option('path') ?: public_path('onetimecsv.csv');
-        if (!is_file($path)) {
-            $this->error("CSV not found at: {$path}");
+        $csvPath = $this->option('path') ?: public_path('onetimecsv.csv');
+        if (!is_file($csvPath)) {
+            $this->error("CSV not found at: {$csvPath}");
             return self::FAILURE;
         }
 
-        $file = new SplFileObject($path, 'r');
+        $chunkSize = max(1, (int)($this->option('chunk') ?: 1000));
+        $forcedEncoding = (string)($this->option('encoding') ?: 'auto');
+
+        // ---- Pass 1: stream CSV -> spill rows into temp files per (store|date) partition ----
+        $partDir = storage_path('app/csv_partitions');
+        if (!is_dir($partDir)) {
+            @mkdir($partDir, 0777, true);
+        } else {
+            // clean previous run
+            foreach (glob($partDir . DIRECTORY_SEPARATOR . '*.jsonl') as $f) {
+                @unlink($f);
+            }
+        }
+
+        $file = new SplFileObject($csvPath, 'r');
         $file->setFlags(SplFileObject::READ_CSV | SplFileObject::SKIP_EMPTY);
 
-        // delimiter
+        // delimiter detection
         $forcedDelim = $this->option('delimiter');
         if ($forcedDelim) {
             $delimiter = ($forcedDelim === 'tab') ? "\t" : ',';
@@ -55,7 +69,7 @@ class singleCsvImporter extends Command
             $header = array_map(fn($h) => is_string($h) ? trim($h) : $h, $header);
         }
 
-        // CSV header -> DB columns
+        // CSV header -> DB columns map
         $map = [
             'Franchise Store'            => 'franchise_store',
             'Business Date'              => 'business_date',
@@ -81,7 +95,7 @@ class singleCsvImporter extends Command
             'Tax Included Amount'        => 'tax_included_amount',
         ];
 
-        // build index map
+        // Build header index map
         $indexes = [];
         if ($hasHeader) {
             foreach ($map as $csvCol => $dbCol) {
@@ -95,10 +109,40 @@ class singleCsvImporter extends Command
             }
         }
 
-        $forcedEncoding = (string)($this->option('encoding') ?: 'auto');
-        $inserted = 0;
         $rowsSeen = 0;
+        $partitions = []; // track which partition files were created
 
+        // Helpers
+        $getStr = function (array $row, string $dbCol) use ($indexes, $forcedEncoding) {
+            $idx = $indexes[$dbCol];
+            if ($idx === null || !array_key_exists($idx, $row)) return null;
+            $raw = $row[$idx];
+            if ($raw === null) return null;
+            $val = is_string($raw) ? trim($raw) : (string)$raw;
+            if ($val === '') return null;
+            return $this->cleanStrStrict($val, $forcedEncoding);
+        };
+        $toDate = function ($v) {
+            if (!$v) return null;
+            $v = trim($v);
+            $dt = DateTime::createFromFormat('n/j/Y', $v)
+                ?: DateTime::createFromFormat('m/d/Y', $v)
+                ?: DateTime::createFromFormat('Y-m-d', $v);
+            return $dt ? $dt->format('Y-m-d') : $v;
+        };
+        $toDateTime = function ($v) {
+            if (!$v) return null;
+            $v = trim($v);
+            $dt = DateTime::createFromFormat('n/j/Y H:i', $v)
+                ?: DateTime::createFromFormat('n/j/Y H:i:s', $v)
+                ?: DateTime::createFromFormat('m/d/Y H:i', $v)
+                ?: DateTime::createFromFormat('m/d/Y H:i:s', $v)
+                ?: DateTime::createFromFormat('Y-m-d H:i', $v)
+                ?: DateTime::createFromFormat('Y-m-d H:i:s', $v);
+            return $dt ? $dt->format('Y-m-d H:i:s') : $v;
+        };
+
+        // PASS 1: write JSONL rows to partition files
         while (!$file->eof()) {
             $row = $file->fgetcsv();
             if ($row === false || $row === null) continue;
@@ -106,88 +150,129 @@ class singleCsvImporter extends Command
 
             $rowsSeen++;
 
-            // accessor that trims + strict UTF-8 conversion
-            $get = function (string $dbCol) use ($row, $indexes, $forcedEncoding) {
-                $idx = $indexes[$dbCol];
-                if ($idx === null || !array_key_exists($idx, $row)) return null;
-                $raw = $row[$idx];
-                if ($raw === null) return null;
-                $val = is_string($raw) ? trim($raw) : (string)$raw;
-                if ($val === '') return null;
-                return $this->cleanStrStrict($val, $forcedEncoding);
-            };
+            $franchise = $getStr($row, 'franchise_store');
+            $bizDate   = $toDate($getStr($row, 'business_date'));
 
-            $toDate = function ($v) {
-                if (!$v) return null;
-                $v = trim($v);
-                // Try common inputs like 9/1/2025, 09/01/2025, 2025-09-01
-                $dt = DateTime::createFromFormat('n/j/Y', $v)
-                    ?: DateTime::createFromFormat('m/d/Y', $v)
-                    ?: DateTime::createFromFormat('Y-m-d', $v);
-                return $dt ? $dt->format('Y-m-d') : $v; // pass-through if already okay
-            };
-            $toDateTime = function ($v) {
-                if (!$v) return null;
-                $v = trim($v);
-                $dt = DateTime::createFromFormat('n/j/Y H:i', $v)
-                    ?: DateTime::createFromFormat('n/j/Y H:i:s', $v)
-                    ?: DateTime::createFromFormat('m/d/Y H:i', $v)
-                    ?: DateTime::createFromFormat('m/d/Y H:i:s', $v)
-                    ?: DateTime::createFromFormat('Y-m-d H:i', $v)
-                    ?: DateTime::createFromFormat('Y-m-d H:i:s', $v);
-                return $dt ? $dt->format('Y-m-d H:i:s') : $v;
-            };
+            // required fields
+            if (empty($franchise) || empty($bizDate)) {
+                continue;
+            }
 
-            $data = [
-                'franchise_store'            => $get('franchise_store'),
-                'business_date'              => $toDate($get('business_date')),
-                'date_time_placed'           => $toDateTime($get('date_time_placed')),
-                'date_time_fulfilled'        => $toDateTime($get('date_time_fulfilled')),
-                'net_amount'                 => $get('net_amount'),
-                'quantity'                   => $get('quantity'),
-                'royalty_item'               => $get('royalty_item'),
-                'taxable_item'               => $get('taxable_item'),
-                'order_id'                   => $get('order_id'),
-                'item_id'                    => $get('item_id'),
-                'menu_item_name'             => $get('menu_item_name'),
-                'menu_item_account'          => $get('menu_item_account'),
-                'bundle_name'                => $get('bundle_name'),
-                'employee'                   => $get('employee'),
-                'override_approval_employee' => $get('override_approval_employee'),
-                'order_placed_method'        => $get('order_placed_method'),
-                'order_fulfilled_method'     => $get('order_fulfilled_method'),
-                'modified_order_amount'      => $get('modified_order_amount'),
-                'modification_reason'        => $get('modification_reason'),
-                'payment_methods'            => $get('payment_methods'),
-                'refunded'                   => $get('refunded'),
-                'tax_included_amount'        => $get('tax_included_amount'),
-                'created_at'                 => now(),
-                'updated_at'                 => now(),
+            // Decode menu_item_name strictly; if undecodable but present, skip row
+            $origName = $indexes['menu_item_name'] !== null ? ($row[$indexes['menu_item_name']] ?? null) : null;
+            $name = $getStr($row, 'menu_item_name');
+            if ($origName !== null && trim((string)$origName) !== '' && $name === null) {
+                // undecodable text -> skip to avoid corruption
+                continue;
+            }
+
+            $record = [
+                'franchise_store'            => $franchise,
+                'business_date'              => $bizDate,
+                'date_time_placed'           => $toDateTime($getStr($row, 'date_time_placed')),
+                'date_time_fulfilled'        => $toDateTime($getStr($row, 'date_time_fulfilled')),
+                'net_amount'                 => $getStr($row, 'net_amount'),
+                'quantity'                   => $getStr($row, 'quantity'),
+                'royalty_item'               => $getStr($row, 'royalty_item'),
+                'taxable_item'               => $getStr($row, 'taxable_item'),
+                'order_id'                   => $getStr($row, 'order_id'),
+                'item_id'                    => $getStr($row, 'item_id'),
+                'menu_item_name'             => $name,
+                'menu_item_account'          => $getStr($row, 'menu_item_account'),
+                'bundle_name'                => $getStr($row, 'bundle_name'),
+                'employee'                   => $getStr($row, 'employee'),
+                'override_approval_employee' => $getStr($row, 'override_approval_employee'),
+                'order_placed_method'        => $getStr($row, 'order_placed_method'),
+                'order_fulfilled_method'     => $getStr($row, 'order_fulfilled_method'),
+                'modified_order_amount'      => $getStr($row, 'modified_order_amount'),
+                'modification_reason'        => $getStr($row, 'modification_reason'),
+                'payment_methods'            => $getStr($row, 'payment_methods'),
+                'refunded'                   => $getStr($row, 'refunded'),
+                'tax_included_amount'        => $getStr($row, 'tax_included_amount'),
             ];
 
-            // required columns per schema
-            if (empty($data['franchise_store']) || empty($data['business_date'])) {
-                continue;
-            }
+            $key = $franchise . '|' . $bizDate;
+            $fileName = $this->partitionPath($partDir, $franchise, $bizDate);
+            $json = json_encode($record, JSON_UNESCAPED_UNICODE);
+            // append line (keeps memory low; opens/closes file per write)
+            file_put_contents($fileName, $json . PHP_EOL, FILE_APPEND | LOCK_EX);
+            $partitions[$key] = $fileName;
 
-            // If menu_item_name existed but failed to decode -> skip to avoid corruption
-            if (($indexes['menu_item_name'] !== null)
-                && isset($row[$indexes['menu_item_name']])
-                && trim((string)$row[$indexes['menu_item_name']]) !== ''
-                && $data['menu_item_name'] === null) {
-                continue;
-            }
-
-            DB::table('order_line')->insert($data);
-            $inserted++;
-
-            if (($inserted % 10000) === 0) {
-                $this->info("Inserted {$inserted} rows...");
+            if (($rowsSeen % 100000) === 0) {
+                $this->info("Pass 1: processed {$rowsSeen} rows...");
             }
         }
 
-        $this->info("Done. Read {$rowsSeen} rows, inserted {$inserted}.");
+        $this->info("Pass 1 complete. Partitions found: " . count($partitions));
+
+        // ---- Pass 2: for each partition -> transaction: delete then bulk insert in chunks ----
+        $totalInserted = 0;
+        foreach ($partitions as $key => $path) {
+            // Derive store/date from filename or read first line
+            [$store, $date] = $this->parsePartitionFromPath($path);
+
+            DB::transaction(function () use ($path, $store, $date, $chunkSize, &$totalInserted) {
+                // fast, indexed delete of the partition
+                DB::table('order_line')
+                    ->where('franchise_store', $store)
+                    ->where('business_date', $date)
+                    ->delete();
+
+                // stream file and insert in chunks
+                $sf = new SplFileObject($path, 'r');
+                $batch = [];
+                $now = now();
+
+                while (!$sf->eof()) {
+                    $line = $sf->fgets();
+                    if ($line === false || trim($line) === '') continue;
+                    $r = json_decode($line, true);
+                    if (!is_array($r)) continue;
+
+                    $r['created_at'] = $now;
+                    $r['updated_at'] = $now;
+
+                    $batch[] = $r;
+                    if (count($batch) >= $chunkSize) {
+                        DB::table('order_line')->insert($batch);
+                        $totalInserted += count($batch);
+                        $batch = [];
+                    }
+                }
+
+                if (!empty($batch)) {
+                    DB::table('order_line')->insert($batch);
+                    $totalInserted += count($batch);
+                }
+            });
+
+            // remove partition file to keep disk tidy
+            @unlink($path);
+            $this->info("Partition {$store} | {$date} done.");
+        }
+
+        $this->info("Import complete. Read {$rowsSeen} rows, inserted {$totalInserted}.");
         return self::SUCCESS;
+    }
+
+    // --- helpers ---
+
+    private function partitionPath(string $dir, string $store, string $date): string
+    {
+        // sanitize for filesystem
+        $safeStore = preg_replace('/[^A-Za-z0-9._-]/', '_', $store);
+        $safeDate  = preg_replace('/[^0-9-]/', '_', $date);
+        return $dir . DIRECTORY_SEPARATOR . "{$safeStore}__{$safeDate}.jsonl";
+    }
+
+    private function parsePartitionFromPath(string $path): array
+    {
+        $base = basename($path, '.jsonl');
+        $parts = explode('__', $base, 2);
+        $store = $parts[0] ?? '';
+        $date  = $parts[1] ?? '';
+        // reverse the sanitization just a bit (store/date characters already safe for queries)
+        return [$store, $date];
     }
 
     /**
@@ -214,7 +299,7 @@ class singleCsvImporter extends Command
 
         $u = @mb_convert_encoding($v, 'UTF-8', $src);
         if ($u === false || !mb_detect_encoding($u, 'UTF-8', true)) {
-            return null; // undecodable; let caller decide (we skip row)
+            return null; // undecodable; caller should skip row
         }
         return $u;
     }
