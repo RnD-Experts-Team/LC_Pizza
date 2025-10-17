@@ -13,52 +13,52 @@ use App\Models\BreadBoostModel;
 class ImportOneTimeOrderLines extends Command
 {
     protected $signature = 'orders:import-onetime
-        {--path= : CSV path (defaults to public/onetimecsv.csv)}
+        {--path= : CSV/TSV path (defaults to public/onetimecsv.csv)}
         {--batch=1000 : DB insert batch size}
         {--delimiter= : Force delimiter ("," or "\t"); auto-detect if omitted}
     ';
 
-    protected $description = 'Stream-import OrderLine for ALL stores/dates in the CSV and run orderline-only logic (Bread Boost).';
+    protected $description = 'Stream-import OrderLine for ALL stores/dates in the file and run Bread Boost logic. OrderLine-only.';
 
-    /** orderline-only header mapping (matches your processOrderLine) */
+    /** mapping identical to your processOrderLine() */
     protected array $columnMap = [
-        'franchise_store' => 'franchisestore',
-        'business_date' => 'businessdate',
-        'date_time_placed' => 'datetimeplaced',
-        'date_time_fulfilled' => 'datetimefulfilled',
-        'net_amount' => 'netamount',
-        'quantity' => 'quantity',
-        'royalty_item' => 'royaltyitem',
-        'taxable_item' => 'taxableitem',
-        'order_id' => 'orderid',
-        'item_id' => 'itemid',
-        'menu_item_name' => 'menuitemname',
-        'menu_item_account' => 'menuitemaccount',
-        'bundle_name' => 'bundlename',
-        'employee' => 'employee',
+        'franchise_store'       => 'franchisestore',
+        'business_date'         => 'businessdate',
+        'date_time_placed'      => 'datetimeplaced',
+        'date_time_fulfilled'   => 'datetimefulfilled',
+        'net_amount'            => 'netamount',
+        'quantity'              => 'quantity',
+        'royalty_item'          => 'royaltyitem',
+        'taxable_item'          => 'taxableitem',
+        'order_id'              => 'orderid',
+        'item_id'               => 'itemid',
+        'menu_item_name'        => 'menuitemname',
+        'menu_item_account'     => 'menuitemaccount',
+        'bundle_name'           => 'bundlename',
+        'employee'              => 'employee',
         'override_approval_employee' => 'overrideapprovalemployee',
-        'order_placed_method' => 'orderplacedmethod',
-        'order_fulfilled_method' => 'orderfulfilledmethod',
+        'order_placed_method'   => 'orderplacedmethod',
+        'order_fulfilled_method'=> 'orderfulfilledmethod',
         'modified_order_amount' => 'modifiedorderamount',
-        'modification_reason' => 'modificationreason',
-        'payment_methods' => 'paymentmethods',
-        'refunded' => 'refunded',
-        'tax_included_amount' => 'taxincludedamount',
+        'modification_reason'   => 'modificationreason',
+        'payment_methods'       => 'paymentmethods',
+        'refunded'              => 'refunded',
+        'tax_included_amount'   => 'taxincludedamount',
     ];
 
-    /** bread boost excludes (from your logic) */
+    /** Bread Boost excludes (from your logic) */
     protected array $breadExcludedItemIds = [
         '-1','6','7','8','9','101001','101002','101288','103044','202901','101289','204100','204200',
     ];
 
     public function handle(): int
     {
-        $path = $this->option('path') ?: public_path('onetimecsv.csv');
+        $path      = $this->option('path') ?: public_path('onetimecsv.csv');
         $batchSize = max(1, (int)($this->option('batch') ?: 1000));
         $delimiter = $this->option('delimiter');
 
         if (!file_exists($path)) {
-            $this->error("CSV not found: {$path}");
+            $this->error("CSV/TSV not found: {$path}");
             return self::FAILURE;
         }
 
@@ -77,46 +77,55 @@ class ImportOneTimeOrderLines extends Command
             return self::FAILURE;
         }
 
-        // read + normalize header
+        // header
         $header = fgetcsv($h, 0, $delimiter);
         if ($header === false) {
             fclose($h);
-            $this->error('Empty or invalid CSV header.');
+            $this->error('Empty or invalid header.');
             return self::FAILURE;
         }
-        $normalizedHeader = array_map(fn($k) => str_replace(' ', '', strtolower(trim((string)$k))), $header);
+        $normalizedHeader = array_map(
+            fn($k) => str_replace(' ', '', strtolower(trim((string)$k))),
+            $header
+        );
 
-        // per-partition state
-        $cleared = [];                 // set of "store|date" partitions we already deleted
-        $buffers = [];                 // "store|date" => row[]
-        $partitionsSeen = [];          // unique partitions for later logic
+        // partition state
+        $cleared        = [];  // "store|date" => true (deleted already)
+        $buffers        = [];  // "store|date" => rows[]
+        $partitionsSeen = [];  // "store|date" => ['store'=>..., 'date'=>...]
 
         $rowsTotal = 0;
 
         while (($row = fgetcsv($h, 0, $delimiter)) !== false) {
-            if ($this->isEmptyRow($row)) continue;
+            if ($this->rowIsEmpty($row)) continue;
             if (count($row) !== count($normalizedHeader)) continue;
 
-            $values = array_map('trim', $row);
-            $r = array_combine($normalizedHeader, $values);
+            // build assoc row with normalized keys
+            $values = array_map(fn($v) => $this->trimCell($v), $row);
+            $assoc  = array_combine($normalizedHeader, $values);
 
-            $mapped = $this->mapOrderLineRow($r);
-            if (!$mapped['franchise_store'] || !$mapped['business_date']) {
+            // map + normalize to app schema
+            $mapped = $this->mapOrderLineRow($assoc);
+
+            $store = (string)($mapped['franchise_store'] ?? '');
+            $date  = (string)($mapped['business_date'] ?? '');
+
+            if ($store === '' || $date === '') {
                 // skip rows missing required partition keys
                 continue;
             }
 
-            $key = $mapped['franchise_store'] . '|' . $mapped['business_date'];
+            $key = $store.'|'.$date;
 
-            // first time we see this partition -> clear existing DB rows once
+            // first time seeing this partition -> delete existing
             if (!isset($cleared[$key])) {
-                DB::transaction(function () use ($mapped) {
-                    OrderLine::where('franchise_store', $mapped['franchise_store'])
-                        ->where('business_date', $mapped['business_date'])
+                DB::transaction(function () use ($store, $date) {
+                    OrderLine::where('franchise_store', $store)
+                        ->where('business_date', $date)
                         ->delete();
                 });
                 $cleared[$key] = true;
-                $partitionsSeen[$key] = ['store' => $mapped['franchise_store'], 'date' => $mapped['business_date']];
+                $partitionsSeen[$key] = ['store' => $store, 'date' => $date];
             }
 
             // buffer + chunked insert
@@ -129,8 +138,8 @@ class ImportOneTimeOrderLines extends Command
             }
         }
 
-        // flush all remaining buffers
-        foreach ($buffers as $key => $buf) {
+        // flush leftovers
+        foreach ($buffers as $buf) {
             if (!empty($buf)) {
                 OrderLine::insert($buf);
                 $rowsTotal += count($buf);
@@ -139,25 +148,32 @@ class ImportOneTimeOrderLines extends Command
 
         fclose($h);
         $this->newLine();
-        $this->info("Inserted {$rowsTotal} order_line rows across ".count($partitionsSeen)." partitions.");
+        $this->info("Inserted {$rowsTotal} order_line rows across ".count($partitionsSeen)." (store,date) partitions.");
 
-        // ====== ORDERLINE-ONLY LOGIC: BREAD BOOST per (store,date) ======
-        $this->info('Running Bread Boost (orderline-only) for all partitions...');
+        // ========= ORDERLINE-ONLY LOGIC: Bread Boost for every partition =========
+        $this->info('Running Bread Boost for all partitions...');
         $bbUpserts = 0;
 
         foreach ($partitionsSeen as $p) {
             $store = $p['store'];
             $date  = $p['date'];
 
-            // fetch only needed columns
+            // get only needed columns
             $lines = OrderLine::query()
                 ->where('franchise_store', $store)
                 ->where('business_date', $date)
-                ->get(['order_id','item_id','menu_item_name','order_fulfilled_method','order_placed_method','bundle_name']);
+                ->get([
+                    'order_id',
+                    'item_id',
+                    'menu_item_name',
+                    'order_fulfilled_method',
+                    'order_placed_method',
+                    'bundle_name',
+                ]);
 
             if ($lines->isEmpty()) continue;
 
-            // classic orders = Classic Pepperoni / Classic Cheese
+            // classic orders (carryout channels)
             $classicOrders = $lines
                 ->whereIn('menu_item_name', ['Classic Pepperoni', 'Classic Cheese'])
                 ->whereIn('order_fulfilled_method', ['Register', 'Drive-Thru'])
@@ -190,7 +206,7 @@ class ImportOneTimeOrderLines extends Command
                 ->unique()
                 ->count();
 
-            // upsert bread_boost
+            // upsert to bread_boost
             BreadBoostModel::upsert([[
                 'franchise_store'         => $store,
                 'business_date'           => $date,
@@ -206,26 +222,31 @@ class ImportOneTimeOrderLines extends Command
         }
 
         $this->info("Bread Boost upserts: {$bbUpserts}");
-
         return self::SUCCESS;
     }
 
-    /* ---------------- helpers ---------------- */
+    /* ===================== helpers ===================== */
+
+    private function trimCell($v): string
+    {
+        // keep empty cells as empty strings, strip quotes/spaces
+        return trim((string)$v, " \t\n\r\0\x0B\"'");
+    }
 
     private function detectDelimiter(string $path): string
     {
         $first = '';
         $h = fopen($path, 'r');
         if ($h !== false) {
-            $first = fgets($h, 4096) ?: '';
+            $first = fgets($h, 8192) ?: '';
             fclose($h);
         }
         $commas = substr_count($first, ',');
-        $tabs = substr_count($first, "\t");
+        $tabs   = substr_count($first, "\t");
         return $tabs > $commas ? "\t" : ",";
     }
 
-    private function isEmptyRow(array $row): bool
+    private function rowIsEmpty(array $row): bool
     {
         foreach ($row as $cell) {
             if (trim((string)$cell) !== '') return false;
@@ -233,33 +254,78 @@ class ImportOneTimeOrderLines extends Command
         return true;
     }
 
-    private function mapOrderLineRow(array $normalizedRow): array
+    private function mapOrderLineRow(array $csv): array
     {
         $out = [];
         foreach ($this->columnMap as $appKey => $csvKey) {
-            $val = $normalizedRow[$csvKey] ?? null;
-            if (in_array($appKey, ['date_time_placed','date_time_fulfilled'], true)) {
-                $val = $this->parseDateTime($val);
+            $val = $csv[$csvKey] ?? null;
+
+            if (is_string($val)) {
+                $val = $this->trimCell($val);
             }
+
+            if ($appKey === 'business_date') {
+                $val = $this->parseDate($val); // <-- normalize to Y-m-d
+            } elseif (in_array($appKey, ['date_time_placed','date_time_fulfilled'], true)) {
+                $val = $this->parseDateTime($val); // <-- normalize to Y-m-d H:i:s
+            }
+
             $out[$appKey] = $val;
         }
         return $out;
     }
 
-    private function parseDateTime($dateTimeString)
+    private function parseDate(?string $dateString): ?string
     {
-        if (empty($dateTimeString)) return null;
+        if (!$dateString) return null;
 
-        $dateTimeString = Str::of((string)$dateTimeString)->replace('Z', '')->trim();
+        // try common formats first
+        $try = ['n/j/Y', 'm/d/Y', 'Y-m-d'];
+        foreach ($try as $fmt) {
+            try {
+                return Carbon::createFromFormat($fmt, $dateString)->format('Y-m-d');
+            } catch (\Throwable $e) {}
+        }
+        // fallback
         try {
-            $dt = Carbon::createFromFormat('m-d-Y h:i:s A', (string)$dateTimeString);
-            return $dt->format('Y-m-d H:i:s');
-        } catch (\Throwable $e) {}
-        try {
-            $dt = Carbon::parse((string)$dateTimeString);
-            return $dt->format('Y-m-d H:i:s');
+            return Carbon::parse($dateString)->format('Y-m-d');
         } catch (\Throwable $e) {
-            Log::error("Error parsing datetime string: {$dateTimeString} - {$e->getMessage()}");
+            Log::error("Error parsing date: {$dateString} - {$e->getMessage()}");
+            return null;
+        }
+    }
+
+    private function parseDateTime(?string $dateTimeString): ?string
+    {
+        if (!$dateTimeString) return null;
+
+        $s = Str::of($dateTimeString)->replace('Z', '')->trim()->toString();
+
+        // try multiple formats (24h + 12h)
+        $formats = [
+            'n/j/Y H:i',      // 9/1/2025 19:41
+            'm/d/Y H:i',
+            'n/j/Y H:i:s',
+            'm/d/Y H:i:s',
+            'n/j/Y h:i A',    // 9/1/2025 07:41 PM
+            'm/d/Y h:i A',
+            'n/j/Y h:i:s A',
+            'm/d/Y h:i:s A',
+            'Y-m-d H:i:s',
+            'Y-m-d H:i',
+            'm-d-Y h:i:s A',  // legacy in your service
+        ];
+        foreach ($formats as $fmt) {
+            try {
+                return Carbon::createFromFormat($fmt, $s)->format('Y-m-d H:i:s');
+            } catch (\Throwable $e) {}
+        }
+
+        // fallback
+        try {
+            return Carbon::parse($s)->format('Y-m-d H:i:s');
+        } catch (\Throwable $e) {
+            Log::error("Error parsing datetime: {$dateTimeString} - {$e->getMessage()}");
             return null;
         }
     }
