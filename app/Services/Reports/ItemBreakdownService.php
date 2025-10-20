@@ -28,7 +28,7 @@ class ItemBreakdownService
     private const BUCKETS = [
         'in_store' => [
             'label'     => 'In Store',
-            'placed'    => ['Register','Drive Thru','SoundHoundAgent','Phone'],
+            'placed'    => ['Register','Drive Thru','SoundHoundAgent','Phone','CallCenterAgent'],
             'fulfilled' => ['Register','Drive-Thru'],
         ],
         'lc_pickup' => [
@@ -38,7 +38,7 @@ class ItemBreakdownService
         ],
         'lc_delivery' => [
             'label'     => 'LC Delivery',
-            'placed'    => ['Website','Mobile'],
+            'placed'    => ['Website','Mobile','CallCenterAgent','SoundHoundAgent'],
             'fulfilled' => ['Delivery'],
         ],
         'third_party' => [
