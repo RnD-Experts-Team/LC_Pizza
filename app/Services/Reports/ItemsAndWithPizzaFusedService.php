@@ -27,7 +27,7 @@ class ItemsAndWithPizzaFusedService
         'lc_pickup' => [
             'label'     => 'LC Pickup',
             'placed'    => ['Website','Mobile'],
-            'fulfilled' => ['Register','Drive-Thru'],
+            'fulfilled' => ['Register','Drive-Thru','In Store Only'],
         ],
         'lc_delivery' => [
             'label'     => 'LC Delivery',
