@@ -97,11 +97,10 @@ class SingleLogicDataImporter extends Command
             $this->line('Valid keys: '.implode(', ', self::LOGIC_KEYS));
         }
 
-        Log::info('Dates to process: ' . json_encode($dates));
         $this->info('Processing ' . count($dates) . ' date(s): ' . implode(', ', $dates));
 
         foreach ($dates as $date) {
-            Log::info('Start logic for: ' . $date);
+            // Log::info('Start logic for: ' . $date);
             $this->info("Processing date: {$date}");
 
             $data = $this->processModelData($date);

@@ -25,7 +25,7 @@ class LogicsAndQueriesServices
                 '-' => ['column' => 'gross_sales', 'type' => 'sum'],
             ],
             'Order_Count' => [
-                '-' => ['column' => 'order_id', 'type' => 'count'], // count distinct order IDs
+                '-' => ['column' => 'customer_count', 'type' => 'sum'], 
             ],
             'Tips' => [
                 'DeliveryTip' => ['column' => 'delivery_tip', 'type' => 'sum'],
