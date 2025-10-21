@@ -26,13 +26,18 @@ class SingleCsvImporter extends Command
     {
         parent::__construct();
 
-        // Per-target configuration (models remain untouched)
         $this->cfg = [
-            // --- order_line: mirrors your existing mapping ---
+            // ===== order_line =====
             'order_line' => [
                 'table'       => 'order_line',
                 'required'    => ['franchise_store', 'business_date'],
                 'partitionBy' => ['franchise_store', 'business_date'],
+                'allowed'     => [
+                    'franchise_store','business_date','date_time_placed','date_time_fulfilled','net_amount',
+                    'quantity','royalty_item','taxable_item','order_id','item_id','menu_item_name','menu_item_account',
+                    'bundle_name','employee','override_approval_employee','order_placed_method','order_fulfilled_method',
+                    'modified_order_amount','modification_reason','payment_methods','refunded','tax_included_amount',
+                ],
                 'dateCols'    => ['business_date' => true],
                 'datetimeCols'=> ['date_time_placed' => true, 'date_time_fulfilled' => true],
                 'headerMap'   => [
@@ -59,68 +64,79 @@ class SingleCsvImporter extends Command
                     'Refunded'                   => 'refunded',
                     'Tax Included Amount'        => 'tax_included_amount',
                 ],
-                // For free text, if source has non-empty but decoding fails -> skip row
                 'strictField' => 'menu_item_name',
             ],
 
-            // --- detail_orders: maps the headers you provided (PascalCase, commas) ---
+            // ===== detail_orders =====
             'detail_orders' => [
                 'table'       => 'detail_orders',
                 'required'    => ['franchise_store', 'business_date'],
                 'partitionBy' => ['franchise_store', 'business_date'],
+                // EXACTLY your model’s $fillable (we only insert these)
+                'allowed'     => [
+                    'franchise_store','business_date','date_time_placed','date_time_fulfilled','royalty_obligation',
+                    'quantity','customer_count','order_id','taxable_amount','non_taxable_amount','tax_exempt_amount',
+                    'non_royalty_amount','sales_tax','employee','gross_sales','occupational_tax','override_approval_employee',
+                    'order_placed_method','delivery_tip','delivery_tip_tax','order_fulfilled_method','delivery_fee',
+                    'modified_order_amount','delivery_fee_tax','modification_reason','payment_methods','delivery_service_fee',
+                    'delivery_service_fee_tax','refunded','delivery_small_order_fee','delivery_small_order_fee_tax',
+                    'transaction_type','store_tip_amount','promise_date','tax_exemption_id','tax_exemption_entity_name',
+                    'user_id','hnrOrder','broken_promise','portal_eligible','portal_used','put_into_portal_before_promise_time',
+                    'portal_compartments_used','time_loaded_into_portal',
+                ],
                 'dateCols'    => ['business_date' => true, 'promise_date' => true],
                 'datetimeCols'=> [
                     'date_time_placed'        => true,
                     'date_time_fulfilled'     => true,
                     'time_loaded_into_portal' => true,
-                    'date_time_promised'      => true, // exists in CSV; ok if nullable in DB
+                    // NOTE: DateTimePromised exists in CSV but NOT in allowed list → ignored automatically
                 ],
                 'headerMap'   => [
-                    'FranchiseStore'                => 'franchise_store',
-                    'BusinessDate'                  => 'business_date',
-                    'DateTimePlaced'                => 'date_time_placed',
-                    'DateTimeFulfilled'             => 'date_time_fulfilled',
-                    'RoyaltyObligation'             => 'royalty_obligation',
-                    'Quantity'                      => 'quantity',
-                    'CustomerCount'                 => 'customer_count',
-                    'OrderId'                       => 'order_id',
-                    'TaxableAmount'                 => 'taxable_amount',
-                    'NonTaxableAmount'              => 'non_taxable_amount',
-                    'TaxExemptAmount'               => 'tax_exempt_amount',
-                    'NonRoyaltyAmount'              => 'non_royalty_amount',
-                    'SalesTax'                      => 'sales_tax',
-                    'Employee'                      => 'employee',
-                    'GrossSales'                    => 'gross_sales',
-                    'OccupationalTax'               => 'occupational_tax',
-                    'OverrideApprovalEmployee'      => 'override_approval_employee',
-                    'OrderPlacedMethod'             => 'order_placed_method',
-                    'DeliveryTip'                   => 'delivery_tip',
-                    'DeliveryTipTax'                => 'delivery_tip_tax',
-                    'OrderFulfilledMethod'          => 'order_fulfilled_method',
-                    'DeliveryFee'                   => 'delivery_fee',
-                    'ModifiedOrderAmount'           => 'modified_order_amount',
-                    'DeliveryFeeTax'                => 'delivery_fee_tax',
-                    'ModificationReason'            => 'modification_reason',
-                    'PaymentMethods'                => 'payment_methods',
-                    'DeliveryServiceFee'            => 'delivery_service_fee',
-                    'DeliveryServiceFeeTax'         => 'delivery_service_fee_tax',
-                    'Refunded'                      => 'refunded',
-                    'DeliverySmallOrderFee'         => 'delivery_small_order_fee',
-                    'DeliverySmallOrderFeeTax'      => 'delivery_small_order_fee_tax',
-                    'TransactionType'               => 'transaction_type',
-                    'StoreTipAmount'                => 'store_tip_amount',
-                    'PromiseDate'                   => 'promise_date',
-                    'TaxExemptionId'                => 'tax_exemption_id',
-                    'TaxExemptionEntityName'        => 'tax_exemption_entity_name',
-                    'UserId'                        => 'user_id',
-                    'DateTimePromised'              => 'date_time_promised',
-                    'hnrOrder'                      => 'hnrOrder',
-                    'BrokenPromise'                 => 'broken_promise',
-                    'PortalEligible'                => 'portal_eligible',
-                    'PortalUsed'                    => 'portal_used',
-                    'TimeLoadedIntoPortal'          => 'time_loaded_into_portal',
-                    'PutIntoPortalBeforePromiseTime'=> 'put_into_portal_before_promise_time',
-                    'PortalCompartmentsUsed'        => 'portal_compartments_used',
+                    'FranchiseStore'                 => 'franchise_store',
+                    'BusinessDate'                   => 'business_date',
+                    'DateTimePlaced'                 => 'date_time_placed',
+                    'DateTimeFulfilled'              => 'date_time_fulfilled',
+                    'RoyaltyObligation'              => 'royalty_obligation',
+                    'Quantity'                       => 'quantity',
+                    'CustomerCount'                  => 'customer_count',
+                    'OrderId'                        => 'order_id',
+                    'TaxableAmount'                  => 'taxable_amount',
+                    'NonTaxableAmount'               => 'non_taxable_amount',
+                    'TaxExemptAmount'                => 'tax_exempt_amount',
+                    'NonRoyaltyAmount'               => 'non_royalty_amount',
+                    'SalesTax'                       => 'sales_tax',
+                    'Employee'                       => 'employee',
+                    'GrossSales'                     => 'gross_sales',
+                    'OccupationalTax'                => 'occupational_tax',
+                    'OverrideApprovalEmployee'       => 'override_approval_employee',
+                    'OrderPlacedMethod'              => 'order_placed_method',
+                    'DeliveryTip'                    => 'delivery_tip',
+                    'DeliveryTipTax'                 => 'delivery_tip_tax',
+                    'OrderFulfilledMethod'           => 'order_fulfilled_method',
+                    'DeliveryFee'                    => 'delivery_fee',
+                    'ModifiedOrderAmount'            => 'modified_order_amount',
+                    'DeliveryFeeTax'                 => 'delivery_fee_tax',
+                    'ModificationReason'             => 'modification_reason',
+                    'PaymentMethods'                 => 'payment_methods',
+                    'DeliveryServiceFee'             => 'delivery_service_fee',
+                    'DeliveryServiceFeeTax'          => 'delivery_service_fee_tax',
+                    'Refunded'                       => 'refunded',
+                    'DeliverySmallOrderFee'          => 'delivery_small_order_fee',
+                    'DeliverySmallOrderFeeTax'       => 'delivery_small_order_fee_tax',
+                    'TransactionType'                => 'transaction_type',
+                    'StoreTipAmount'                 => 'store_tip_amount',
+                    'PromiseDate'                    => 'promise_date',
+                    'TaxExemptionId'                 => 'tax_exemption_id',
+                    'TaxExemptionEntityName'         => 'tax_exemption_entity_name',
+                    'UserId'                         => 'user_id',
+                    'DateTimePromised'               => 'date_time_promised', // from CSV, will be IGNORED later
+                    'hnrOrder'                       => 'hnrOrder',
+                    'BrokenPromise'                  => 'broken_promise',
+                    'PortalEligible'                 => 'portal_eligible',
+                    'PortalUsed'                     => 'portal_used',
+                    'TimeLoadedIntoPortal'           => 'time_loaded_into_portal',
+                    'PutIntoPortalBeforePromiseTime' => 'put_into_portal_before_promise_time',
+                    'PortalCompartmentsUsed'         => 'portal_compartments_used',
                 ],
                 'strictField' => null,
             ],
@@ -129,7 +145,6 @@ class SingleCsvImporter extends Command
 
     public function handle(): int
     {
-        // Keep memory flat & proper charset for MySQL
         DB::connection()->disableQueryLog();
         DB::statement("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
 
@@ -151,7 +166,7 @@ class SingleCsvImporter extends Command
         $forcedEncoding = (string)($this->option('encoding') ?: 'auto');
         $hasHeader      = !$this->option('skip-header');
 
-        // partitions dir (fresh every run)
+        // fresh partitions dir
         $partDir = storage_path('app/csv_partitions');
         if (!is_dir($partDir)) {
             @mkdir($partDir, 0777, true);
@@ -176,21 +191,20 @@ class SingleCsvImporter extends Command
         }
         $file->setCsvControl($delimiter);
 
-        // ---- Read header ----
+        // ---- header ----
         $header = $hasHeader ? $file->fgetcsv() : null;
         if ($hasHeader && (!$header || $header === false)) {
             $this->error('Unable to read CSV header.');
             return self::FAILURE;
         }
         if ($header) {
-            // Trim + strip BOM on first cell
             $header = array_map(fn($h) => is_string($h) ? trim($h) : $h, $header);
             if (isset($header[0]) && is_string($header[0])) {
                 $header[0] = ltrim($header[0], "\xEF\xBB\xBF");
             }
         }
 
-        // Normalizer: remove non-alphanumerics + lowercase (spaces/underscores/case-insensitive)
+        // normalize headers
         $normalize = function (?string $s): string {
             $s = (string)$s;
             $s = trim($s);
@@ -198,7 +212,7 @@ class SingleCsvImporter extends Command
             return strtolower($s);
         };
 
-        // Build lookup: normalized header => index
+        // map normalized header => index
         $indexByNorm = [];
         if ($hasHeader) {
             foreach ($header as $i => $h) {
@@ -206,7 +220,7 @@ class SingleCsvImporter extends Command
             }
         }
 
-        // Build $indexes for the current model config
+        // build indexes
         $indexes = [];
         if ($hasHeader) {
             foreach ($cfg['headerMap'] as $csvCol => $dbCol) {
@@ -220,7 +234,7 @@ class SingleCsvImporter extends Command
             }
         }
 
-        // Sanity check: required partition columns must be present
+        // ensure required partition headers exist
         [$storeCol, $dateCol] = $cfg['partitionBy'];
         if (($indexes[$storeCol] ?? null) === null || ($indexes[$dateCol] ?? null) === null) {
             $this->error('Required headers for partitioning not found.');
@@ -231,8 +245,9 @@ class SingleCsvImporter extends Command
 
         $rowsSeen   = 0;
         $partitions = [];
+        $allowedSet = array_flip($cfg['allowed']);
 
-        // Helpers
+        // helpers
         $getStr = function (array $row, string $dbCol) use ($indexes, $forcedEncoding) {
             $idx = $indexes[$dbCol] ?? null;
             if ($idx === null || !array_key_exists($idx, $row)) return null;
@@ -265,7 +280,7 @@ class SingleCsvImporter extends Command
         $this->info("Pass 1/2 (model={$modelKey}): streaming & partitioning…");
         $t0 = microtime(true);
 
-        // PASS 1: stream -> partitions
+        // PASS 1
         while (!$file->eof()) {
             $row = $file->fgetcsv();
             if ($row === false || $row === null) continue;
@@ -273,13 +288,13 @@ class SingleCsvImporter extends Command
 
             $rowsSeen++;
 
-            // Build record from headerMap
+            // build record from headerMap
             $record = [];
             foreach ($cfg['headerMap'] as $_csv => $dbCol) {
                 $record[$dbCol] = $getStr($row, $dbCol);
             }
 
-            // Normalize dates/datetimes
+            // normalize dates/datetimes
             foreach (array_keys($cfg['dateCols'] ?? []) as $dbCol) {
                 if (array_key_exists($dbCol, $record)) {
                     $record[$dbCol] = $toDate($record[$dbCol]);
@@ -291,18 +306,21 @@ class SingleCsvImporter extends Command
                 }
             }
 
-            // required
+            // filter to allowed columns ONLY (drop unknowns like date_time_promised)
+            $record = array_intersect_key($record, $allowedSet);
+
+            // required checks
             foreach ($cfg['required'] as $req) {
                 if (empty($record[$req])) continue 2;
             }
 
-            // undecodable guard for free-text (order_line only)
+            // undecodable guard for order_line free-text
             if (!empty($cfg['strictField'])) {
                 $sf  = $cfg['strictField'];
                 $idx = $indexes[$sf] ?? null;
                 if ($idx !== null) {
                     $orig = $row[$idx];
-                    if ($orig !== null && trim((string)$orig) !== '' && $record[$sf] === null) {
+                    if ($orig !== null && trim((string)$orig) !== '' && ($record[$sf] ?? null) === null) {
                         continue; // skip undecodable row
                     }
                 }
@@ -331,10 +349,10 @@ class SingleCsvImporter extends Command
             number_format(count($partitions))
         ));
 
-        // PASS 2: per-partition delete+insert
+        // PASS 2
         $this->info("Pass 2/2: deleting & inserting per partition…");
         $totalInserted = 0;
-        $i = 0; $n = count($partitions);
+        $i=0; $n = count($partitions);
 
         foreach ($partitions as $key => $path) {
             $i++;
@@ -356,6 +374,7 @@ class SingleCsvImporter extends Command
                     $r = json_decode($line, true);
                     if (!is_array($r)) continue;
 
+                    // r is already filtered to allowed keys
                     $r['created_at'] = $now;
                     $r['updated_at'] = $now;
                     $batch[] = $r;
@@ -386,8 +405,6 @@ class SingleCsvImporter extends Command
         return self::SUCCESS;
     }
 
-    // --- helpers ---
-
     private function partitionPath(string $dir, string $store, string $date): string
     {
         $safeStore = preg_replace('/[^A-Za-z0-9._-]/', '_', $store);
@@ -402,9 +419,6 @@ class SingleCsvImporter extends Command
         return [$parts[0] ?? '', $parts[1] ?? ''];
     }
 
-    /**
-     * Strict UTF-8 conversion; return null if undecodable.
-     */
     private function cleanStrStrict(?string $v, string $forced = 'auto'): ?string
     {
         if ($v === null) return null;
