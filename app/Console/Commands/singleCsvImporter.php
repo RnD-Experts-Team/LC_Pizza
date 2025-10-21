@@ -280,11 +280,11 @@ class SingleCsvImporter extends Command
             $partitions[$store.'|'.$date] = $fileName;
 
             if (($rowsSeen % 100000) === 0) {
-                $this->info(sprintf("  • %,d rows streamed (%.1fs)", $rowsSeen, microtime(true)-$t0));
+$this->info(sprintf("  • %s rows streamed (%.1fs)", number_format($rowsSeen), microtime(true)-$t0));
             }
         }
 
-        $this->info(sprintf("Pass 1 complete: %,d rows, %,d partitions.", $rowsSeen, count($partitions)));
+$this->info(sprintf("Pass 1 complete: %s rows, %s partitions.", number_format($rowsSeen), number_format(count($partitions))));
 
         // PASS 2: per-partition delete+insert
         $this->info("Pass 2/2: deleting & inserting per partition…");
@@ -328,10 +328,10 @@ class SingleCsvImporter extends Command
             });
 
             @unlink($path);
-            $this->info(sprintf("  [%d/%d] %s | %s done (total inserted: %,d)", $i, $n, $store, $date, $totalInserted));
+$this->info(sprintf("  [%d/%d] %s | %s done (total inserted: %s)", $i, $n, $store, $date, number_format($totalInserted)));
         }
 
-        $this->info(sprintf("ALL DONE (model=%s). Read %,d rows, inserted %,d.", $modelKey, $rowsSeen, $totalInserted));
+$this->info(sprintf("ALL DONE (model=%s). Read %s rows, inserted %s.", $modelKey, number_format($rowsSeen), number_format($totalInserted)));
         return self::SUCCESS;
     }
 
