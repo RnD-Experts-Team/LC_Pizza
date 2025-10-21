@@ -256,7 +256,7 @@ class InsertDataServices{
         ],
         'detail_orders' => [
             'model'      => \App\Models\DetailOrder::class,
-            'unique'     => ['franchise_store', 'business_date', 'order_id'],
+            'unique'     => ['franchise_store', 'business_date', 'order_id','transaction_type'],
             'updateCols' => [
                 'date_time_placed',
                     'date_time_fulfilled',

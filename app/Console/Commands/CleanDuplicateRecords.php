@@ -26,13 +26,12 @@ class CleanDuplicateRecords extends Command
         }
 
         $tables = [
-            'detail_orders' => ['franchise_store', 'business_date', 'order_id'],
+            'detail_orders' => ['franchise_store', 'business_date', 'order_id', 'transaction_type'],
             'cash_management' => ['franchise_store','business_date','create_datetime', 'till', 'check_type'],
             'financial_views' => ['franchise_store', 'business_date', 'sub_account', 'area'],
             'summary_items' => ['franchise_store', 'business_date', 'menu_item_name', 'item_id'],
             'summary_sales' => ['franchise_store', 'business_date'],
             'summary_transactions' => ['franchise_store', 'business_date', 'payment_method', 'sub_payment_method'],
-            'order_line' => ['franchise_store', 'business_date', 'order_id', 'item_id'],
             'online_discount_program' => ['franchise_store', 'date', 'order_id'],
             'delivery_order_summary' => ['franchise_store', 'date'],
             'third_party_marketplace_orders' => ['franchise_store', 'date'],
