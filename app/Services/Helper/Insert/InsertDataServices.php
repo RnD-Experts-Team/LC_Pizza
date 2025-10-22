@@ -501,11 +501,11 @@ class InsertDataServices{
 
         $this->loopInsertHelper($data,'detail_orders',$chunkSize);
     }
-    //OrderLine
-    public function insertOrderLine(array $data, int $chunkSize = 500){
+    // //OrderLine
+    // public function insertOrderLine(array $data, int $chunkSize = 500){
 
-        $this->loopInsertHelper($data,'order_line',$chunkSize);
-    }
+    //     $this->loopInsertHelper($data,'order_line',$chunkSize);
+    // }
 
     /**
      * @param  int    $chunkSize  How many rows per batch (default 1000)

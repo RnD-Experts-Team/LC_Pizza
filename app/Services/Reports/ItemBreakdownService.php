@@ -6,22 +6,6 @@ use App\Models\OrderLine;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 
-/**
- * ItemBreakdownService
- *
- * Memory-safe, Eloquent-only (no raw SQL) item analytics:
- * - Top 10 Pizza (by total net_amount)
- * - Top 3 Bread (by total net_amount)
- * - Wings, Crazy Puffs, Cookie, Beverage, Sides (per item)
- *
- * Always filtered by franchise_store + business_date range.
- * Bucket-aware (In Store, LC Pickup, LC Delivery, 3rd Party) + All Buckets.
- *
- * Implementation notes:
- * - Uses ONLY scalar aggregates (sum(), count()) and a single first() per item to fetch name/price.
- * - Never pulls large collections to PHP.
- * - Sorting for "top" lists is done on tiny in-memory arrays of ~IDs with scalar totals.
- */
 class ItemBreakdownService
 {
     /** @var array<string, array{label:string, placed:string[]|null, fulfilled:string[]|null}> */
@@ -46,7 +30,6 @@ class ItemBreakdownService
             'placed'    => ['UberEats','Grubhub','DoorDash'],
             'fulfilled' => ['Delivery'],
         ],
-        // All buckets combined (no placed/fulfilled filter)
         'all' => [
             'label'     => 'All Buckets',
             'placed'    => null,
@@ -75,22 +58,6 @@ class ItemBreakdownService
     private const BEVERAGE_IDS     = [204100, 204200];
     private const SIDES_IDS        = [206117, 103002];
 
-    /**
-     * Public API: compute all item groups for each bucket plus "all".
-     *
-     * @return array{
-     *   buckets: array<string, array{
-     *     label: string,
-     *     pizza_top10: array<int, array{item_id:int,menu_item_name:string,unit_price:float,total_sales:float,entries_count:int}>,
-     *     bread_top3: array<int, array{item_id:int,menu_item_name:string,unit_price:float,total_sales:float,entries_count:int}>,
-     *     wings: array<int, array{item_id:int,menu_item_name:string,unit_price:float,total_sales:float,entries_count:int}>,
-     *     crazy_puffs: array<int, array{item_id:int,menu_item_name:string,unit_price:float,total_sales:float,entries_count:int}>,
-     *     cookie: array<int, array{item_id:int,menu_item_name:string,unit_price:float,total_sales:float,entries_count:int}>,
-     *     beverage: array<int, array{item_id:int,menu_item_name:string,unit_price:float,total_sales:float,entries_count:int}>,
-     *     sides: array<int, array{item_id:int,menu_item_name:string,unit_price:float,total_sales:float,entries_count:int}>
-     *   }>
-     * }
-     */
     public function breakdown(string $franchiseStore, $fromDate, $toDate): array
     {
         $from = $fromDate instanceof Carbon ? $fromDate->toDateString() : Carbon::parse($fromDate)->toDateString();
@@ -101,35 +68,32 @@ class ItemBreakdownService
         foreach (self::BUCKETS as $key => $rules) {
             $base = $this->baseQuery($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled']);
 
-            // PIZZA: compute totals per id (scalar sum per id), then sort desc & pick top 10
+            // PIZZA: totals & top 10
             $pizzaTotals = $this->totalsByIds($base, self::PIZZA_IDS);
-            arsort($pizzaTotals); // high to low by total_sales
+            arsort($pizzaTotals);
             $topPizzaIds = array_slice(array_keys($pizzaTotals), 0, 10);
 
-            // BREAD: same, pick top 3
+            // BREAD: totals & top 3
             $breadTotals = $this->totalsByIds($base, self::BREAD_IDS);
             arsort($breadTotals);
             $topBreadIds = array_slice(array_keys($breadTotals), 0, 3);
 
             $out['buckets'][$key] = [
                 'label'        => $rules['label'],
-                'pizza_top10'  => $this->materializeItems($base, $topPizzaIds),
-                'bread_top3'   => $this->materializeItems($base, $topBreadIds),
-                'wings'        => $this->materializeItems($base, self::WINGS_IDS),
-                'crazy_puffs'  => $this->materializeItems($base, self::CRAZY_PUFFS_IDS),
-                'cookie'       => $this->materializeItems($base, self::COOKIE_IDS),
-                'beverage'     => $this->materializeItems($base, self::BEVERAGE_IDS),
-                'sides'        => $this->materializeItems($base, self::SIDES_IDS),
+                // NOTE: pass $franchiseStore/$from/$to so unit_price can be sourced from Register/Register rows
+                'pizza_top10'  => $this->materializeItems($base, $topPizzaIds, $franchiseStore, $from, $to),
+                'bread_top3'   => $this->materializeItems($base, $topBreadIds, $franchiseStore, $from, $to),
+                'wings'        => $this->materializeItems($base, self::WINGS_IDS, $franchiseStore, $from, $to),
+                'crazy_puffs'  => $this->materializeItems($base, self::CRAZY_PUFFS_IDS, $franchiseStore, $from, $to),
+                'cookie'       => $this->materializeItems($base, self::COOKIE_IDS, $franchiseStore, $from, $to),
+                'beverage'     => $this->materializeItems($base, self::BEVERAGE_IDS, $franchiseStore, $from, $to),
+                'sides'        => $this->materializeItems($base, self::SIDES_IDS, $franchiseStore, $from, $to),
             ];
         }
 
         return $out;
     }
 
-    /**
-     * Build a base query with store/date and optional bucket method filters.
-     * We only add filters; no selections or raw expressions.
-     */
     private function baseQuery(
         string $franchiseStore,
         string $from,
@@ -151,17 +115,10 @@ class ItemBreakdownService
         return $q;
     }
 
-    /**
-     * Compute scalar totals for a set of item_ids using sum('net_amount').
-     * @param  Builder $base  (already contains store/date/bucket filters)
-     * @param  int[]   $ids
-     * @return array<int,float>   [item_id => total_sales]
-     */
     private function totalsByIds(Builder $base, array $ids): array
     {
         $out = [];
         foreach ($ids as $id) {
-            // clone base to keep it clean per iteration
             $sum = (clone $base)
                 ->where('item_id', (string)$id)
                 ->sum('net_amount');
@@ -172,63 +129,95 @@ class ItemBreakdownService
     }
 
     /**
-     * For each item_id, materialize the full record:
-     * - total_sales (sum)
-     * - entries_count (count)
-     * - menu_item_name + unit_price (from first row with quantity > 0; fallback to any row)
+     * Materialize rows for the provided item IDs.
+     * - total_sales: sum over the (possibly bucket-filtered) base
+     * - entries_count: count over the (possibly bucket-filtered) base
+     * - unit_price: FIRST row in date range with Register/Register and empty/null bundle & mod reason
      *
-     * Uses only scalar operations; no raw SQL.
+     * If no qualifying unit-price row exists, fallback to the latest row (bucket-filtered) as before.
      *
      * @param  Builder $base
      * @param  int[]   $ids
+     * @param  string  $franchiseStore
+     * @param  string  $from
+     * @param  string  $to
      * @return array<int, array{item_id:int,menu_item_name:string,unit_price:float,total_sales:float,entries_count:int}>
      */
-    private function materializeItems(Builder $base, array $ids): array
-    {
+    private function materializeItems(
+        Builder $base,
+        array $ids,
+        string $franchiseStore,
+        string $from,
+        string $to
+    ): array {
         $rows = [];
         foreach ($ids as $id) {
             $idStr = (string) $id;
 
-            // total sales
+            // total sales (bucket-aware)
             $total = (float) (clone $base)
                 ->where('item_id', $idStr)
                 ->sum('net_amount');
 
-            // count of entries
+            // count of entries (bucket-aware)
             $count = (int) (clone $base)
                 ->where('item_id', $idStr)
                 ->count();
 
-            // fetch one row to derive name & unit price
-            $row = (clone $base)
+            // -------- NEW: derive unit price from FIRST qualifying Register/Register row in date range --------
+            $priceRow = OrderLine::query()
+                ->where('franchise_store', $franchiseStore)
+                ->whereBetween('business_date', [$from, $to])
                 ->where('item_id', $idStr)
                 ->where('quantity', '>', 0)
-                ->orderBy('business_date', 'desc')  // deterministic latest price
+                ->where('order_placed_method', 'Register')
+                ->where('order_fulfilled_method', 'Register')
+                ->where(function ($q) {
+                    $q->whereNull('bundle_name')->orWhere('bundle_name', '');
+                })
+                ->where(function ($q) {
+                    $q->whereNull('modification_reason')->orWhere('modification_reason', '');
+                })
+                ->orderBy('business_date', 'asc') // FIRST in the range
                 ->first(['menu_item_name', 'net_amount', 'quantity']);
 
-            if (!$row) {
-                // fallback to any row if all quantities are zero/null
-                $row = (clone $base)
+            $name  = $priceRow?->menu_item_name ?? '';
+
+            $price = ($priceRow && (float)$priceRow->quantity !== 0.0)
+                ? (float) $priceRow->net_amount / (float) $priceRow->quantity
+                : null;
+
+            // Fallback if no qualifying price row: use latest bucket-filtered row (original behavior)
+            if ($price === null) {
+                $fallbackRow = (clone $base)
                     ->where('item_id', $idStr)
+                    ->where('quantity', '>', 0)
                     ->orderBy('business_date', 'desc')
                     ->first(['menu_item_name', 'net_amount', 'quantity']);
-            }
 
-            $name  = $row?->menu_item_name ?? '';
-            $price = ($row && (float)$row->quantity !== 0.0)
-                ? (float) $row->net_amount / (float) $row->quantity
-                : 0.0;
+                if (!$fallbackRow) {
+                    $fallbackRow = (clone $base)
+                        ->where('item_id', $idStr)
+                        ->orderBy('business_date', 'desc')
+                        ->first(['menu_item_name', 'net_amount', 'quantity']);
+                }
+
+                $name = $name !== '' ? $name : ($fallbackRow?->menu_item_name ?? '');
+                $price = ($fallbackRow && (float)$fallbackRow->quantity !== 0.0)
+                    ? (float) $fallbackRow->net_amount / (float) $fallbackRow->quantity
+                    : 0.0;
+            }
 
             $rows[] = [
                 'item_id'        => (int) $id,
                 'menu_item_name' => (string) $name,
                 'unit_price'     => (float) $price,
-                'total_sales'     => (float) $total,
-                'entries_count'   => (int) $count,
+                'total_sales'    => (float) $total,
+                'entries_count'  => (int) $count,
             ];
         }
 
-        // For deterministic ordering, sort by total_sales desc when we didn't pre-limit
+        // Deterministic ordering by total_sales desc
         usort($rows, function ($a, $b) {
             if ($a['total_sales'] === $b['total_sales']) return 0;
             return ($a['total_sales'] < $b['total_sales']) ? 1 : -1;
