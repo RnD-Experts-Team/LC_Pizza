@@ -117,7 +117,7 @@ Artisan::command('lc:import-additional-report-data {--date=}', function () {
 
 
 })->purpose('Import LC Report Data')
-  ->dailyAt('09:20')
+  ->dailyAt('10:20')
   ->timezone('America/New_York')
   ->withoutOverlapping()
   ->onOneServer()

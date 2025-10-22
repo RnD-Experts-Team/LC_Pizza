@@ -84,11 +84,12 @@ class SingleCsvImporter extends Command
                     'user_id','hnrOrder','broken_promise','portal_eligible','portal_used','put_into_portal_before_promise_time',
                     'portal_compartments_used','time_loaded_into_portal',
                 ],
-                'dateCols'    => ['business_date' => true, 'promise_date' => true],
+                'dateCols'    => ['business_date' => true,],
                 'datetimeCols'=> [
                     'date_time_placed'        => true,
                     'date_time_fulfilled'     => true,
                     'time_loaded_into_portal' => true,
+                    'promise_date'            => true,
                     // NOTE: DateTimePromised exists in CSV but NOT in allowed list → ignored automatically
                 ],
                 'headerMap'   => [
