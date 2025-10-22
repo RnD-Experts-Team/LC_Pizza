@@ -128,7 +128,6 @@ class SingleCsvImporter extends Command
                     'StoreTipAmount'                 => 'store_tip_amount',
 
                     // map BOTH headers to the SAME db column; DateTimePromised is preferred
-                    'PromiseDate'                    => 'promise_date',       // fallback if CSV has only this
                     'DateTimePromised'               => 'promise_date',       // preferred source (e.g. 9/9/2025 16:03)
 
                     'TaxExemptionId'                 => 'tax_exemption_id',
