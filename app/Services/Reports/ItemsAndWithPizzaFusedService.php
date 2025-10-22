@@ -229,86 +229,88 @@ class ItemsAndWithPizzaFusedService
     }
 
     /**
-     * NEW:
-     * Precompute unit prices for all relevant items once (same across buckets).
-     * Rule: first (business_date ASC) row in range where:
-     *   placed='Register' AND fulfilled='Register'
-     *   AND bundle_name IS NULL/'' AND modification_reason IS NULL/''
-     *   AND quantity > 0
-     * Fallback: if none found, use latest (business_date DESC) row with quantity > 0 (no extra conditions).
-     *
-     * @param string|null $store
-     * @param string      $from
-     * @param string      $to
-     * @param string[]    $relevantIdStr
-     * @return array<string,float>  [item_id_string => unit_price]
-     */
-    private function precomputeUnitPrices(?string $store, string $from, string $to, array $relevantIdStr): array
-    {
-        $unit = [];
+ * Precompute unit prices for all relevant items once (same across buckets).
+ * If a store is provided (and not "all"), use that store.
+ * Otherwise, force store = "03795-00001".
+ *
+ * Rule: first (business_date ASC) row in range where:
+ *   placed='Register' AND fulfilled='Register'
+ *   AND bundle_name IS NULL/'' AND modification_reason IS NULL/''
+ *   AND quantity > 0
+ * Fallback: if none found, use latest (business_date DESC) row with quantity > 0 (no extra conditions).
+ *
+ * @param string|null $store
+ * @param string      $from
+ * @param string      $to
+ * @param string[]    $relevantIdStr
+ * @return array<string,float>  [item_id_string => unit_price]
+ */
+private function precomputeUnitPrices(?string $store, string $from, string $to, array $relevantIdStr): array
+{
+    $unit = [];
 
-        // ---------- Primary: first qualifying Register/Register row ----------
-        $q = DB::table('order_line')
-            ->select(['id','item_id','net_amount','quantity','business_date'])
-            ->whereBetween('business_date', [$from, $to])
-            ->whereIn('item_id', $relevantIdStr)
-            ->where('quantity', '>', 0)
-            ->where('order_placed_method', 'Register')
-            ->where('order_fulfilled_method', 'Register')
-            ->where(function ($q) {
-                $q->whereNull('bundle_name')->orWhere('bundle_name', '');
-            })
-            ->where(function ($q) {
-                $q->whereNull('modification_reason')->orWhere('modification_reason', '');
-            });
+    // Decide which store to use for UNIT PRICE lookup
+    $storeForPrice = ($store !== null && $store !== '' && strtolower($store) !== 'all')
+        ? $store
+        : '03795-00001';
 
-        if ($store !== null && $store !== '' && strtolower($store) !== 'all') {
-            $q->where('franchise_store', $store);
-        }
+    // ---------- Primary: first qualifying Register/Register row ----------
+    $q = DB::table('order_line')
+        ->select(['id','item_id','net_amount','quantity','business_date'])
+        ->whereBetween('business_date', [$from, $to])
+        ->where('franchise_store', $storeForPrice) // <-- always fixed store for price
+        ->whereIn('item_id', $relevantIdStr)
+        ->where('quantity', '>', 0)
+        ->where('order_placed_method', 'Register')
+        ->where('order_fulfilled_method', 'Register')
+        ->where(function ($q) {
+            $q->whereNull('bundle_name')->orWhere('bundle_name', '');
+        })
+        ->where(function ($q) {
+            $q->whereNull('modification_reason')->orWhere('modification_reason', '');
+        });
 
-        // We need "first by date" per item. Iterate in ascending date order and take the first occurrence per item_id.
-        $q->orderBy('business_date', 'asc')->orderBy('id', 'asc')
-          ->chunk(5000, function ($rows) use (&$unit) {
-              foreach ($rows as $r) {
-                  $id = (string) $r->item_id;
-                  if (!isset($unit[$id])) {
-                      $qty = (float) ($r->quantity ?? 0);
-                      if ($qty !== 0.0) {
-                          $unit[$id] = (float) $r->net_amount / $qty;
-                      }
+    // "first by date" per item
+    $q->orderBy('business_date', 'asc')->orderBy('id', 'asc')
+      ->chunk(5000, function ($rows) use (&$unit) {
+          foreach ($rows as $r) {
+              $id = (string) $r->item_id;
+              if (!isset($unit[$id])) {
+                  $qty = (float) ($r->quantity ?? 0);
+                  if ($qty !== 0.0) {
+                      $unit[$id] = (float) $r->net_amount / $qty;
                   }
               }
-          });
+          }
+      });
 
-        // ---------- Fallback: latest qty>0 row in range if still missing ----------
-        $missing = array_values(array_diff($relevantIdStr, array_keys($unit)));
-        if (!empty($missing)) {
-            $fq = DB::table('order_line')
-                ->select(['id','item_id','net_amount','quantity','business_date'])
-                ->whereBetween('business_date', [$from, $to])
-                ->whereIn('item_id', $missing)
-                ->where('quantity', '>', 0);
+    // ---------- Fallback: latest qty>0 row in range if still missing ----------
+    $missing = array_values(array_diff($relevantIdStr, array_keys($unit)));
+    if (!empty($missing)) {
+        $fq = DB::table('order_line')
+            ->select(['id','item_id','net_amount','quantity','business_date'])
+            ->whereBetween('business_date', [$from, $to])
+            ->where('franchise_store', $storeForPrice) // <-- same fixed store for price
+            ->whereIn('item_id', $missing)
+            ->where('quantity', '>', 0);
 
-            if ($store !== null && $store !== '' && strtolower($store) !== 'all') {
-                $fq->where('franchise_store', $store);
-            }
-
-            // iterate latest-to-oldest and take the first we see per item
-            $seen = [];
-            $fq->orderBy('business_date', 'desc')->orderBy('id', 'desc')
-               ->chunk(5000, function ($rows) use (&$unit, &$seen) {
-                   foreach ($rows as $r) {
-                       $id = (string) $r->item_id;
-                       if (isset($seen[$id])) { continue; }
-                       $qty = (float) ($r->quantity ?? 0);
-                       if ($qty !== 0.0) {
-                           $unit[$id] = (float) $r->net_amount / $qty;
-                           $seen[$id] = true;
-                       }
+        // iterate latest-to-oldest and take the first we see per item
+        $seen = [];
+        $fq->orderBy('business_date', 'desc')->orderBy('id', 'desc')
+           ->chunk(5000, function ($rows) use (&$unit, &$seen) {
+               foreach ($rows as $r) {
+                   $id = (string) $r->item_id;
+                   if (isset($seen[$id])) { continue; }
+                   $qty = (float) ($r->quantity ?? 0);
+                   if ($qty !== 0.0) {
+                       $unit[$id] = (float) $r->net_amount / $qty;
+                       $seen[$id] = true;
                    }
-               });
-        }
-
-        return $unit;
+               }
+           });
     }
+
+    return $unit;
+}
+
 }
