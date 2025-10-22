@@ -464,7 +464,7 @@ class LogicsAndQueriesServices
 
             $Sales_Tax_Delivery = $OrderRows
                 ->where('order_fulfilled_method', 'Delivery')
-                ->whereIn('order_placed_method', ['Mobile', 'Website','SoundHoundAgent'])
+                ->whereIn('order_placed_method', ['Mobile', 'Website', 'SoundHoundAgent', 'CallCenterAgent'])
                 ->sum('sales_tax');
 
 
@@ -560,13 +560,13 @@ class LogicsAndQueriesServices
                 ->Count();
 
             $Agent_Pre_Paid = $OrderRows
-                ->where('order_placed_method', 'SoundHoundAgent')
+                ->whereIn('order_placed_method', ['SoundHoundAgent', 'CallCenterAgent'])
                 ->where('order_fulfilled_method', 'Delivery')
                 ->where('royalty_obligation', '!=', 0)
                 ->Count();
 
             $Agent_Pay_In_Store = $OrderRows
-                ->where('order_placed_method', 'SoundHoundAgent')
+                ->whereIn('order_placed_method', ['SoundHoundAgent','CallCenterAgent'])
                 ->whereIn('order_fulfilled_method', ['Register', 'Drive-Thru'])
                 ->where('royalty_obligation', '!=', 0)
                 ->Count();
@@ -736,8 +736,8 @@ class LogicsAndQueriesServices
                 ->sum('royalty_obligation');
 
             $callCenterAgent = $OrderRows
-                ->where('order_placed_method', 'SoundHoundAgent')
-                ->sum('royalty_obligation');
+    ->whereIn('order_placed_method', ['SoundHoundAgent', 'CallCenterAgent'])
+    ->sum('royalty_obligation');
 
             $driveThruSales = $OrderRows
                 ->where('order_placed_method', 'Drive Thru')
@@ -941,7 +941,7 @@ class LogicsAndQueriesServices
             'hour'              => $hour,
             'total_sales'       => $hourOrders->sum('royalty_obligation'),
             'phone_sales'       => $hourOrders->where('order_placed_method', 'Phone')->sum('royalty_obligation'),
-            'call_center_sales' => $hourOrders->where('order_placed_method', 'SoundHoundAgent')->sum('royalty_obligation'),
+            'call_center_sales' => $hourOrders->whereIn('order_placed_method', ['SoundHoundAgent', 'CallCenterAgent'])->sum('royalty_obligation'),
             'drive_thru_sales'  => $hourOrders->where('order_placed_method', 'Drive Thru')->sum('royalty_obligation'),
             'website_sales'     => $hourOrders
                     ->where('order_placed_method', 'Website')
