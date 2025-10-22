@@ -5,17 +5,6 @@ namespace App\Services\Reports;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
-/**
- * ItemsAndWithPizzaFusedService (timeout-safe)
- *
- * Same output + rules as your current version, but:
- *  - Uses Query Builder (no Eloquent model hydration / no casting overhead)
- *  - Two-pass per chunk using a SET of pizza order_ids (no big per-order arrays)
- *  - Adaptive chunk size for "All" store (smaller to reduce peak work)
- *  - Tracks latest business_date per item_id to compute unit price (qty>0)
- *
- * Still 100% "Laravel queries only". No direct SQL (only Builder).
- */
 class ItemsAndWithPizzaFusedService
 {
     private const BUCKETS = [
@@ -54,12 +43,12 @@ class ItemsAndWithPizzaFusedService
         202001,201112,101541,202011,201412,101403,201043,101378,101542,201044,201049,201118,201120,201111,201109,
         201140,202212,202003,201426,201058
     ];
-    private const BREAD_IDS      = [103044,103003,201343,103001,203004,203003,103033,203010];
-    private const WINGS_IDS      = [105001];
-    private const CRAZY_PUFFS_IDS= [103033, 103044];
-    private const COOKIE_IDS     = [101288, 101289];
-    private const BEVERAGE_IDS   = [204100, 204200];
-    private const SIDES_IDS      = [206117, 103002];
+    private const BREAD_IDS       = [103044,103003,201343,103001,203004,203003,103033,203010];
+    private const WINGS_IDS       = [105001];
+    private const CRAZY_PUFFS_IDS = [103033, 103044];
+    private const COOKIE_IDS      = [101288, 101289];
+    private const BEVERAGE_IDS    = [204100, 204200];
+    private const SIDES_IDS       = [206117, 103002];
 
     // ===== Public API =====
     public function compute(?string $franchiseStore, $fromDate, $toDate): array
@@ -90,6 +79,9 @@ class ItemsAndWithPizzaFusedService
         $relevantIdStr  = array_map('strval', $relevantIds);
         $relevantIdFlip = array_fill_keys($relevantIdStr, true); // tiny in-memory set
 
+        // === NEW: Precompute unit prices ONCE for the whole period (same across buckets) ===
+        $unitPriceByItem = $this->precomputeUnitPrices($franchiseStore, $from, $to, $relevantIdStr);
+
         foreach (self::BUCKETS as $key => $rules) {
             $label = $rules['label'];
 
@@ -97,8 +89,6 @@ class ItemsAndWithPizzaFusedService
             $sumByItem   = [];
             $countByItem = [];
             $nameByItem  = [];
-            $priceByItem = [];
-            $latestDate  = []; // item_id => Y-m-d string for most recent qty>0 row used for price
 
             $countCzb = 0; $countCok = 0; $countSau = 0; $countWin = 0; $pizzaBase = 0;
 
@@ -114,7 +104,7 @@ class ItemsAndWithPizzaFusedService
                 })
                 ->orderBy('id')
                 ->chunkById($chunkSize, function ($rows) use (
-                    &$sumByItem, &$countByItem, &$nameByItem, &$priceByItem, &$latestDate,
+                    &$sumByItem, &$countByItem, &$nameByItem,
                     &$pizzaBase, &$countCzb, &$countCok, &$countSau, &$countWin,
                     $relevantIdFlip
                 ) {
@@ -123,25 +113,16 @@ class ItemsAndWithPizzaFusedService
                     foreach ($rows as $r) {
                         $orderId = (string) ($r->order_id ?? '');
                         $itemId  = (string) ($r->item_id ?? '');
-                        $qty     = (float)  ($r->quantity ?? 0);
                         $amt     = (float)  ($r->net_amount ?? 0);
                         $name    = (string) ($r->menu_item_name ?? '');
-                        $bDate   = (string) ($r->business_date ?? '');
 
                         // Item breakdown only for relevant IDs (avoid any accidental pollution)
                         if (isset($relevantIdFlip[$itemId])) {
                             $sumByItem[$itemId]   = ($sumByItem[$itemId]   ?? 0.0) + $amt;
                             $countByItem[$itemId] = ($countByItem[$itemId] ?? 0) + 1;
 
-                            if ($qty !== 0.0) {
-                                // keep the latest business_date's unit price
-                                if (!isset($latestDate[$itemId]) || $bDate > $latestDate[$itemId]) {
-                                    $latestDate[$itemId] = $bDate;
-                                    $priceByItem[$itemId] = $amt / $qty;
-                                    if ($name !== '') { $nameByItem[$itemId] = $name; }
-                                }
-                            } elseif (!isset($nameByItem[$itemId]) && $name !== '') {
-                                // capture a name even if qty=0 rows dominate
+                            // capture a name (doesn't affect price; price is precomputed)
+                            if (!isset($nameByItem[$itemId]) && $name !== '') {
                                 $nameByItem[$itemId] = $name;
                             }
                         }
@@ -169,14 +150,14 @@ class ItemsAndWithPizzaFusedService
                 }, 'id', 'id');
 
             // Build breakdown rows (sorted desc by total_sales)
-            $buildRows = function (array $ids) use ($sumByItem, $countByItem, $nameByItem, $priceByItem): array {
+            $buildRows = function (array $ids) use ($sumByItem, $countByItem, $nameByItem, $unitPriceByItem): array {
                 $rows = [];
                 foreach ($ids as $intId) {
                     $id = (string) $intId;
                     $rows[] = [
                         'item_id'        => (int) $intId,
                         'menu_item_name' => $nameByItem[$id]  ?? '',
-                        'unit_price'     => (float) ($priceByItem[$id] ?? 0.0),
+                        'unit_price'     => (float) ($unitPriceByItem[$id] ?? 0.0), // SAME across buckets
                         'total_sales'    => (float) ($sumByItem[$id]   ?? 0.0),
                         'entries_count'  => (int)   ($countByItem[$id] ?? 0),
                     ];
@@ -185,7 +166,7 @@ class ItemsAndWithPizzaFusedService
                 return $rows;
             };
 
-            // === Item breakdown payload (with all the sections you want) ===
+            // === Item breakdown payload ===
             $itemRes['buckets'][$key] = [
                 'label'        => $label,
                 'pizza_top10'  => array_slice($buildRows(self::PIZZA_IDS), 0, 10),
@@ -245,5 +226,89 @@ class ItemsAndWithPizzaFusedService
         }
 
         return $q;
+    }
+
+    /**
+     * NEW:
+     * Precompute unit prices for all relevant items once (same across buckets).
+     * Rule: first (business_date ASC) row in range where:
+     *   placed='Register' AND fulfilled='Register'
+     *   AND bundle_name IS NULL/'' AND modification_reason IS NULL/''
+     *   AND quantity > 0
+     * Fallback: if none found, use latest (business_date DESC) row with quantity > 0 (no extra conditions).
+     *
+     * @param string|null $store
+     * @param string      $from
+     * @param string      $to
+     * @param string[]    $relevantIdStr
+     * @return array<string,float>  [item_id_string => unit_price]
+     */
+    private function precomputeUnitPrices(?string $store, string $from, string $to, array $relevantIdStr): array
+    {
+        $unit = [];
+
+        // ---------- Primary: first qualifying Register/Register row ----------
+        $q = DB::table('order_line')
+            ->select(['id','item_id','net_amount','quantity','business_date'])
+            ->whereBetween('business_date', [$from, $to])
+            ->whereIn('item_id', $relevantIdStr)
+            ->where('quantity', '>', 0)
+            ->where('order_placed_method', 'Register')
+            ->where('order_fulfilled_method', 'Register')
+            ->where(function ($q) {
+                $q->whereNull('bundle_name')->orWhere('bundle_name', '');
+            })
+            ->where(function ($q) {
+                $q->whereNull('modification_reason')->orWhere('modification_reason', '');
+            });
+
+        if ($store !== null && $store !== '' && strtolower($store) !== 'all') {
+            $q->where('franchise_store', $store);
+        }
+
+        // We need "first by date" per item. Iterate in ascending date order and take the first occurrence per item_id.
+        $q->orderBy('business_date', 'asc')->orderBy('id', 'asc')
+          ->chunk(5000, function ($rows) use (&$unit) {
+              foreach ($rows as $r) {
+                  $id = (string) $r->item_id;
+                  if (!isset($unit[$id])) {
+                      $qty = (float) ($r->quantity ?? 0);
+                      if ($qty !== 0.0) {
+                          $unit[$id] = (float) $r->net_amount / $qty;
+                      }
+                  }
+              }
+          });
+
+        // ---------- Fallback: latest qty>0 row in range if still missing ----------
+        $missing = array_values(array_diff($relevantIdStr, array_keys($unit)));
+        if (!empty($missing)) {
+            $fq = DB::table('order_line')
+                ->select(['id','item_id','net_amount','quantity','business_date'])
+                ->whereBetween('business_date', [$from, $to])
+                ->whereIn('item_id', $missing)
+                ->where('quantity', '>', 0);
+
+            if ($store !== null && $store !== '' && strtolower($store) !== 'all') {
+                $fq->where('franchise_store', $store);
+            }
+
+            // iterate latest-to-oldest and take the first we see per item
+            $seen = [];
+            $fq->orderBy('business_date', 'desc')->orderBy('id', 'desc')
+               ->chunk(5000, function ($rows) use (&$unit, &$seen) {
+                   foreach ($rows as $r) {
+                       $id = (string) $r->item_id;
+                       if (isset($seen[$id])) { continue; }
+                       $qty = (float) ($r->quantity ?? 0);
+                       if ($qty !== 0.0) {
+                           $unit[$id] = (float) $r->net_amount / $qty;
+                           $seen[$id] = true;
+                       }
+                   }
+               });
+        }
+
+        return $unit;
     }
 }
