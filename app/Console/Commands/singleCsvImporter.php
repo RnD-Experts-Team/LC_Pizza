@@ -83,12 +83,14 @@ class SingleCsvImporter extends Command
                     'user_id','hnrOrder','broken_promise','portal_eligible','portal_used','put_into_portal_before_promise_time',
                     'portal_compartments_used','time_loaded_into_portal',
                 ],
-                // promise_date is a DATE in DB; keep it under dateCols
-                'dateCols'    => ['business_date' => true, 'promise_date' => true],
+                // keep business_date as DATE only
+                'dateCols'    => ['business_date' => true],
+                // parse promise_date as DATETIME to match the service transformer
                 'datetimeCols'=> [
                     'date_time_placed'        => true,
                     'date_time_fulfilled'     => true,
                     'time_loaded_into_portal' => true,
+                    'promise_date'            => true, // <-- moved here
                 ],
                 'headerMap'   => [
                     'FranchiseStore'                 => 'franchise_store',
@@ -124,11 +126,16 @@ class SingleCsvImporter extends Command
                     'DeliverySmallOrderFeeTax'       => 'delivery_small_order_fee_tax',
                     'TransactionType'                => 'transaction_type',
                     'StoreTipAmount'                 => 'store_tip_amount',
-                    'PromiseDate'                    => 'promise_date',
+
+                    // map BOTH headers to the SAME db column; DateTimePromised is preferred
+                    'PromiseDate'                    => 'promise_date',       // fallback if CSV has only this
+                    'DateTimePromised'               => 'promise_date',       // preferred source (e.g. 9/9/2025 16:03)
+
                     'TaxExemptionId'                 => 'tax_exemption_id',
                     'TaxExemptionEntityName'         => 'tax_exemption_entity_name',
                     'UserId'                         => 'user_id',
-                    'DateTimePromised'               => 'date_time_promised', // ignored automatically
+
+                    // keep as ignored (not in allowed[])
                     'hnrOrder'                       => 'hnrOrder',
                     'BrokenPromise'                  => 'broken_promise',
                     'PortalEligible'                 => 'portal_eligible',
@@ -219,17 +226,23 @@ class SingleCsvImporter extends Command
             }
         }
 
-        // build indexes
+        // build indexes (do not overwrite a non-null index; lets DateTimePromised win but keeps PromiseDate as fallback)
         $indexes = [];
         if ($hasHeader) {
             foreach ($cfg['headerMap'] as $csvCol => $dbCol) {
                 $norm = $normalize($csvCol);
-                $indexes[$dbCol] = $indexByNorm[$norm] ?? null;
+                $idx  = $indexByNorm[$norm] ?? null;
+
+                if (!array_key_exists($dbCol, $indexes) || $indexes[$dbCol] === null) {
+                    $indexes[$dbCol] = $idx;
+                }
             }
         } else {
             $i = 0;
             foreach ($cfg['headerMap'] as $_ => $dbCol) {
-                $indexes[$dbCol] = $i++;
+                if (!array_key_exists($dbCol, $indexes)) {
+                    $indexes[$dbCol] = $i++;
+                }
             }
         }
 
@@ -256,62 +269,32 @@ class SingleCsvImporter extends Command
             if ($val === '') return null;
             return $this->cleanStrStrict($val, $forcedEncoding);
         };
-
-        // ---- improved, tolerant date parser (fixes promise_date) ----
         $toDate = function ($v) {
             if (!$v) return null;
             $v = trim($v);
-
-            // Accept ISO 8601 like 2024-09-05T00:00:00Z
-            $vv = rtrim(str_replace('T', ' ', $v), 'Z');
-
-            // Try a wide set of formats (date-only and date-time), both slashes and dashes, with/without seconds, with/without AM/PM
-            $formats = [
-                // date-only
-                'n/j/Y','m/d/Y','Y-m-d','n-j-Y','m-d-Y',
-                // 24h date-time
-                'n/j/Y H:i','n/j/Y H:i:s','m/d/Y H:i','m/d/Y H:i:s','n-j-Y H:i','n-j-Y H:i:s','m-d-Y H:i','m-d-Y H:i:s','Y-m-d H:i','Y-m-d H:i:s',
-                // 12h date-time with AM/PM
-                'n/j/Y h:i A','n/j/Y h:i:s A','m/d/Y h:i A','m/d/Y h:i:s A','n-j-Y h:i A','n-j-Y h:i:s A','m-d-Y h:i A','m-d-Y h:i:s A',
-            ];
-
-            foreach ($formats as $fmt) {
-                $dt = DateTime::createFromFormat($fmt, $vv);
-                if ($dt instanceof DateTime) {
-                    return $dt->format('Y-m-d'); // force DATE for DB
-                }
-            }
-
-            // final fallback: strtotime (will also handle bare ISO)
-            $ts = strtotime($vv);
-            return $ts ? date('Y-m-d', $ts) : $v;
+            $dt = DateTime::createFromFormat('n/j/Y', $v)
+                ?: DateTime::createFromFormat('m/d/Y', $v)
+                ?: DateTime::createFromFormat('Y-m-d', $v);
+            return $dt ? $dt->format('Y-m-d') : $v;
         };
-
-        // Keep existing datetime behavior, but make it tolerant to ISO T/Z too
         $toDateTime = function ($v) {
             if (!$v) return null;
             $v = trim($v);
-            $vv = rtrim(str_replace('T', ' ', $v), 'Z');
-
-            $formats = [
-                'n/j/Y H:i','n/j/Y H:i:s','m/d/Y H:i','m/d/Y H:i:s','n-j-Y H:i','n-j-Y H:i:s','m-d-Y H:i','m-d-Y H:i:s',
-                'Y-m-d H:i','Y-m-d H:i:s',
-                'n/j/Y h:i A','n/j/Y h:i:s A','m/d/Y h:i A','m/d/Y h:i:s A','n-j-Y h:i A','n-j-Y h:i:s A','m-d-Y h:i A','m-d-Y h:i:s A',
-            ];
-            foreach ($formats as $fmt) {
-                $dt = DateTime::createFromFormat($fmt, $vv);
-                if ($dt instanceof DateTime) {
-                    return $dt->format('Y-m-d H:i:s');
-                }
-            }
-            $ts = strtotime($vv);
-            return $ts ? date('Y-m-d H:i:s', $ts) : $v;
+            $dt = DateTime::createFromFormat('n/j/Y H:i', $v)
+                ?: DateTime::createFromFormat('n/j/Y H:i:s', $v)
+                ?: DateTime::createFromFormat('m/d/Y H:i', $v)
+                ?: DateTime::createFromFormat('m/d/Y H:i:s', $v)
+                ?: DateTime::createFromFormat('Y-m-d H:i', $v)
+                ?: DateTime::createFromFormat('Y-m-d H:i:s', $v);
+            return $dt ? $dt->format('Y-m-d H:i:s') : $v;
         };
 
         $this->info("Pass 1/2 (model={$modelKey}): streaming & partitioning…");
         $t0 = microtime(true);
 
         // PASS 1
+        $file->rewind();
+        if ($hasHeader) { $file->fgetcsv(); } // skip header row we already read
         while (!$file->eof()) {
             $row = $file->fgetcsv();
             if ($row === false || $row === null) continue;
@@ -328,7 +311,7 @@ class SingleCsvImporter extends Command
             // normalize dates/datetimes
             foreach (array_keys($cfg['dateCols'] ?? []) as $dbCol) {
                 if (array_key_exists($dbCol, $record)) {
-                    $record[$dbCol] = $toDate($record[$dbCol]);        // <-- promise_date fixed here
+                    $record[$dbCol] = $toDate($record[$dbCol]);
                 }
             }
             foreach (array_keys($cfg['datetimeCols'] ?? []) as $dbCol) {
@@ -337,7 +320,7 @@ class SingleCsvImporter extends Command
                 }
             }
 
-            // filter to allowed columns ONLY (drop unknowns like date_time_promised)
+            // filter to allowed columns ONLY (drops anything not in allowed[])
             $record = array_intersect_key($record, $allowedSet);
 
             // required checks
@@ -405,7 +388,6 @@ class SingleCsvImporter extends Command
                     $r = json_decode($line, true);
                     if (!is_array($r)) continue;
 
-                    // r is already filtered to allowed keys
                     $r['created_at'] = $now;
                     $r['updated_at'] = $now;
                     $batch[] = $r;
