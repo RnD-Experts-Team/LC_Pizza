@@ -151,20 +151,27 @@ class ItemsAndWithPizzaFusedService
 
             // Build breakdown rows (sorted desc by total_sales)
             $buildRows = function (array $ids) use ($sumByItem, $countByItem, $nameByItem, $unitPriceByItem): array {
-                $rows = [];
-                foreach ($ids as $intId) {
-                    $id = (string) $intId;
-                    $rows[] = [
-                        'item_id'        => (int) $intId,
-                        'menu_item_name' => $nameByItem[$id]  ?? '',
-                        'unit_price'     => (float) ($unitPriceByItem[$id] ?? 0.0), // SAME across buckets
-                        'total_sales'    => (float) ($sumByItem[$id]   ?? 0.0),
-                        'entries_count'  => (int)   ($countByItem[$id] ?? 0),
-                    ];
-                }
-                usort($rows, fn($a,$b) => $b['total_sales'] <=> $a['total_sales']);
-                return $rows;
-            };
+    $rows = [];
+    foreach ($ids as $intId) {
+        $id = (string) $intId;
+        $rows[] = [
+            'item_id'        => (int) $intId,
+            'menu_item_name' => $nameByItem[$id]  ?? '',
+            'unit_price'     => (float) ($unitPriceByItem[$id] ?? 0.0), // SAME across buckets
+            'total_sales'    => (float) ($sumByItem[$id]   ?? 0.0),
+            'entries_count'  => (int)   ($countByItem[$id] ?? 0),
+        ];
+    }
+
+    // Sort by count desc, then sales desc
+    usort($rows, function ($a, $b) {
+        $cmp = $b['entries_count'] <=> $a['entries_count'];
+        if ($cmp !== 0) { return $cmp; }
+        return $b['total_sales'] <=> $a['total_sales'];
+    });
+
+    return $rows;
+};
 
             // === Item breakdown payload ===
             $itemRes['buckets'][$key] = [
