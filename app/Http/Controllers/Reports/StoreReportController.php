@@ -55,6 +55,7 @@ class StoreReportController extends Controller
                 'overview'        => $this->overview->overview($store, $from, $to),
                 'item_breakdown'  => $fused['item_breakdown'],
                 'sold_with_pizza' => $fused['sold_with_pizza'],
+                'all_items_union' => $fused['all_items_union'],  // IDs that appeared at least once anywhere
             ],
         ]);
     }
