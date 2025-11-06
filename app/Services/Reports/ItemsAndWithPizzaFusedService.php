@@ -51,7 +51,7 @@ class ItemsAndWithPizzaFusedService
     private const SIDES_IDS       = [206117, 103002];
 
     // ===== Public API =====
-     public function compute(?string $franchiseStore, $fromDate, $toDate): array
+    public function compute(?string $franchiseStore, $fromDate, $toDate): array
     {
         if (function_exists('set_time_limit')) { @set_time_limit(0); }
 
@@ -77,13 +77,10 @@ class ItemsAndWithPizzaFusedService
         $relevantIdStr  = array_map('strval', $relevantIds);
         $relevantIdFlip = array_fill_keys($relevantIdStr, true);
 
-        // === Precompute unit prices ONCE (kept exactly as you had) ===
-        $unitPriceByItem = $this->precomputeUnitPrices($franchiseStore, $from, $to, $relevantIdStr);
-
-        // We’ll accumulate a global “seen anywhere” set while we stream buckets (no extra pass).
+        // === We’ll accumulate a global “seen anywhere” set while we stream buckets (no extra pass).
         $seenAnywhere = [];
 
-        // Helper to build rows for a known id-set, using per-bucket accumulators
+        // === Helper to build rows for a known id-set, using per-bucket accumulators
         $buildRows = static function (
             array $ids,
             array $sumByItem,
@@ -114,8 +111,36 @@ class ItemsAndWithPizzaFusedService
             return $rows;
         };
 
+        // === Unit price rule map (only placed/fulfilled differ by bucket)
+        $priceFiltersByBucket = [
+            // Bucket 1: Register/Register
+            'in_store'     => [['Register'],         ['Register']],
+            // Bucket 2: Website or Mobile / Register
+            'lc_pickup'    => [['Website','Mobile'], ['Register']],
+            // Bucket 3: Website or Mobile / Delivery
+            'lc_delivery'  => [['Website','Mobile'], ['Delivery']],
+            // Bucket 4: DoorDash / Delivery   (NOTE: only DoorDash, per your ask)
+            'third_party'  => [['DoorDash'],         ['Delivery']],
+            // "All Buckets" follows Bucket 1 rule
+            'all'          => [['Register'],         ['Register']],
+        ];
+
+        // Stash per-bucket raw accumulators + unit prices for the union phase
+        $_bucketRaw = [];
+
         foreach (self::BUCKETS as $key => $rules) {
             $label = $rules['label'];
+
+            // === NEW: bucket-specific unit prices
+            [$placedForPrice, $fulfilledForPrice] = $priceFiltersByBucket[$key] ?? [null, null];
+            $unitPriceByItem = $this->precomputeUnitPrices(
+                $franchiseStore,
+                $from,
+                $to,
+                $relevantIdStr,
+                $placedForPrice,
+                $fulfilledForPrice
+            );
 
             // Per-bucket accumulators (tiny arrays, all scalar math)
             $sumByItem   = [];
@@ -124,7 +149,7 @@ class ItemsAndWithPizzaFusedService
 
             $countCzb = 0; $countCok = 0; $countSau = 0; $countWin = 0; $pizzaBase = 0;
 
-            // === Stream rows (single pass, tight projection, id-ordered) ===
+            // === Stream rows (single pass, tight projection, id-ordered)
             $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled'])
                 ->where(function ($q) use ($relevantIdStr) {
                     $q->whereIn('item_id', $relevantIdStr)
@@ -170,10 +195,10 @@ class ItemsAndWithPizzaFusedService
                         foreach ($rows as $r) {
                             $oid = (string)($r->order_id ?? '');
                             if ($oid === '' || !isset($pizzaOrders[$oid])) { continue; }
-                            if ($r->is_companion_crazy_bread) { $countCzb++; }
-                            elseif ($r->is_companion_cookie)  { $countCok++; }
-                            elseif ($r->is_companion_sauce)   { $countSau++; }
-                            elseif ($r->is_companion_wings)   { $countWin++; }
+                            if     ($r->is_companion_crazy_bread) { $countCzb++; }
+                            elseif ($r->is_companion_cookie)      { $countCok++; }
+                            elseif ($r->is_companion_sauce)       { $countSau++; }
+                            elseif ($r->is_companion_wings)       { $countWin++; }
                         }
                     }
                 }, 'id', 'id');
@@ -187,11 +212,11 @@ class ItemsAndWithPizzaFusedService
             $bevRows   = $buildRows(self::BEVERAGE_IDS,    $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
             $sideRows  = $buildRows(self::SIDES_IDS,       $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
 
-            // === NEW: Top 15 overall (any category) — using “appeared at least once” ===
+            // === NEW: Top 15 overall (any category)
             $overallRows = $buildRows($relevantIds, $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
             $top15 = \array_slice($overallRows, 0, 15);
 
-            // === Build per-bucket item payload ===
+            // === Build per-bucket item payload
             $itemRes['buckets'][$key] = [
                 'label'         => $label,
                 'pizza_top10'   => \array_slice($pizzaRows, 0, 10),
@@ -204,7 +229,7 @@ class ItemsAndWithPizzaFusedService
                 // NEW:
                 'top15_overall' => $top15,
                 // NEW placeholder, filled below after we know global union:
-                'all_items_seen'=> [],   // will become per-bucket rows for union set
+                'all_items_seen'=> [],
             ];
 
             // Sold-with-pizza unchanged
@@ -226,21 +251,19 @@ class ItemsAndWithPizzaFusedService
                 ],
             ];
 
-            // Stash the per-bucket raw accumulators for a moment so we can quickly emit the union later
-            // (kept private inside this method; small memory footprint since arrays are sparse).
-            $_bucketRaw[$key] = [$sumByItem, $countByItem, $nameByItem];
+            // Stash the per-bucket raw accumulators + unit prices for the union emit later
+            $_bucketRaw[$key] = [$sumByItem, $countByItem, $nameByItem, $unitPriceByItem];
         }
 
-        // === Build the union of items that appeared at least once anywhere ===
-        // (tight: we already marked seenAnywhere during streaming; keep order by “most global appearances”)
+        // === Build the union of items that appeared at least once anywhere
         $unionIds = \array_keys($seenAnywhere);              // strings
-        // If you prefer deterministic ordering, sort numerically:
+        // Deterministic ordering (numeric-like string sort)
         \sort($unionIds, \SORT_STRING);
         $allItemsUnion = \array_map('intval', $unionIds);    // for controller convenience
 
-        // === For each bucket, emit rows for ALL union items (zero-filled if missing in that bucket) ===
+        // === For each bucket, emit rows for ALL union items (zero-filled if missing), using bucket unit prices
         foreach (self::BUCKETS as $key => $_) {
-            [$sumBy, $countBy, $nameBy] = $_bucketRaw[$key];
+            [$sumBy, $countBy, $nameBy, $unitPriceByItem] = $_bucketRaw[$key];
 
             $rows = [];
             foreach ($unionIds as $id) {
@@ -253,7 +276,7 @@ class ItemsAndWithPizzaFusedService
                 ];
             }
 
-            // client-friendly: sort same way (count desc, sales desc), but you can skip if you want raw union order
+            // client-friendly: sort same way (count desc, sales desc)
             \usort($rows, static function ($a, $b) {
                 $cmp = $b['entries_count'] <=> $a['entries_count'];
                 return $cmp !== 0 ? $cmp : ($b['total_sales'] <=> $a['total_sales']);
@@ -295,88 +318,105 @@ class ItemsAndWithPizzaFusedService
     }
 
     /**
- * Precompute unit prices for all relevant items once (same across buckets).
- * If a store is provided (and not "all"), use that store.
- * Otherwise, force store = "03795-00001".
- *
- * Rule: first (business_date ASC) row in range where:
- *   placed='Register' AND fulfilled='Register'
- *   AND bundle_name IS NULL/'' AND modification_reason IS NULL/''
- *   AND quantity > 0
- * Fallback: if none found, use latest (business_date DESC) row with quantity > 0 (no extra conditions).
- *
- * @param string|null $store
- * @param string      $from
- * @param string      $to
- * @param string[]    $relevantIdStr
- * @return array<string,float>  [item_id_string => unit_price]
- */
-private function precomputeUnitPrices(?string $store, string $from, string $to, array $relevantIdStr): array
-{
-    $unit = [];
+     * Precompute unit prices for all relevant items once FOR A GIVEN BUCKET.
+     *
+     * If a store is provided (and not "all"), use that store.
+     * Otherwise, force store = "03795-00001".
+     *
+     * Rule for the bucket:
+     *   - placed in $placedForPrice (if not null)
+     *   - fulfilled in $fulfilledForPrice (if not null)
+     *   - bundle_name IS NULL/'' AND modification_reason IS NULL/''
+     *   - quantity > 0
+     *
+     * Primary: first (business_date ASC, then id ASC)
+     * Fallback: latest (business_date DESC, then id DESC) with same filters
+     *
+     * @param string|null  $store
+     * @param string       $from
+     * @param string       $to
+     * @param string[]     $relevantIdStr
+     * @param string[]|null $placedForPrice
+     * @param string[]|null $fulfilledForPrice
+     * @return array<string,float>  [item_id_string => unit_price]
+     */
+    private function precomputeUnitPrices(
+        ?string $store,
+        string $from,
+        string $to,
+        array $relevantIdStr,
+        ?array $placedForPrice,
+        ?array $fulfilledForPrice
+    ): array {
+        $unit = [];
 
-    // Decide which store to use for UNIT PRICE lookup
-    $storeForPrice = ($store !== null && $store !== '' && strtolower($store) !== 'all')
-        ? $store
-        : '03795-00001';
+        // Decide which store to use for UNIT PRICE lookup
+        $storeForPrice = ($store !== null && $store !== '' && strtolower($store) !== 'all')
+            ? $store
+            : '03795-00001';
 
-    // ---------- Primary: first qualifying Register/Register row ----------
-    $q = DB::table('order_line')
-        ->select(['id','item_id','net_amount','quantity','business_date'])
-        ->whereBetween('business_date', [$from, $to])
-        ->where('franchise_store', $storeForPrice) // <-- always fixed store for price
-        ->whereIn('item_id', $relevantIdStr)
-        ->where('quantity', '>', 0)
-        ->where('order_placed_method', 'Register')
-        ->where('order_fulfilled_method', 'Register')
-        ->where(function ($q) {
-            $q->whereNull('bundle_name')->orWhere('bundle_name', '');
-        })
-        ->where(function ($q) {
-            $q->whereNull('modification_reason')->orWhere('modification_reason', '');
-        });
-
-    // "first by date" per item
-    $q->orderBy('business_date', 'asc')->orderBy('id', 'asc')
-      ->chunk(5000, function ($rows) use (&$unit) {
-          foreach ($rows as $r) {
-              $id = (string) $r->item_id;
-              if (!isset($unit[$id])) {
-                  $qty = (float) ($r->quantity ?? 0);
-                  if ($qty !== 0.0) {
-                      $unit[$id] = (float) $r->net_amount / $qty;
-                  }
-              }
-          }
-      });
-
-    // ---------- Fallback: latest qty>0 row in range if still missing ----------
-    $missing = array_values(array_diff($relevantIdStr, array_keys($unit)));
-    if (!empty($missing)) {
-        $fq = DB::table('order_line')
+        // ---------- Primary: first qualifying row per item ----------
+        $q = DB::table('order_line')
             ->select(['id','item_id','net_amount','quantity','business_date'])
             ->whereBetween('business_date', [$from, $to])
-            ->where('franchise_store', $storeForPrice) // <-- same fixed store for price
-            ->whereIn('item_id', $missing)
-            ->where('quantity', '>', 0);
+            ->where('franchise_store', $storeForPrice)
+            ->whereIn('item_id', $relevantIdStr)
+            ->where('quantity', '>', 0)
+            ->when($placedForPrice, fn ($qq) => $qq->whereIn('order_placed_method', $placedForPrice))
+            ->when($fulfilledForPrice, fn ($qq) => $qq->whereIn('order_fulfilled_method', $fulfilledForPrice))
+            ->where(function ($qq) {
+                $qq->whereNull('bundle_name')->orWhere('bundle_name', '');
+            })
+            ->where(function ($qq) {
+                $qq->whereNull('modification_reason')->orWhere('modification_reason', '');
+            });
 
-        // iterate latest-to-oldest and take the first we see per item
-        $seen = [];
-        $fq->orderBy('business_date', 'desc')->orderBy('id', 'desc')
-           ->chunk(5000, function ($rows) use (&$unit, &$seen) {
-               foreach ($rows as $r) {
-                   $id = (string) $r->item_id;
-                   if (isset($seen[$id])) { continue; }
-                   $qty = (float) ($r->quantity ?? 0);
-                   if ($qty !== 0.0) {
-                       $unit[$id] = (float) $r->net_amount / $qty;
-                       $seen[$id] = true;
+        $q->orderBy('business_date', 'asc')->orderBy('id', 'asc')
+          ->chunk(5000, function ($rows) use (&$unit) {
+              foreach ($rows as $r) {
+                  $id = (string) $r->item_id;
+                  if (!isset($unit[$id])) {
+                      $qty = (float) ($r->quantity ?? 0);
+                      if ($qty !== 0.0) {
+                          $unit[$id] = (float) $r->net_amount / $qty;
+                      }
+                  }
+              }
+          });
+
+        // ---------- Fallback: latest row with SAME filters if still missing ----------
+        $missing = array_values(array_diff($relevantIdStr, array_keys($unit)));
+        if (!empty($missing)) {
+            $fq = DB::table('order_line')
+                ->select(['id','item_id','net_amount','quantity','business_date'])
+                ->whereBetween('business_date', [$from, $to])
+                ->where('franchise_store', $storeForPrice)
+                ->whereIn('item_id', $missing)
+                ->where('quantity', '>', 0)
+                ->when($placedForPrice, fn ($qq) => $qq->whereIn('order_placed_method', $placedForPrice))
+                ->when($fulfilledForPrice, fn ($qq) => $qq->whereIn('order_fulfilled_method', $fulfilledForPrice))
+                ->where(function ($qq) {
+                    $qq->whereNull('bundle_name')->orWhere('bundle_name', '');
+                })
+                ->where(function ($qq) {
+                    $qq->whereNull('modification_reason')->orWhere('modification_reason', '');
+                });
+
+            $seen = [];
+            $fq->orderBy('business_date', 'desc')->orderBy('id', 'desc')
+               ->chunk(5000, function ($rows) use (&$unit, &$seen) {
+                   foreach ($rows as $r) {
+                       $id = (string) $r->item_id;
+                       if (isset($seen[$id])) { continue; }
+                       $qty = (float) ($r->quantity ?? 0);
+                       if ($qty !== 0.0) {
+                           $unit[$id] = (float) $r->net_amount / $qty;
+                           $seen[$id] = true;
+                       }
                    }
-               }
-           });
+               });
+        }
+
+        return $unit;
     }
-
-    return $unit;
-}
-
 }

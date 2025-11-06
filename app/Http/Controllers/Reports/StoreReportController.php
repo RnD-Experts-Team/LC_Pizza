@@ -39,7 +39,6 @@ class StoreReportController extends Controller
     public function __invoke(StoreReportRequest $request): JsonResponse
     {
         // Allow null/"All" store: we don’t force a value here.
-        // If your FormRequest currently requires a string, loosen it (nullable) or read raw input as below.
         $store = $request->input('franchise_store'); // nullable
         $from  = $request->inputFrom();
         $to    = $request->inputTo();
