@@ -35,20 +35,56 @@ class ItemsAndWithPizzaFusedService
         ],
     ];
 
-    // Item groups for breakdown
-    private const PIZZA_IDS = [
-        101002,101001,101401,201108,201441,101567,101281,101573,101402,201059,201002,101423,201042,102000,201106,
-        201048,101473,201064,201157,101474,201004,201138,201003,202900,402208,201100,201001,201129,202206,202100,
-        202909,202208,201139,201342,201165,101539,201119,201128,101282,201017,202002,201150,202910,101229,201008,
-        202001,201112,101541,202011,201412,101403,201043,101378,101542,201044,201049,201118,201120,201111,201109,
-        201140,202212,202003,201426,201058
+    /** Keep Sides “as they are” */
+    private const SIDES_IDS = [206117, 103002];
+
+    /** Cookies unchanged (your sold-with-pizza still counts cookies via generated flag) */
+    private const COOKIE_IDS = [101288, 101289];
+
+    /** Caesar dips explicit list (new group) */
+    private const CAESAR_DIP_IDS = [
+        206117, // Caesar Dip
+        206103, // Caesar Dip - Buttery Garlic
+        206104, // Caesar Dip - Ranch
+        206108, // Caesar Dip - Cheezy Jalapeno
+        206101, // Caesar Dip - Buffalo Ranch
     ];
-    private const BREAD_IDS       = [103044,103003,201343,103001,203004,203003,103033,203010];
-    private const WINGS_IDS       = [105001];
-    private const CRAZY_PUFFS_IDS = [103033, 103044];
-    private const COOKIE_IDS      = [101288, 101289];
-    private const BEVERAGE_IDS    = [204100, 204200];
-    private const SIDES_IDS       = [206117, 103002];
+
+    /**
+     * Helper: distinct item_ids for a menu_item_account list
+     */
+    private function getIdsByAccount(?string $store, string $from, string $to, array $accounts): array
+    {
+        $q = DB::table('order_line')
+            ->distinct()
+            ->whereBetween('business_date', [$from, $to])
+            ->whereIn('menu_item_account', $accounts)
+            ->whereNotNull('item_id');
+
+        if ($store !== null && $store !== '' && strtolower($store) !== 'all') {
+            $q->where('franchise_store', $store);
+        }
+
+        return $q->pluck('item_id')->map(fn($v) => (int)$v)->unique()->values()->all();
+    }
+
+    /**
+     * Helper: distinct item_ids for a LIKE pattern on menu_item_name
+     */
+    private function getIdsByNameLike(?string $store, string $from, string $to, string $needle): array
+    {
+        $q = DB::table('order_line')
+            ->distinct()
+            ->whereBetween('business_date', [$from, $to])
+            ->where('menu_item_name', 'LIKE', '%'.$needle.'%')
+            ->whereNotNull('item_id');
+
+        if ($store !== null && $store !== '' && strtolower($store) !== 'all') {
+            $q->where('franchise_store', $store);
+        }
+
+        return $q->pluck('item_id')->map(fn($v) => (int)$v)->unique()->values()->all();
+    }
 
     // ===== Public API =====
     public function compute(?string $franchiseStore, $fromDate, $toDate): array
@@ -64,30 +100,39 @@ class ItemsAndWithPizzaFusedService
         $isAllStore = ($franchiseStore === null || $franchiseStore === '' || strtolower($franchiseStore) === 'all');
         $chunkSize  = $isAllStore ? 2000 : 5000;
 
-        // ==== Relevant IDs (string keys for micro-hash lookups) ====
+        // ===== Build category ID sets from DB (per your new rules) =====
+        $PIZZA_IDS       = $this->getIdsByAccount($franchiseStore, $from, $to, ['HNR','Pizza']);
+        $BREAD_IDS       = $this->getIdsByAccount($franchiseStore, $from, $to, ['Bread']);
+        $WINGS_IDS       = $this->getIdsByAccount($franchiseStore, $from, $to, ['Wings']);
+        $BEVERAGE_IDS    = $this->getIdsByAccount($franchiseStore, $from, $to, ['Beverages']);
+        $PUFFS_FROM_NAME = $this->getIdsByNameLike($franchiseStore, $from, $to, 'Puffs');
+        $CRAZY_PUFFS_IDS = !empty($PUFFS_FROM_NAME) ? $PUFFS_FROM_NAME : [103057, 103044, 103033]; // fallback
+        $COOKIE_IDS      = self::COOKIE_IDS;
+        $SIDES_IDS       = self::SIDES_IDS;
+        $CAESAR_DIP_IDS  = self::CAESAR_DIP_IDS;
+
+        // Everything we care about (used for filtering + unit price precompute)
         $relevantIds = array_values(array_unique(array_merge(
-            self::PIZZA_IDS,
-            self::BREAD_IDS,
-            self::WINGS_IDS,
-            self::CRAZY_PUFFS_IDS,
-            self::COOKIE_IDS,
-            self::BEVERAGE_IDS,
-            self::SIDES_IDS
+            $PIZZA_IDS, $BREAD_IDS, $WINGS_IDS, $CRAZY_PUFFS_IDS, $COOKIE_IDS, $BEVERAGE_IDS, $SIDES_IDS, $CAESAR_DIP_IDS
         )));
         $relevantIdStr  = array_map('strval', $relevantIds);
         $relevantIdFlip = array_fill_keys($relevantIdStr, true);
 
+        // === the rest of your original method stays the same, except:
+        // - replace references to self::XYZ_IDS with the local variables above
+        // - add an extra output block for 'caesar_dips'
+        // - keep sides unchanged
+
         // === We’ll accumulate a global “seen anywhere” set while we stream buckets (no extra pass).
         $seenAnywhere = [];
 
-        // === Helper to build rows for a known id-set, using per-bucket accumulators
         $buildRows = static function (
             array $ids,
             array $sumByItem,
             array $countByItem,
             array $nameByItem,
             array $unitPriceByItem,
-            bool $filterAppeared = true   // if true, drop items with entries_count == 0
+            bool $filterAppeared = true
         ): array {
             $rows = [];
             foreach ($ids as $intId) {
@@ -103,7 +148,6 @@ class ItemsAndWithPizzaFusedService
                     'entries_count'  => $count,
                 ];
             }
-            // Sort by count desc, then sales desc
             usort($rows, static function ($a, $b) {
                 $cmp = $b['entries_count'] <=> $a['entries_count'];
                 return $cmp !== 0 ? $cmp : ($b['total_sales'] <=> $a['total_sales']);
@@ -111,27 +155,19 @@ class ItemsAndWithPizzaFusedService
             return $rows;
         };
 
-        // === Unit price rule map (only placed/fulfilled differ by bucket)
         $priceFiltersByBucket = [
-            // Bucket 1: Register/Register
             'in_store'     => [['Register'],         ['Register']],
-            // Bucket 2: Website or Mobile / Register
             'lc_pickup'    => [['Website','Mobile'], ['Register']],
-            // Bucket 3: Website or Mobile / Delivery
             'lc_delivery'  => [['Website','Mobile'], ['Delivery']],
-            // Bucket 4: DoorDash / Delivery   (NOTE: only DoorDash, per your ask)
             'third_party'  => [['DoorDash'],         ['Delivery']],
-            // "All Buckets" follows Bucket 1 rule
             'all'          => [['Register'],         ['Register']],
         ];
 
-        // Stash per-bucket raw accumulators + unit prices for the union phase
         $_bucketRaw = [];
 
         foreach (self::BUCKETS as $key => $rules) {
             $label = $rules['label'];
 
-            // === NEW: bucket-specific unit prices
             [$placedForPrice, $fulfilledForPrice] = $priceFiltersByBucket[$key] ?? [null, null];
             $unitPriceByItem = $this->precomputeUnitPrices(
                 $franchiseStore,
@@ -142,14 +178,12 @@ class ItemsAndWithPizzaFusedService
                 $fulfilledForPrice
             );
 
-            // Per-bucket accumulators (tiny arrays, all scalar math)
             $sumByItem   = [];
             $countByItem = [];
             $nameByItem  = [];
 
             $countCzb = 0; $countCok = 0; $countSau = 0; $countWin = 0; $pizzaBase = 0;
 
-            // === Stream rows (single pass, tight projection, id-ordered)
             $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled'])
                 ->where(function ($q) use ($relevantIdStr) {
                     $q->whereIn('item_id', $relevantIdStr)
@@ -160,14 +194,13 @@ class ItemsAndWithPizzaFusedService
                       ->orWhere('is_companion_wings', 1);
                 })
                 ->orderBy('id')
-                ->chunkById($chunkSize, function ($rows) use (
+                ->chunkById($isAllStore ? 2000 : 5000, function ($rows) use (
                     &$sumByItem, &$countByItem, &$nameByItem,
                     &$pizzaBase, &$countCzb, &$countCok, &$countSau, &$countWin,
                     $relevantIdFlip, &$seenAnywhere
                 ) {
                     $pizzaOrders = [];
 
-                    // Pass 1: accumulate items + mark pizza orders
                     foreach ($rows as $r) {
                         $orderId = (string)($r->order_id ?? '');
                         $itemIdS = (string)($r->item_id ?? '');
@@ -180,7 +213,6 @@ class ItemsAndWithPizzaFusedService
                             if (!isset($nameByItem[$itemIdS]) && $name !== '') {
                                 $nameByItem[$itemIdS] = $name;
                             }
-                            // mark globally seen item
                             $seenAnywhere[$itemIdS] = true;
                         }
 
@@ -190,7 +222,6 @@ class ItemsAndWithPizzaFusedService
                         }
                     }
 
-                    // Pass 2: companions only when order had pizza
                     if (!empty($pizzaOrders)) {
                         foreach ($rows as $r) {
                             $oid = (string)($r->order_id ?? '');
@@ -203,20 +234,19 @@ class ItemsAndWithPizzaFusedService
                     }
                 }, 'id', 'id');
 
-            // === Standard breakdowns (filtered to “appeared at least once”) ===
-            $pizzaRows = $buildRows(self::PIZZA_IDS,       $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
-            $breadRows = $buildRows(self::BREAD_IDS,       $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
-            $wingRows  = $buildRows(self::WINGS_IDS,       $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
-            $puffRows  = $buildRows(self::CRAZY_PUFFS_IDS, $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
-            $cookRows  = $buildRows(self::COOKIE_IDS,      $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
-            $bevRows   = $buildRows(self::BEVERAGE_IDS,    $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
-            $sideRows  = $buildRows(self::SIDES_IDS,       $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            // Build groups with new ID sets
+            $pizzaRows = $buildRows($PIZZA_IDS,       $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $breadRows = $buildRows($BREAD_IDS,       $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $wingRows  = $buildRows($WINGS_IDS,       $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $puffRows  = $buildRows($CRAZY_PUFFS_IDS, $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $cookRows  = $buildRows($COOKIE_IDS,      $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $bevRows   = $buildRows($BEVERAGE_IDS,    $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $sideRows  = $buildRows($SIDES_IDS,       $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $dipRows   = $buildRows($CAESAR_DIP_IDS,  $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
 
-            // === NEW: Top 15 overall (any category)
             $overallRows = $buildRows($relevantIds, $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
             $top15 = \array_slice($overallRows, 0, 15);
 
-            // === Build per-bucket item payload
             $itemRes['buckets'][$key] = [
                 'label'         => $label,
                 'pizza_top10'   => \array_slice($pizzaRows, 0, 10),
@@ -226,13 +256,12 @@ class ItemsAndWithPizzaFusedService
                 'cookies'       => $cookRows,
                 'beverages'     => $bevRows,
                 'sides'         => $sideRows,
-                // NEW:
+                'caesar_dips'   => $dipRows,   // << NEW GROUP
                 'top15_overall' => $top15,
-                // NEW placeholder, filled below after we know global union:
-                'all_items_seen'=> [],
+                'all_items_seen'=> [],         // filled later
             ];
 
-            // Sold-with-pizza unchanged
+            // sold-with-pizza stays the same
             $den = $pizzaBase ?: 1;
             $soldRes['buckets'][$key] = [
                 'label'       => $label,
@@ -251,17 +280,14 @@ class ItemsAndWithPizzaFusedService
                 ],
             ];
 
-            // Stash the per-bucket raw accumulators + unit prices for the union emit later
             $_bucketRaw[$key] = [$sumByItem, $countByItem, $nameByItem, $unitPriceByItem];
         }
 
-        // === Build the union of items that appeared at least once anywhere
-        $unionIds = \array_keys($seenAnywhere);              // strings
-        // Deterministic ordering (numeric-like string sort)
+        // Union + per-bucket zero-filled list (unchanged)
+        $unionIds = \array_keys($seenAnywhere);
         \sort($unionIds, \SORT_STRING);
-        $allItemsUnion = \array_map('intval', $unionIds);    // for controller convenience
+        $allItemsUnion = \array_map('intval', $unionIds);
 
-        // === For each bucket, emit rows for ALL union items (zero-filled if missing), using bucket unit prices
         foreach (self::BUCKETS as $key => $_) {
             [$sumBy, $countBy, $nameBy, $unitPriceByItem] = $_bucketRaw[$key];
 
@@ -276,7 +302,6 @@ class ItemsAndWithPizzaFusedService
                 ];
             }
 
-            // client-friendly: sort same way (count desc, sales desc)
             \usort($rows, static function ($a, $b) {
                 $cmp = $b['entries_count'] <=> $a['entries_count'];
                 return $cmp !== 0 ? $cmp : ($b['total_sales'] <=> $a['total_sales']);
@@ -288,7 +313,6 @@ class ItemsAndWithPizzaFusedService
         return [
             'item_breakdown'   => $itemRes,
             'sold_with_pizza'  => $soldRes,
-            // handy to have at the top level for consumers that need the ID list:
             'all_items_union'  => $allItemsUnion,
         ];
     }
