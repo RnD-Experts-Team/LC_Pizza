@@ -107,7 +107,7 @@ class ItemsAndWithPizzaFusedService
         // collect union across buckets
         $seenAnywhere = [];
 
-        // ===== EDIT #2: renamed entries_count -> units_sold and sort by it
+        // ===== rows builder using UNITS (quantities) =====
         $buildRows = static function (
             array $ids,
             array $sumByItem,
@@ -127,11 +127,11 @@ class ItemsAndWithPizzaFusedService
                     'menu_item_name' => $nameByItem[$id]  ?? '',
                     'unit_price'     => (float)($unitPriceByItem[$id] ?? 0.0),
                     'total_sales'    => (float)($sumByItem[$id]   ?? 0.0),
-                    'units_sold'     => $units, // renamed
+                    'units_sold'     => $units,
                 ];
             }
             usort($rows, static function ($a, $b) {
-                $cmp = $b['units_sold'] <=> $a['units_sold']; // sort by units
+                $cmp = $b['units_sold'] <=> $a['units_sold'];
                 return $cmp !== 0 ? $cmp : ($b['total_sales'] <=> $a['total_sales']);
             });
             return $rows;
@@ -161,10 +161,10 @@ class ItemsAndWithPizzaFusedService
             );
 
             $sumByItem   = [];
-            $countByItem = []; // now stores UNITS (sum of quantities)
+            $countByItem = []; // stores UNITS (sum of quantities)
             $nameByItem  = [];
 
-            // ====== SOLD-WITH (NOW USING UNITS) ======
+            // ====== SOLD-WITH (UNITS) ======
             $unitsBread  = 0; $unitsCookie = 0; $unitsSauce = 0; $unitsWings = 0; $unitsBev = 0; $unitsPuffs = 0;
             $pizzaUnitsBase = 0;
 
@@ -186,11 +186,11 @@ class ItemsAndWithPizzaFusedService
                         $itemIdS = (string)($r->item_id ?? '');
                         $amt     = (float) ($r->net_amount ?? 0);
                         $name    = (string)($r->menu_item_name ?? '');
-                        $qty     = (int)   ($r->quantity ?? 0); // sum quantities
+                        $qty     = (int)   ($r->quantity ?? 0);
 
                         if (isset($relevantIdFlip[$itemIdS])) {
                             $sumByItem[$itemIdS]   = ($sumByItem[$itemIdS]   ?? 0.0) + $amt;
-                            $countByItem[$itemIdS] = ($countByItem[$itemIdS] ?? 0)   + $qty; // sum quantities
+                            $countByItem[$itemIdS] = ($countByItem[$itemIdS] ?? 0)   + $qty;
                             if (!isset($nameByItem[$itemIdS]) && $name !== '') {
                                 $nameByItem[$itemIdS] = $name;
                             }
@@ -199,12 +199,12 @@ class ItemsAndWithPizzaFusedService
 
                         // pizza base by UNITS
                         if ($r->is_pizza) {
-                            $pizzaUnitsBase += $qty; // pizza UNITS
+                            $pizzaUnitsBase += $qty;
                             if ($orderId !== '') { $pizzaOrders[$orderId] = true; }
                         }
                     }
 
-                    // sold-with-pizza using generated flags; now sum UNITS
+                    // sold-with-pizza using generated flags; sum UNITS
                     if (!empty($pizzaOrders)) {
                         foreach ($rows as $r) {
                             $oid = (string)($r->order_id ?? '');
@@ -224,7 +224,7 @@ class ItemsAndWithPizzaFusedService
                     }
                 }, 'id', 'id');
 
-            // Build groups using the ID sets sourced from flags
+            // Build groups from flags
             $pizzaRows = $buildRows($PIZZA_IDS,    $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
             $breadRows = $buildRows($BREAD_IDS,    $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
             $wingRows  = $buildRows($WINGS_IDS,    $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
@@ -251,12 +251,10 @@ class ItemsAndWithPizzaFusedService
                 'all_items_seen'=> [],
             ];
 
-            // ===== SOLD-WITH OUTPUT (USING UNITS) =====
+            // ===== SOLD-WITH OUTPUT (UNITS ONLY) =====
             $den = $pizzaUnitsBase ?: 1;
             $soldRes['buckets'][$key] = [
                 'label'  => $label,
-
-                // Primary (new) units-based output
                 'units'  => [
                     'crazy_bread' => (int)$unitsBread,
                     'cookies'     => (int)$unitsCookie,
@@ -266,19 +264,6 @@ class ItemsAndWithPizzaFusedService
                     'crazy_puffs' => (int)$unitsPuffs,
                     'pizza_base'  => (int)$pizzaUnitsBase,
                 ],
-
-                // Back-compat alias: counts mirrors units
-                'counts' => [
-                    'crazy_bread' => (int)$unitsBread,
-                    'cookies'     => (int)$unitsCookie,
-                    'sauce'       => (int)$unitsSauce,
-                    'wings'       => (int)$unitsWings,
-                    'beverages'   => (int)$unitsBev,
-                    'crazy_puffs' => (int)$unitsPuffs,
-                    'pizza_base'  => (int)$pizzaUnitsBase,
-                ],
-
-                // Percentages now per pizza UNIT (not per pizza row)
                 'percentages' => [
                     'crazy_bread' => $pizzaUnitsBase ? $unitsBread / $den : 0.0,
                     'cookies'     => $pizzaUnitsBase ? $unitsCookie / $den : 0.0,
@@ -292,7 +277,7 @@ class ItemsAndWithPizzaFusedService
             $_bucketRaw[$key] = [$sumByItem, $countByItem, $nameByItem, $unitPriceByItem];
         }
 
-        // ===== EDIT #3: Union + per-bucket zero-filled list uses units_sold and sorts by it
+        // ===== Union + per-bucket zero-filled list uses units_sold and sorts by it
         $unionIds = \array_keys($seenAnywhere);
         \sort($unionIds, \SORT_STRING);
         $allItemsUnion = \array_map('intval', $unionIds);
@@ -307,12 +292,12 @@ class ItemsAndWithPizzaFusedService
                     'menu_item_name' => $nameBy[$id] ?? '',
                     'unit_price'     => (float)($unitPriceByItem[$id] ?? 0.0),
                     'total_sales'    => (float)($sumBy[$id]   ?? 0.0),
-                    'units_sold'     => (int)  ($countBy[$id] ?? 0), // renamed
+                    'units_sold'     => (int)  ($countBy[$id] ?? 0),
                 ];
             }
 
             \usort($rows, static function ($a, $b) {
-                $cmp = $b['units_sold'] <=> $a['units_sold']; // sort by units
+                $cmp = $b['units_sold'] <=> $a['units_sold'];
                 return $cmp !== 0 ? $cmp : ($b['total_sales'] <=> $a['total_sales']);
             });
 
