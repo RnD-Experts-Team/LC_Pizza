@@ -35,14 +35,14 @@ class ItemsAndWithPizzaFusedService
         ],
     ];
 
-    /** Keep Sides “as they are” */
+    /** Keep Sides “as they are” (unchanged) */
     private const SIDES_IDS = [206117, 103002];
 
-    /** Cookies unchanged (explicit IDs) */
+    /** Cookies explicit IDs (unchanged) */
     private const COOKIE_IDS = [101288, 101289];
 
-    /** Caesar dips explicit list (new group) */
-    private const CAESAR_DIP_IDS = [
+    /** Fallback dip IDs if needed (rare) */
+    private const CAESAR_DIP_IDS_FALLBACK = [
         206117, // Caesar Dip
         206103, // Caesar Dip - Buttery Garlic
         206104, // Caesar Dip - Ranch
@@ -50,29 +50,15 @@ class ItemsAndWithPizzaFusedService
         206101, // Caesar Dip - Buffalo Ranch
     ];
 
-    /** IDs by account helper */
-    private function getIdsByAccount(?string $store, string $from, string $to, array $accounts): array
+    /**
+     * Helper: distinct item_ids where a boolean flag column = 1
+     */
+    private function getIdsByFlag(?string $store, string $from, string $to, string $flagCol): array
     {
         $q = DB::table('order_line')
             ->distinct()
             ->whereBetween('business_date', [$from, $to])
-            ->whereIn('menu_item_account', $accounts)
-            ->whereNotNull('item_id');
-
-        if ($store !== null && $store !== '' && strtolower($store) !== 'all') {
-            $q->where('franchise_store', $store);
-        }
-
-        return $q->pluck('item_id')->map(fn($v) => (int)$v)->unique()->values()->all();
-    }
-
-    /** IDs by name LIKE helper */
-    private function getIdsByNameLike(?string $store, string $from, string $to, string $needle): array
-    {
-        $q = DB::table('order_line')
-            ->distinct()
-            ->whereBetween('business_date', [$from, $to])
-            ->where('menu_item_name', 'LIKE', '%'.$needle.'%')
+            ->where($flagCol, 1)
             ->whereNotNull('item_id');
 
         if ($store !== null && $store !== '' && strtolower($store) !== 'all') {
@@ -96,24 +82,29 @@ class ItemsAndWithPizzaFusedService
         $isAllStore = ($franchiseStore === null || $franchiseStore === '' || strtolower($franchiseStore) === 'all');
         $chunkSize  = $isAllStore ? 2000 : 5000;
 
-        // ===== Build category ID sets from DB (per new rules) =====
-        $PIZZA_IDS       = $this->getIdsByAccount($franchiseStore, $from, $to, ['HNR','Pizza']);
-        $BREAD_IDS       = $this->getIdsByAccount($franchiseStore, $from, $to, ['Bread']);
-        $WINGS_IDS       = $this->getIdsByAccount($franchiseStore, $from, $to, ['Wings']);
-        $BEVERAGE_IDS    = $this->getIdsByAccount($franchiseStore, $from, $to, ['Beverages']);
-        $PUFFS_FROM_NAME = $this->getIdsByNameLike($franchiseStore, $from, $to, 'Puffs');
-        $CRAZY_PUFFS_IDS = !empty($PUFFS_FROM_NAME) ? $PUFFS_FROM_NAME : [103057, 103044, 103033]; // fallback
-        $COOKIE_IDS      = self::COOKIE_IDS;
-        $SIDES_IDS       = self::SIDES_IDS;
-        $CAESAR_DIP_IDS  = self::CAESAR_DIP_IDS;
+        // ===== Build category ID sets DIRECTLY from generated flags =====
+        $PIZZA_IDS      = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_pizza');
+        $BREAD_IDS      = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_bread');
+        $WINGS_IDS      = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_wings');
+        $BEVERAGE_IDS   = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_beverages');
+        $PUFFS_IDS      = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_crazy_puffs');
+        $DIP_IDS        = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_caesar_dip');
+        if (empty($DIP_IDS)) {
+            // optional safety fallback if no dips appear in the window
+            $DIP_IDS = self::CAESAR_DIP_IDS_FALLBACK;
+        }
 
-        // Everything we care about (for filtering + unit prices)
+        $COOKIE_IDS     = self::COOKIE_IDS;
+        $SIDES_IDS      = self::SIDES_IDS;
+
+        // Everything we care about (filtering + unit prices)
         $relevantIds = array_values(array_unique(array_merge(
-            $PIZZA_IDS, $BREAD_IDS, $WINGS_IDS, $CRAZY_PUFFS_IDS, $COOKIE_IDS, $BEVERAGE_IDS, $SIDES_IDS, $CAESAR_DIP_IDS
+            $PIZZA_IDS, $BREAD_IDS, $WINGS_IDS, $PUFFS_IDS, $COOKIE_IDS, $BEVERAGE_IDS, $SIDES_IDS, $DIP_IDS
         )));
         $relevantIdStr  = array_map('strval', $relevantIds);
         $relevantIdFlip = array_fill_keys($relevantIdStr, true);
 
+        // collect union across buckets
         $seenAnywhere = [];
 
         $buildRows = static function (
@@ -172,6 +163,7 @@ class ItemsAndWithPizzaFusedService
             $countByItem = [];
             $nameByItem  = [];
 
+            // sold-with-pizza counters (using flags)
             $countBread = 0; $countCookie = 0; $countSauce = 0; $countWings = 0; $countBev = 0; $countPuffs = 0;
             $pizzaBase = 0;
 
@@ -184,7 +176,7 @@ class ItemsAndWithPizzaFusedService
                 ->chunkById($chunkSize, function ($rows) use (
                     &$sumByItem, &$countByItem, &$nameByItem,
                     &$pizzaBase, &$countBread, &$countCookie, &$countSauce, &$countWings, &$countBev, &$countPuffs,
-                    $relevantIdFlip, &$seenAnywhere, $WINGS_IDS, $COOKIE_IDS
+                    $relevantIdFlip, &$seenAnywhere, $COOKIE_IDS
                 ) {
                     $pizzaOrders = [];
 
@@ -209,7 +201,7 @@ class ItemsAndWithPizzaFusedService
                         }
                     }
 
-                    // sold-with-pizza using new flags
+                    // sold-with-pizza using the generated boolean columns
                     if (!empty($pizzaOrders)) {
                         foreach ($rows as $r) {
                             $oid = (string)($r->order_id ?? '');
@@ -227,17 +219,17 @@ class ItemsAndWithPizzaFusedService
                     }
                 }, 'id', 'id');
 
-            // Build groups with new ID sets (unchanged)
-            $pizzaRows = $buildRows($PIZZA_IDS,       $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
-            $breadRows = $buildRows($BREAD_IDS,       $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
-            $wingRows  = $buildRows($WINGS_IDS,       $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
-            $puffRows  = $buildRows($CRAZY_PUFFS_IDS, $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
-            $cookRows  = $buildRows($COOKIE_IDS,      $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
-            $bevRows   = $buildRows($BEVERAGE_IDS,    $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
-            $sideRows  = $buildRows($SIDES_IDS,       $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
-            $dipRows   = $buildRows($CAESAR_DIP_IDS,  $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            // Build groups using the ID sets sourced from flags
+            $pizzaRows = $buildRows($PIZZA_IDS,    $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $breadRows = $buildRows($BREAD_IDS,    $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $wingRows  = $buildRows($WINGS_IDS,    $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $puffRows  = $buildRows($PUFFS_IDS,    $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $cookRows  = $buildRows($COOKIE_IDS,   $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $bevRows   = $buildRows($BEVERAGE_IDS, $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $sideRows  = $buildRows($SIDES_IDS,    $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $dipRows   = $buildRows($DIP_IDS,      $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
 
-            $overallRows = $buildRows($relevantIds, $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $overallRows = $buildRows(array_values(array_unique($relevantIds)), $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
             $top15 = \array_slice($overallRows, 0, 15);
 
             $itemRes['buckets'][$key] = [
@@ -254,17 +246,17 @@ class ItemsAndWithPizzaFusedService
                 'all_items_seen'=> [],
             ];
 
-            // sold-with-pizza output (now includes beverages + crazy_puffs)
+            // sold-with-pizza output (based on flags)
             $den = $pizzaBase ?: 1;
             $soldRes['buckets'][$key] = [
                 'label'       => $label,
                 'counts'      => [
-                    'crazy_bread' => (int)$countBread,
-                    'cookies'     => (int)$countCookie,
-                    'sauce'       => (int)$countSauce,      // mapped to is_caesar_dip
-                    'wings'       => (int)$countWings,      // mapped to is_wings
-                    'beverages'   => (int)$countBev,        // mapped to is_beverages
-                    'crazy_puffs' => (int)$countPuffs,      // mapped to is_crazy_puffs
+                    'crazy_bread' => (int)$countBread,   // is_bread
+                    'cookies'     => (int)$countCookie,  // explicit cookie IDs
+                    'sauce'       => (int)$countSauce,   // is_caesar_dip
+                    'wings'       => (int)$countWings,   // is_wings
+                    'beverages'   => (int)$countBev,     // is_beverages
+                    'crazy_puffs' => (int)$countPuffs,   // is_crazy_puffs
                     'pizza_base'  => (int)$pizzaBase,
                 ],
                 'percentages' => [
@@ -280,7 +272,7 @@ class ItemsAndWithPizzaFusedService
             $_bucketRaw[$key] = [$sumByItem, $countByItem, $nameByItem, $unitPriceByItem];
         }
 
-        // Union + per-bucket zero-filled list (unchanged)
+        // Union + per-bucket zero-filled list
         $unionIds = \array_keys($seenAnywhere);
         \sort($unionIds, \SORT_STRING);
         $allItemsUnion = \array_map('intval', $unionIds);
@@ -314,13 +306,13 @@ class ItemsAndWithPizzaFusedService
         ];
     }
 
-    // ====== Query Builder base ======
+    // ====== Query Builder base (no Eloquent hydration) ======
     private function baseQB(?string $store, string $from, string $to, ?array $placed, ?array $fulfilled)
     {
-        // NOTE: includes new generated flags for sold-with-pizza counting
+        // select only columns we truly use, including the generated flags
         $q = DB::table('order_line')
             ->select([
-                'id','order_id','item_id','menu_item_name','menu_item_account',
+                'id','order_id','item_id','menu_item_name',
                 'net_amount','quantity','business_date',
                 'is_pizza',
                 'is_bread','is_wings','is_beverages','is_crazy_puffs','is_caesar_dip',
@@ -353,6 +345,7 @@ class ItemsAndWithPizzaFusedService
     ): array {
         $unit = [];
 
+        // Decide which store to use for UNIT PRICE lookup
         $storeForPrice = ($store !== null && $store !== '' && strtolower($store) !== 'all')
             ? $store
             : '03795-00001';
