@@ -164,9 +164,9 @@ class ItemsAndWithPizzaFusedService
             $countByItem = []; // now stores UNITS (sum of quantities)
             $nameByItem  = [];
 
-            // sold-with-pizza counters (using flags)
-            $countBread = 0; $countCookie = 0; $countSauce = 0; $countWings = 0; $countBev = 0; $countPuffs = 0;
-            $pizzaBase = 0;
+            // ====== SOLD-WITH (NOW USING UNITS) ======
+            $unitsBread  = 0; $unitsCookie = 0; $unitsSauce = 0; $unitsWings = 0; $unitsBev = 0; $unitsPuffs = 0;
+            $pizzaUnitsBase = 0;
 
             $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled'])
                 ->where(function ($q) use ($relevantIdStr) {
@@ -176,7 +176,7 @@ class ItemsAndWithPizzaFusedService
                 ->orderBy('id')
                 ->chunkById($chunkSize, function ($rows) use (
                     &$sumByItem, &$countByItem, &$nameByItem,
-                    &$pizzaBase, &$countBread, &$countCookie, &$countSauce, &$countWings, &$countBev, &$countPuffs,
+                    &$pizzaUnitsBase, &$unitsBread, &$unitsCookie, &$unitsSauce, &$unitsWings, &$unitsBev, &$unitsPuffs,
                     $relevantIdFlip, &$seenAnywhere, $COOKIE_IDS
                 ) {
                     $pizzaOrders = [];
@@ -186,38 +186,40 @@ class ItemsAndWithPizzaFusedService
                         $itemIdS = (string)($r->item_id ?? '');
                         $amt     = (float) ($r->net_amount ?? 0);
                         $name    = (string)($r->menu_item_name ?? '');
-                        $qty     = (int)   ($r->quantity ?? 0); // ===== EDIT #1: grab quantity
+                        $qty     = (int)   ($r->quantity ?? 0); // sum quantities
 
                         if (isset($relevantIdFlip[$itemIdS])) {
                             $sumByItem[$itemIdS]   = ($sumByItem[$itemIdS]   ?? 0.0) + $amt;
-                            $countByItem[$itemIdS] = ($countByItem[$itemIdS] ?? 0)   + $qty; // ===== EDIT #1: sum quantities
+                            $countByItem[$itemIdS] = ($countByItem[$itemIdS] ?? 0)   + $qty; // sum quantities
                             if (!isset($nameByItem[$itemIdS]) && $name !== '') {
                                 $nameByItem[$itemIdS] = $name;
                             }
                             $seenAnywhere[$itemIdS] = true;
                         }
 
-                        // sold-with-pizza section remains as you had it (you said it's good)
+                        // pizza base by UNITS
                         if ($r->is_pizza) {
-                            $pizzaBase++; // keep as row-level base if that's what you want
+                            $pizzaUnitsBase += $qty; // pizza UNITS
                             if ($orderId !== '') { $pizzaOrders[$orderId] = true; }
                         }
                     }
 
-                    // sold-with-pizza using the generated boolean columns (unchanged)
+                    // sold-with-pizza using generated flags; now sum UNITS
                     if (!empty($pizzaOrders)) {
                         foreach ($rows as $r) {
                             $oid = (string)($r->order_id ?? '');
                             if ($oid === '' || !isset($pizzaOrders[$oid])) { continue; }
 
                             $itemId = (int)($r->item_id ?? 0);
+                            $qty    = (int)($r->quantity ?? 0);
+                            if ($qty <= 0) { continue; }
 
-                            if ($r->is_bread)        { $countBread++;  continue; }
-                            if (in_array($itemId, $COOKIE_IDS, true)) { $countCookie++; continue; }
-                            if ($r->is_caesar_dip)   { $countSauce++;  continue; }
-                            if ($r->is_wings)        { $countWings++;  continue; }
-                            if ($r->is_beverages)    { $countBev++;    continue; }
-                            if ($r->is_crazy_puffs)  { $countPuffs++;  continue; }
+                            if ($r->is_bread)                         { $unitsBread  += $qty; continue; }
+                            if (in_array($itemId, $COOKIE_IDS, true)) { $unitsCookie += $qty; continue; }
+                            if ($r->is_caesar_dip)                    { $unitsSauce  += $qty; continue; }
+                            if ($r->is_wings)                         { $unitsWings  += $qty; continue; }
+                            if ($r->is_beverages)                     { $unitsBev    += $qty; continue; }
+                            if ($r->is_crazy_puffs)                   { $unitsPuffs  += $qty; continue; }
                         }
                     }
                 }, 'id', 'id');
@@ -249,26 +251,41 @@ class ItemsAndWithPizzaFusedService
                 'all_items_seen'=> [],
             ];
 
-            // sold-with-pizza output (unchanged)
-            $den = $pizzaBase ?: 1;
+            // ===== SOLD-WITH OUTPUT (USING UNITS) =====
+            $den = $pizzaUnitsBase ?: 1;
             $soldRes['buckets'][$key] = [
-                'label'       => $label,
-                'counts'      => [
-                    'crazy_bread' => (int)$countBread,
-                    'cookies'     => (int)$countCookie,
-                    'sauce'       => (int)$countSauce,
-                    'wings'       => (int)$countWings,
-                    'beverages'   => (int)$countBev,
-                    'crazy_puffs' => (int)$countPuffs,
-                    'pizza_base'  => (int)$pizzaBase,
+                'label'  => $label,
+
+                // Primary (new) units-based output
+                'units'  => [
+                    'crazy_bread' => (int)$unitsBread,
+                    'cookies'     => (int)$unitsCookie,
+                    'sauce'       => (int)$unitsSauce,
+                    'wings'       => (int)$unitsWings,
+                    'beverages'   => (int)$unitsBev,
+                    'crazy_puffs' => (int)$unitsPuffs,
+                    'pizza_base'  => (int)$pizzaUnitsBase,
                 ],
+
+                // Back-compat alias: counts mirrors units
+                'counts' => [
+                    'crazy_bread' => (int)$unitsBread,
+                    'cookies'     => (int)$unitsCookie,
+                    'sauce'       => (int)$unitsSauce,
+                    'wings'       => (int)$unitsWings,
+                    'beverages'   => (int)$unitsBev,
+                    'crazy_puffs' => (int)$unitsPuffs,
+                    'pizza_base'  => (int)$pizzaUnitsBase,
+                ],
+
+                // Percentages now per pizza UNIT (not per pizza row)
                 'percentages' => [
-                    'crazy_bread' => $pizzaBase ? $countBread / $den : 0.0,
-                    'cookies'     => $pizzaBase ? $countCookie / $den : 0.0,
-                    'sauce'       => $pizzaBase ? $countSauce / $den : 0.0,
-                    'wings'       => $pizzaBase ? $countWings / $den : 0.0,
-                    'beverages'   => $pizzaBase ? $countBev   / $den : 0.0,
-                    'crazy_puffs' => $pizzaBase ? $countPuffs / $den : 0.0,
+                    'crazy_bread' => $pizzaUnitsBase ? $unitsBread / $den : 0.0,
+                    'cookies'     => $pizzaUnitsBase ? $unitsCookie / $den : 0.0,
+                    'sauce'       => $pizzaUnitsBase ? $unitsSauce / $den : 0.0,
+                    'wings'       => $pizzaUnitsBase ? $unitsWings / $den : 0.0,
+                    'beverages'   => $pizzaUnitsBase ? $unitsBev   / $den : 0.0,
+                    'crazy_puffs' => $pizzaUnitsBase ? $unitsPuffs / $den : 0.0,
                 ],
             ];
 
