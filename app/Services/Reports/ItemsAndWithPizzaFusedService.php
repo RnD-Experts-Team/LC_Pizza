@@ -38,7 +38,7 @@ class ItemsAndWithPizzaFusedService
     /** Keep Sides “as they are” */
     private const SIDES_IDS = [206117, 103002];
 
-    /** Cookies unchanged (your sold-with-pizza still counts cookies via generated flag) */
+    /** Cookies unchanged (explicit IDs) */
     private const COOKIE_IDS = [101288, 101289];
 
     /** Caesar dips explicit list (new group) */
@@ -50,9 +50,7 @@ class ItemsAndWithPizzaFusedService
         206101, // Caesar Dip - Buffalo Ranch
     ];
 
-    /**
-     * Helper: distinct item_ids for a menu_item_account list
-     */
+    /** IDs by account helper */
     private function getIdsByAccount(?string $store, string $from, string $to, array $accounts): array
     {
         $q = DB::table('order_line')
@@ -68,9 +66,7 @@ class ItemsAndWithPizzaFusedService
         return $q->pluck('item_id')->map(fn($v) => (int)$v)->unique()->values()->all();
     }
 
-    /**
-     * Helper: distinct item_ids for a LIKE pattern on menu_item_name
-     */
+    /** IDs by name LIKE helper */
     private function getIdsByNameLike(?string $store, string $from, string $to, string $needle): array
     {
         $q = DB::table('order_line')
@@ -100,7 +96,7 @@ class ItemsAndWithPizzaFusedService
         $isAllStore = ($franchiseStore === null || $franchiseStore === '' || strtolower($franchiseStore) === 'all');
         $chunkSize  = $isAllStore ? 2000 : 5000;
 
-        // ===== Build category ID sets from DB (per your new rules) =====
+        // ===== Build category ID sets from DB (per new rules) =====
         $PIZZA_IDS       = $this->getIdsByAccount($franchiseStore, $from, $to, ['HNR','Pizza']);
         $BREAD_IDS       = $this->getIdsByAccount($franchiseStore, $from, $to, ['Bread']);
         $WINGS_IDS       = $this->getIdsByAccount($franchiseStore, $from, $to, ['Wings']);
@@ -111,19 +107,13 @@ class ItemsAndWithPizzaFusedService
         $SIDES_IDS       = self::SIDES_IDS;
         $CAESAR_DIP_IDS  = self::CAESAR_DIP_IDS;
 
-        // Everything we care about (used for filtering + unit price precompute)
+        // Everything we care about (for filtering + unit prices)
         $relevantIds = array_values(array_unique(array_merge(
             $PIZZA_IDS, $BREAD_IDS, $WINGS_IDS, $CRAZY_PUFFS_IDS, $COOKIE_IDS, $BEVERAGE_IDS, $SIDES_IDS, $CAESAR_DIP_IDS
         )));
         $relevantIdStr  = array_map('strval', $relevantIds);
         $relevantIdFlip = array_fill_keys($relevantIdStr, true);
 
-        // === the rest of your original method stays the same, except:
-        // - replace references to self::XYZ_IDS with the local variables above
-        // - add an extra output block for 'caesar_dips'
-        // - keep sides unchanged
-
-        // === We’ll accumulate a global “seen anywhere” set while we stream buckets (no extra pass).
         $seenAnywhere = [];
 
         $buildRows = static function (
@@ -182,22 +172,19 @@ class ItemsAndWithPizzaFusedService
             $countByItem = [];
             $nameByItem  = [];
 
-            $countCzb = 0; $countCok = 0; $countSau = 0; $countWin = 0; $pizzaBase = 0;
+            $countBread = 0; $countCookie = 0; $countSauce = 0; $countWings = 0; $countBev = 0; $countPuffs = 0;
+            $pizzaBase = 0;
 
             $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled'])
                 ->where(function ($q) use ($relevantIdStr) {
                     $q->whereIn('item_id', $relevantIdStr)
-                      ->orWhere('is_pizza', 1)
-                      ->orWhere('is_companion_crazy_bread', 1)
-                      ->orWhere('is_companion_cookie', 1)
-                      ->orWhere('is_companion_sauce', 1)
-                      ->orWhere('is_companion_wings', 1);
+                      ->orWhere('is_pizza', 1);
                 })
                 ->orderBy('id')
-                ->chunkById($isAllStore ? 2000 : 5000, function ($rows) use (
+                ->chunkById($chunkSize, function ($rows) use (
                     &$sumByItem, &$countByItem, &$nameByItem,
-                    &$pizzaBase, &$countCzb, &$countCok, &$countSau, &$countWin,
-                    $relevantIdFlip, &$seenAnywhere
+                    &$pizzaBase, &$countBread, &$countCookie, &$countSauce, &$countWings, &$countBev, &$countPuffs,
+                    $relevantIdFlip, &$seenAnywhere, $WINGS_IDS, $COOKIE_IDS
                 ) {
                     $pizzaOrders = [];
 
@@ -222,19 +209,25 @@ class ItemsAndWithPizzaFusedService
                         }
                     }
 
+                    // sold-with-pizza using new flags
                     if (!empty($pizzaOrders)) {
                         foreach ($rows as $r) {
                             $oid = (string)($r->order_id ?? '');
                             if ($oid === '' || !isset($pizzaOrders[$oid])) { continue; }
-                            if     ($r->is_companion_crazy_bread) { $countCzb++; }
-                            elseif ($r->is_companion_cookie)      { $countCok++; }
-                            elseif ($r->is_companion_sauce)       { $countSau++; }
-                            elseif ($r->is_companion_wings)       { $countWin++; }
+
+                            $itemId = (int)($r->item_id ?? 0);
+
+                            if ($r->is_bread)        { $countBread++;  continue; }
+                            if (in_array($itemId, $COOKIE_IDS, true)) { $countCookie++; continue; }
+                            if ($r->is_caesar_dip)   { $countSauce++;  continue; }
+                            if ($r->is_wings)        { $countWings++;  continue; }
+                            if ($r->is_beverages)    { $countBev++;    continue; }
+                            if ($r->is_crazy_puffs)  { $countPuffs++;  continue; }
                         }
                     }
                 }, 'id', 'id');
 
-            // Build groups with new ID sets
+            // Build groups with new ID sets (unchanged)
             $pizzaRows = $buildRows($PIZZA_IDS,       $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
             $breadRows = $buildRows($BREAD_IDS,       $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
             $wingRows  = $buildRows($WINGS_IDS,       $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
@@ -256,27 +249,31 @@ class ItemsAndWithPizzaFusedService
                 'cookies'       => $cookRows,
                 'beverages'     => $bevRows,
                 'sides'         => $sideRows,
-                'caesar_dips'   => $dipRows,   // << NEW GROUP
+                'caesar_dips'   => $dipRows,
                 'top15_overall' => $top15,
-                'all_items_seen'=> [],         // filled later
+                'all_items_seen'=> [],
             ];
 
-            // sold-with-pizza stays the same
+            // sold-with-pizza output (now includes beverages + crazy_puffs)
             $den = $pizzaBase ?: 1;
             $soldRes['buckets'][$key] = [
                 'label'       => $label,
                 'counts'      => [
-                    'crazy_bread' => (int)$countCzb,
-                    'cookies'     => (int)$countCok,
-                    'sauce'       => (int)$countSau,
-                    'wings'       => (int)$countWin,
+                    'crazy_bread' => (int)$countBread,
+                    'cookies'     => (int)$countCookie,
+                    'sauce'       => (int)$countSauce,      // mapped to is_caesar_dip
+                    'wings'       => (int)$countWings,      // mapped to is_wings
+                    'beverages'   => (int)$countBev,        // mapped to is_beverages
+                    'crazy_puffs' => (int)$countPuffs,      // mapped to is_crazy_puffs
                     'pizza_base'  => (int)$pizzaBase,
                 ],
                 'percentages' => [
-                    'crazy_bread' => $pizzaBase ? $countCzb / $den : 0.0,
-                    'cookies'     => $pizzaBase ? $countCok / $den : 0.0,
-                    'sauce'       => $pizzaBase ? $countSau / $den : 0.0,
-                    'wings'       => $pizzaBase ? $countWin / $den : 0.0,
+                    'crazy_bread' => $pizzaBase ? $countBread / $den : 0.0,
+                    'cookies'     => $pizzaBase ? $countCookie / $den : 0.0,
+                    'sauce'       => $pizzaBase ? $countSauce / $den : 0.0,
+                    'wings'       => $pizzaBase ? $countWings / $den : 0.0,
+                    'beverages'   => $pizzaBase ? $countBev   / $den : 0.0,
+                    'crazy_puffs' => $pizzaBase ? $countPuffs / $den : 0.0,
                 ],
             ];
 
@@ -317,14 +314,16 @@ class ItemsAndWithPizzaFusedService
         ];
     }
 
-    // ====== Query Builder base (no Eloquent hydration) ======
+    // ====== Query Builder base ======
     private function baseQB(?string $store, string $from, string $to, ?array $placed, ?array $fulfilled)
     {
+        // NOTE: includes new generated flags for sold-with-pizza counting
         $q = DB::table('order_line')
             ->select([
-                'id','order_id','item_id','menu_item_name','net_amount','quantity',
-                'business_date',
-                'is_pizza','is_companion_crazy_bread','is_companion_cookie','is_companion_sauce','is_companion_wings',
+                'id','order_id','item_id','menu_item_name','menu_item_account',
+                'net_amount','quantity','business_date',
+                'is_pizza',
+                'is_bread','is_wings','is_beverages','is_crazy_puffs','is_caesar_dip',
             ])
             ->whereBetween('business_date', [$from, $to]);
 
@@ -343,26 +342,6 @@ class ItemsAndWithPizzaFusedService
 
     /**
      * Precompute unit prices for all relevant items once FOR A GIVEN BUCKET.
-     *
-     * If a store is provided (and not "all"), use that store.
-     * Otherwise, force store = "03795-00001".
-     *
-     * Rule for the bucket:
-     *   - placed in $placedForPrice (if not null)
-     *   - fulfilled in $fulfilledForPrice (if not null)
-     *   - bundle_name IS NULL/'' AND modification_reason IS NULL/''
-     *   - quantity > 0
-     *
-     * Primary: first (business_date ASC, then id ASC)
-     * Fallback: latest (business_date DESC, then id DESC) with same filters
-     *
-     * @param string|null  $store
-     * @param string       $from
-     * @param string       $to
-     * @param string[]     $relevantIdStr
-     * @param string[]|null $placedForPrice
-     * @param string[]|null $fulfilledForPrice
-     * @return array<string,float>  [item_id_string => unit_price]
      */
     private function precomputeUnitPrices(
         ?string $store,
@@ -374,12 +353,11 @@ class ItemsAndWithPizzaFusedService
     ): array {
         $unit = [];
 
-        // Decide which store to use for UNIT PRICE lookup
         $storeForPrice = ($store !== null && $store !== '' && strtolower($store) !== 'all')
             ? $store
             : '03795-00001';
 
-        // ---------- Primary: first qualifying row per item ----------
+        // Primary: first qualifying row per item
         $q = DB::table('order_line')
             ->select(['id','item_id','net_amount','quantity','business_date'])
             ->whereBetween('business_date', [$from, $to])
@@ -408,7 +386,7 @@ class ItemsAndWithPizzaFusedService
               }
           });
 
-        // ---------- Fallback: latest row with SAME filters if still missing ----------
+        // Fallback: latest row with same filters if still missing
         $missing = array_values(array_diff($relevantIdStr, array_keys($unit)));
         if (!empty($missing)) {
             $fq = DB::table('order_line')
