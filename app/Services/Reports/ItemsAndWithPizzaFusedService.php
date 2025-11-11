@@ -107,6 +107,7 @@ class ItemsAndWithPizzaFusedService
         // collect union across buckets
         $seenAnywhere = [];
 
+        // ===== EDIT #2: renamed entries_count -> units_sold and sort by it
         $buildRows = static function (
             array $ids,
             array $sumByItem,
@@ -117,20 +118,20 @@ class ItemsAndWithPizzaFusedService
         ): array {
             $rows = [];
             foreach ($ids as $intId) {
-                $id = (string)$intId;
-                $count = (int)($countByItem[$id] ?? 0);
-                if ($filterAppeared && $count === 0) { continue; }
+                $id    = (string)$intId;
+                $units = (int)($countByItem[$id] ?? 0);
+                if ($filterAppeared && $units === 0) { continue; }
 
                 $rows[] = [
                     'item_id'        => (int)$intId,
                     'menu_item_name' => $nameByItem[$id]  ?? '',
                     'unit_price'     => (float)($unitPriceByItem[$id] ?? 0.0),
                     'total_sales'    => (float)($sumByItem[$id]   ?? 0.0),
-                    'entries_count'  => $count,
+                    'units_sold'     => $units, // renamed
                 ];
             }
             usort($rows, static function ($a, $b) {
-                $cmp = $b['entries_count'] <=> $a['entries_count'];
+                $cmp = $b['units_sold'] <=> $a['units_sold']; // sort by units
                 return $cmp !== 0 ? $cmp : ($b['total_sales'] <=> $a['total_sales']);
             });
             return $rows;
@@ -160,7 +161,7 @@ class ItemsAndWithPizzaFusedService
             );
 
             $sumByItem   = [];
-            $countByItem = [];
+            $countByItem = []; // now stores UNITS (sum of quantities)
             $nameByItem  = [];
 
             // sold-with-pizza counters (using flags)
@@ -185,23 +186,25 @@ class ItemsAndWithPizzaFusedService
                         $itemIdS = (string)($r->item_id ?? '');
                         $amt     = (float) ($r->net_amount ?? 0);
                         $name    = (string)($r->menu_item_name ?? '');
+                        $qty     = (int)   ($r->quantity ?? 0); // ===== EDIT #1: grab quantity
 
                         if (isset($relevantIdFlip[$itemIdS])) {
                             $sumByItem[$itemIdS]   = ($sumByItem[$itemIdS]   ?? 0.0) + $amt;
-                            $countByItem[$itemIdS] = ($countByItem[$itemIdS] ?? 0) + 1;
+                            $countByItem[$itemIdS] = ($countByItem[$itemIdS] ?? 0)   + $qty; // ===== EDIT #1: sum quantities
                             if (!isset($nameByItem[$itemIdS]) && $name !== '') {
                                 $nameByItem[$itemIdS] = $name;
                             }
                             $seenAnywhere[$itemIdS] = true;
                         }
 
+                        // sold-with-pizza section remains as you had it (you said it's good)
                         if ($r->is_pizza) {
-                            $pizzaBase++;
+                            $pizzaBase++; // keep as row-level base if that's what you want
                             if ($orderId !== '') { $pizzaOrders[$orderId] = true; }
                         }
                     }
 
-                    // sold-with-pizza using the generated boolean columns
+                    // sold-with-pizza using the generated boolean columns (unchanged)
                     if (!empty($pizzaOrders)) {
                         foreach ($rows as $r) {
                             $oid = (string)($r->order_id ?? '');
@@ -246,17 +249,17 @@ class ItemsAndWithPizzaFusedService
                 'all_items_seen'=> [],
             ];
 
-            // sold-with-pizza output (based on flags)
+            // sold-with-pizza output (unchanged)
             $den = $pizzaBase ?: 1;
             $soldRes['buckets'][$key] = [
                 'label'       => $label,
                 'counts'      => [
-                    'crazy_bread' => (int)$countBread,   // is_bread
-                    'cookies'     => (int)$countCookie,  // explicit cookie IDs
-                    'sauce'       => (int)$countSauce,   // is_caesar_dip
-                    'wings'       => (int)$countWings,   // is_wings
-                    'beverages'   => (int)$countBev,     // is_beverages
-                    'crazy_puffs' => (int)$countPuffs,   // is_crazy_puffs
+                    'crazy_bread' => (int)$countBread,
+                    'cookies'     => (int)$countCookie,
+                    'sauce'       => (int)$countSauce,
+                    'wings'       => (int)$countWings,
+                    'beverages'   => (int)$countBev,
+                    'crazy_puffs' => (int)$countPuffs,
                     'pizza_base'  => (int)$pizzaBase,
                 ],
                 'percentages' => [
@@ -272,7 +275,7 @@ class ItemsAndWithPizzaFusedService
             $_bucketRaw[$key] = [$sumByItem, $countByItem, $nameByItem, $unitPriceByItem];
         }
 
-        // Union + per-bucket zero-filled list
+        // ===== EDIT #3: Union + per-bucket zero-filled list uses units_sold and sorts by it
         $unionIds = \array_keys($seenAnywhere);
         \sort($unionIds, \SORT_STRING);
         $allItemsUnion = \array_map('intval', $unionIds);
@@ -287,12 +290,12 @@ class ItemsAndWithPizzaFusedService
                     'menu_item_name' => $nameBy[$id] ?? '',
                     'unit_price'     => (float)($unitPriceByItem[$id] ?? 0.0),
                     'total_sales'    => (float)($sumBy[$id]   ?? 0.0),
-                    'entries_count'  => (int)  ($countBy[$id] ?? 0),
+                    'units_sold'     => (int)  ($countBy[$id] ?? 0), // renamed
                 ];
             }
 
             \usort($rows, static function ($a, $b) {
-                $cmp = $b['entries_count'] <=> $a['entries_count'];
+                $cmp = $b['units_sold'] <=> $a['units_sold']; // sort by units
                 return $cmp !== 0 ? $cmp : ($b['total_sales'] <=> $a['total_sales']);
             });
 

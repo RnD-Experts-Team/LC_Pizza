@@ -18,7 +18,6 @@ class OrderLine extends Model
         'date_time_fulfilled',
         'net_amount',
         'quantity',
-        
         'royalty_item',
         'taxable_item',
         'order_id',
