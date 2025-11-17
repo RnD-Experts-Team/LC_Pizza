@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\HourlySales;
 use App\Models\SummaryItem;
 use App\Models\FinalSummary;
+use App\Models\HourHNRTransaction; // NEW
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Http;
@@ -66,8 +67,8 @@ class DSPR_Controller extends Controller
 
         /***dates Used**/
         $givenDate = Carbon::parse($date);
-        $usedDate = CarbonImmutable::parse($givenDate);
-        $dayName = $givenDate->dayName;
+        $usedDate  = CarbonImmutable::parse($givenDate);
+        $dayName   = $givenDate->dayName;
 
         //for week (current week)
         $weekNumber    = $usedDate->isoWeek;
@@ -82,18 +83,18 @@ class DSPR_Controller extends Controller
         $lookBackStartDate = $usedDate->subDays(84);
         $lookBackEndDate   = $usedDate;
 
-        $startStr    = $weekStartDate->toDateString();
-        $endStr      = $weekEndDate->toDateString();
+        $startStr = $weekStartDate->toDateString();
+        $endStr   = $weekEndDate->toDateString();
 
         // External deposit/delivery data - CURRENT WEEK
         $base = rtrim('https://hook.pneunited.com/api/deposit-delivery-dsqr-weekly', '/');
         $url  = $base.'/'.rawurlencode($store).'/'.rawurlencode($startStr).'/'.rawurlencode($endStr);
 
         Log::info('Fetching weekly deposit/delivery data', [
-            'store'   => $store,
-            'start'   => $weekStartDate,
-            'end'     => $weekEndDate,
-            'url'     => $url,
+            'store' => $store,
+            'start' => $weekStartDate,
+            'end'   => $weekEndDate,
+            'url'   => $url,
         ]);
 
         // Make the GET request (current week)
@@ -156,6 +157,12 @@ class DSPR_Controller extends Controller
             ->where('business_date', $usedDate)
             ->get();
 
+        // NEW: daily HNR transactions
+        $dailyHnrCollection = HourHNRTransaction::
+            where('franchise_store', $store)
+            ->where('business_date', $usedDate)
+            ->get();
+
         //weekly (current week)
         $weeklyFinalSummaryCollection = FinalSummary::
             where('franchise_store', '=', $store)
@@ -193,9 +200,9 @@ class DSPR_Controller extends Controller
             ->get();
 
         //calling the methods for the data
-        $dailyHourlySalesData = $this->DailyHourlySalesReport($dailyHourlySalesCollection);
+        $dailyHourlySalesData = $this->DailyHourlySalesReport($dailyHourlySalesCollection, $dailyHnrCollection);
         $dailyDSQRData        = $this->DailyDSQRReport($dailyDepositDeliveryCollection);
-        $dailyDSPRData        = $this->DailyDSPRReport($dailyFinalSummaryCollection, $dailyDepositDeliveryCollection);
+        $dailyDSPRData        = $this->DailyDSPRReport($dailyFinalSummaryCollection, $dailyDepositDeliveryCollection, $dailyHnrCollection);
 
         $WeeklyDSPRData       = $this->WeeklyDSPRReport($weeklyFinalSummaryCollection, $weeklyDepositDeliveryCollection);
 
@@ -247,6 +254,7 @@ class DSPR_Controller extends Controller
         /**
          * Build DailyDSPRByDate for current week, and for each date,
          * also attach "PrevWeek" → the same weekday one week earlier.
+         * (No HNR added here, to avoid changing weekly structure unless needed.)
          */
         $dailyDSPRRange = [];
 
@@ -257,7 +265,7 @@ class DSPR_Controller extends Controller
             $dd = $ddByDate->get($key, collect()); // per-day DD (current week)
 
             // Base DailyDSPR for this date (your existing method; returns array OR string)
-            $dayDspr = $this->DailyDSPRReport($fs, $dd);
+            $dayDspr = $this->DailyDSPRReport($fs, $dd); // NOTE: no HNR here → old behavior
 
             // Only enrich when we got a proper array back
             if (is_array($dayDspr)) {
@@ -303,7 +311,7 @@ class DSPR_Controller extends Controller
                 $prevKey     = $prevDate->toDateString();  // e.g. 2025-11-10
                 $prevFs      = $prevFsByDate->get($prevKey, collect());
                 $prevDd      = $prevDdByDate->get($prevKey, collect());
-                $prevDayDspr = $this->DailyDSPRReport($prevFs, $prevDd);
+                $prevDayDspr = $this->DailyDSPRReport($prevFs, $prevDd); // also old behavior
 
                 if (is_array($prevDayDspr)) {
                     $prevDayName = $prevDate->dayName;
@@ -365,13 +373,13 @@ class DSPR_Controller extends Controller
             ],
             'reports' => [
                 'daily' => [
-                    'dailyHourlySales' => $dailyHourlySalesData,
+                    'dailyHourlySales' => $dailyHourlySalesData,  // includes HNR by hour
                     'dailyDSQRData'    => $dailyDSQRData,
-                    'dailyDSPRData'    => $dailyDSPRData,
+                    'dailyDSPRData'    => $dailyDSPRData,        // includes HNR totals
                 ],
                 'weekly' => [
-                    'DSPRData'       => $WeeklyDSPRData,
-                    'DailyDSPRByDate'=> $dailyDSPRRange,
+                    'DSPRData'        => $WeeklyDSPRData,
+                    'DailyDSPRByDate' => $dailyDSPRRange,
                 ],
             ],
         ];
@@ -408,10 +416,13 @@ class DSPR_Controller extends Controller
 
     }
 
-    public function DailyHourlySalesReport($dailyHourlySalesCollection)
+    /**
+     * Extended: if $hnrCollection is provided, we enrich each hour with HNR data.
+     */
+    public function DailyHourlySalesReport($dailyHourlySalesCollection, $hnrCollection = null)
     {
-        // If empty, keep the new shape but mark hours as empty
-        if ($dailyHourlySalesCollection->isEmpty()) {
+        // If both are empty, keep the shape but mark hours as empty
+        if ($dailyHourlySalesCollection->isEmpty() && (empty($hnrCollection) || $hnrCollection->isEmpty())) {
             return [
                 'franchise_store' => null,
                 'business_date'   => null,
@@ -419,32 +430,80 @@ class DSPR_Controller extends Controller
             ];
         }
 
-        // Derive store/date from the first record in the collection
-        $first = $dailyHourlySalesCollection->first();
-        $store = $first->franchise_store ?? null;
-        $date  = $first->business_date ?? null;
+        // Derive store/date from whichever has data first
+        $firstSource = !$dailyHourlySalesCollection->isEmpty()
+            ? $dailyHourlySalesCollection->first()
+            : ($hnrCollection ? $hnrCollection->first() : null);
+
+        $store = $firstSource->franchise_store ?? null;
+        $date  = $firstSource->business_date ?? null;
+
+        // Pre-group HNR by hour if provided
+        $hnrByHour = ($hnrCollection instanceof Collection)
+            ? $hnrCollection->groupBy('hour')
+            : collect();
 
         // Pre-build the hours map 0..23
         $hours = [];
         for ($h = 0; $h <= 23; $h++) {
-            // Filter the in-memory collection for this hour
+
+            $base = [];
+
+            // --- Existing hourly sales aggregation ---
             $subset = $dailyHourlySalesCollection->where('hour', $h);
 
-            if ($subset->isEmpty()) {
-                $hours[$h] = (object)[];  // empty object for missing hour
-                continue;
+            if (!$subset->isEmpty()) {
+                $base = [
+                    'Total_Sales'       => round((float) $subset->sum('total_sales'), 2),
+                    'Phone_Sales'       => round((float) $subset->sum('phone_sales'), 2),
+                    'Call_Center_Agent' => round((float) $subset->sum('call_center_sales'), 2),
+                    'Drive_Thru'        => round((float) $subset->sum('drive_thru_sales'), 2),
+                    'Website'           => round((float) $subset->sum('website_sales'), 2),
+                    'Mobile'            => round((float) $subset->sum('mobile_sales'), 2),
+                    'Order_Count'       => (int) $subset->sum('order_count'),
+                ];
             }
 
-            // Aggregate
-            $hours[$h] = [
-                'Total_Sales'       => round((float) $subset->sum('total_sales'),2),
-                'Phone_Sales'       => round((float) $subset->sum('phone_sales'),2),
-                'Call_Center_Agent' => round((float) $subset->sum('call_center_sales'),2),
-                'Drive_Thru'        => round((float) $subset->sum('drive_thru_sales'),2),
-                'Website'           => round((float) $subset->sum('website_sales'),2),
-                'Mobile'            => round((float) $subset->sum('mobile_sales'),2),
-                'Order_Count'       => (int)   $subset->sum('order_count'),
-            ];
+            // --- NEW: HNR per hour ---
+            $hnrHourSet = $hnrByHour->get($h, collect());
+
+            if ($hnrHourSet instanceof Collection && !$hnrHourSet->isEmpty()) {
+                $totalTransactions    = (float) $hnrHourSet->sum('transactions');
+                $totalTransactionsCC  = (float) $hnrHourSet->sum('transactions_with_CC');
+
+                $promiseBrokenWeighted = 0.0;
+                $maxBrokenRaw          = 0.0;
+
+                if ($totalTransactions > 0) {
+                    $promiseBrokenWeighted = $hnrHourSet->reduce(function ($carry, $row) {
+                        $t = (float) $row->transactions;
+                        $p = (float) $row->promise_broken_percentage;
+                        return $carry + ($t * $p);
+                    }, 0.0) / $totalTransactions;
+
+                    $maxBrokenRaw = (float) $hnrHourSet->max('promise_broken_percentage');
+                }
+
+                // Handle scale: if max broken <= 1, treat as 0..1; otherwise as 0..100
+                if ($maxBrokenRaw <= 1.0) {
+                    $promiseMetPercent   = max(0.0, 1.0 - $promiseBrokenWeighted);
+                    $promiseMetTx        = $totalTransactions * $promiseMetPercent;
+                } else {
+                    $promiseMetPercent   = max(0.0, 100.0 - $promiseBrokenWeighted);
+                    $promiseMetTx        = $totalTransactions * ($promiseMetPercent / 100.0);
+                }
+
+                $base['HNR'] = [
+                    'Transactions'               => round($totalTransactions, 2),
+                    'Transactions_with_CC'       => round($totalTransactionsCC, 2),
+                    'Promise_Broken_Percent'     => round($promiseBrokenWeighted, 2),
+                    'Promise_Met_Percent'        => round($promiseMetPercent, 2),
+                    'Promise_Met_Transactions'   => round($promiseMetTx, 2),
+                ];
+            }
+
+            // If we still have no data at all, keep old behavior: empty object
+            $hours[$h] = empty($base) ? (object)[] : $base;
         }
 
         return [
@@ -508,7 +567,11 @@ class DSPR_Controller extends Controller
 
     }
 
-    public function DailyDSPRReport($dailyFinalSummaryCollection, $depositDeliveryCollection)
+    /**
+     * Extended: can optionally accept $hnrCollection and add daily HNR totals
+     * to the returned DSPR data.
+     */
+    public function DailyDSPRReport($dailyFinalSummaryCollection, $depositDeliveryCollection, $hnrCollection = null)
     {
         if ($dailyFinalSummaryCollection->isEmpty()) {
             return "No Final Summary data available.";
@@ -524,33 +587,69 @@ class DSPR_Controller extends Controller
         $cashSales     = $dailyFinalSummaryCollection->sum('cash_sales');
         $customerCount = $dailyFinalSummaryCollection->sum('customer_count');
 
-        return[
-            'labor'                          => round($workingHours * 16 / $totalSales,2),
-            'waste_gateway'                  => round($dailyFinalSummaryCollection->sum('total_waste_cost'),2),
-            'over_short'                     => round($deposit - $cashSales,2),
-            'Refunded_order_Qty'             => round($dailyFinalSummaryCollection->sum('refunded_order_qty'),2),
-            'Total_Cash_Sales'               => round($cashSales,2),
-            'Total_Sales'                    => round($totalSales,2),
-            'Waste_Alta'                     => round($depositDeliveryCollection->sum('HookAltimetricWaste'),2),
-            'Modified_Order_Qty'             => round($dailyFinalSummaryCollection->sum('modified_order_qty'),2),
-            'Total_TIPS'                     => round($dailyFinalSummaryCollection->sum('total_tips') + $depositDeliveryCollection->sum('HookHowMuchTips'),2),
-            'Customer_count'                 => round($customerCount,2),
-            'DoorDash_Sales'                 => round($dailyFinalSummaryCollection->sum('doordash_sales'),2),
-            'UberEats_Sales'                 => round($dailyFinalSummaryCollection->sum('ubereats_sales'),2),
-            'GrubHub_Sales'                  => round($dailyFinalSummaryCollection->sum('grubhub_sales'),2),
-            'Phone'                          => round($dailyFinalSummaryCollection->sum('phone_sales'),2),
-            'Call_Center_Agent'              => round($dailyFinalSummaryCollection->sum('call_center_sales'),2),
-            'Website'                        => round($dailyFinalSummaryCollection->sum('website_sales'),2),
-            'Mobile'                         => round($dailyFinalSummaryCollection->sum('mobile_sales'),2),
-            'Digital_Sales_Percent'          => round($dailyFinalSummaryCollection->sum('digital_sales_percent'),2),
-            'Total_Portal_Eligible_Transactions' => round($dailyFinalSummaryCollection->sum('portal_transactions'),2),
-            'Put_into_Portal_Percent'        => round($dailyFinalSummaryCollection->sum('portal_used_percent'),2),
-            'In_Portal_on_Time_Percent'      => round($dailyFinalSummaryCollection->sum('in_portal_on_time_percent'),2),
-            'Drive_Thru_Sales'               => round($dailyFinalSummaryCollection->sum('drive_thru_sales'),2),
+        $result = [
+            'labor'                          => round($workingHours * 16 / $totalSales, 2),
+            'waste_gateway'                  => round($dailyFinalSummaryCollection->sum('total_waste_cost'), 2),
+            'over_short'                     => round($deposit - $cashSales, 2),
+            'Refunded_order_Qty'             => round($dailyFinalSummaryCollection->sum('refunded_order_qty'), 2),
+            'Total_Cash_Sales'               => round($cashSales, 2),
+            'Total_Sales'                    => round($totalSales, 2),
+            'Waste_Alta'                     => round($depositDeliveryCollection->sum('HookAltimetricWaste'), 2),
+            'Modified_Order_Qty'             => round($dailyFinalSummaryCollection->sum('modified_order_qty'), 2),
+            'Total_TIPS'                     => round($dailyFinalSummaryCollection->sum('total_tips') + $depositDeliveryCollection->sum('HookHowMuchTips'), 2),
+            'Customer_count'                 => round($customerCount, 2),
+            'DoorDash_Sales'                 => round($dailyFinalSummaryCollection->sum('doordash_sales'), 2),
+            'UberEats_Sales'                 => round($dailyFinalSummaryCollection->sum('ubereats_sales'), 2),
+            'GrubHub_Sales'                  => round($dailyFinalSummaryCollection->sum('grubhub_sales'), 2),
+            'Phone'                          => round($dailyFinalSummaryCollection->sum('phone_sales'), 2),
+            'Call_Center_Agent'              => round($dailyFinalSummaryCollection->sum('call_center_sales'), 2),
+            'Website'                        => round($dailyFinalSummaryCollection->sum('website_sales'), 2),
+            'Mobile'                         => round($dailyFinalSummaryCollection->sum('mobile_sales'), 2),
+            'Digital_Sales_Percent'          => round($dailyFinalSummaryCollection->sum('digital_sales_percent'), 2),
+            'Total_Portal_Eligible_Transactions' => round($dailyFinalSummaryCollection->sum('portal_transactions'), 2),
+            'Put_into_Portal_Percent'        => round($dailyFinalSummaryCollection->sum('portal_used_percent'), 2),
+            'In_Portal_on_Time_Percent'      => round($dailyFinalSummaryCollection->sum('in_portal_on_time_percent'), 2),
+            'Drive_Thru_Sales'               => round($dailyFinalSummaryCollection->sum('drive_thru_sales'), 2),
             'Upselling'                      => null,
-            'Cash_Sales_Vs_Deposite_Difference' => round($deposit - $cashSales,2),
-            'Avrage_ticket'                  => round($totalSales / $customerCount,2),
+            'Cash_Sales_Vs_Deposite_Difference' => round($deposit - $cashSales, 2),
+            'Avrage_ticket'                  => round($totalSales / $customerCount, 2),
         ];
+
+        // NEW: daily HNR totals (if provided)
+        if ($hnrCollection instanceof Collection && !$hnrCollection->isEmpty()) {
+            $totalTransactions   = (float) $hnrCollection->sum('transactions');
+            $totalTransactionsCC = (float) $hnrCollection->sum('transactions_with_CC');
+
+            $promiseBrokenWeighted = 0.0;
+            $maxBrokenRaw          = 0.0;
+
+            if ($totalTransactions > 0) {
+                $promiseBrokenWeighted = $hnrCollection->reduce(function ($carry, $row) {
+                    $t = (float) $row->transactions;
+                    $p = (float) $row->promise_broken_percentage;
+                    return $carry + ($t * $p);
+                }, 0.0) / $totalTransactions;
+
+                $maxBrokenRaw = (float) $hnrCollection->max('promise_broken_percentage');
+            }
+
+            // Decide scale (0..1 or 0..100) based on max
+            if ($maxBrokenRaw <= 1.0) {
+                $promiseMetPercent = max(0.0, 1.0 - $promiseBrokenWeighted);
+                $promiseMetTx      = $totalTransactions * $promiseMetPercent;
+            } else {
+                $promiseMetPercent = max(0.0, 100.0 - $promiseBrokenWeighted);
+                $promiseMetTx      = $totalTransactions * ($promiseMetPercent / 100.0);
+            }
+
+            $result['HNR_Transactions']             = round($totalTransactions, 2);
+            $result['HNR_Transactions_with_CC']     = round($totalTransactionsCC, 2);
+            $result['HNR_Promise_Broken_Percent']   = round($promiseBrokenWeighted, 2);
+            $result['HNR_Promise_Met_Percent']      = round($promiseMetPercent, 2);
+            $result['HNR_Promise_Met_Transactions'] = round($promiseMetTx, 2);
+        }
+
+        return $result;
     }
 
     public function WeeklyDSPRReport($weeklyFinalSummaryCollection, $weeklyDepositDeliveryCollection)
@@ -606,31 +705,31 @@ class DSPR_Controller extends Controller
         $tipsDepositDelivery = (float) $weeklyDepositDeliveryCollection->sum('HookHowMuchTips');
 
         return [
-            'labor'                          => round($totalLabors,2),
-            'waste_gateway'                  => round((float) $weeklyFinalSummaryCollection->sum('total_waste_cost'),2),
-            'over_short'                     => round($deposit - $cashSales,2),
-            'Refunded_order_Qty'             => round((float) $weeklyFinalSummaryCollection->sum('refunded_order_qty'),2),
-            'Total_Cash_Sales'               => round($cashSales,2),
-            'Total_Sales'                    => round($totalSales,2),
-            'Waste_Alta'                     => round((float) $weeklyDepositDeliveryCollection->sum('HookAltimetricWaste'),2),
-            'Modified_Order_Qty'             => round((float) $weeklyFinalSummaryCollection->sum('modified_order_qty'),2),
-            'Total_TIPS'                     => round($tipsFinalSummary + $tipsDepositDelivery,2),
-            'Customer_count'                 => round($customerCount,2),
-            'DoorDash_Sales'                 => round((float) $weeklyFinalSummaryCollection->sum('doordash_sales'),2),
-            'UberEats_Sales'                 => round((float) $weeklyFinalSummaryCollection->sum('ubereats_sales'),2),
-            'GrubHub_Sales'                  => round((float) $weeklyFinalSummaryCollection->sum('grubhub_sales'),2),
-            'Phone'                          => round((float) $weeklyFinalSummaryCollection->sum('phone_sales'),2),
-            'Call_Center_Agent'              => round((float) $weeklyFinalSummaryCollection->sum('call_center_sales'),2),
-            'Website'                        => round((float) $weeklyFinalSummaryCollection->sum('website_sales'),2),
-            'Mobile'                         => round((float) $weeklyFinalSummaryCollection->sum('mobile_sales'),2),
-            'Digital_Sales_Percent'          => round($finalSummaryDaysCount ? (float) $weeklyFinalSummaryCollection->sum('digital_sales_percent') / $finalSummaryDaysCount : 0.0,2),
-            'Total_Portal_Eligible_Transactions' => round((float) $weeklyFinalSummaryCollection->sum('portal_transactions'),2),
-            'Put_into_Portal_Percent'        => round($finalSummaryDaysCount ? (float) $weeklyFinalSummaryCollection->sum('portal_used_percent') / $finalSummaryDaysCount : 0.0,2),
-            'In_Portal_on_Time_Percent'      => round($finalSummaryDaysCount ? (float) $weeklyFinalSummaryCollection->sum('in_portal_on_time_percent') / $finalSummaryDaysCount : 0.0,2),
-            'Drive_Thru_Sales'               => round((float) $weeklyFinalSummaryCollection->sum('drive_thru_sales'),2),
+            'labor'                          => round($totalLabors, 2),
+            'waste_gateway'                  => round((float) $weeklyFinalSummaryCollection->sum('total_waste_cost'), 2),
+            'over_short'                     => round($deposit - $cashSales, 2),
+            'Refunded_order_Qty'             => round((float) $weeklyFinalSummaryCollection->sum('refunded_order_qty'), 2),
+            'Total_Cash_Sales'               => round($cashSales, 2),
+            'Total_Sales'                    => round($totalSales, 2),
+            'Waste_Alta'                     => round((float) $weeklyDepositDeliveryCollection->sum('HookAltimetricWaste'), 2),
+            'Modified_Order_Qty'             => round((float) $weeklyFinalSummaryCollection->sum('modified_order_qty'), 2),
+            'Total_TIPS'                     => round($tipsFinalSummary + $tipsDepositDelivery, 2),
+            'Customer_count'                 => round($customerCount, 2),
+            'DoorDash_Sales'                 => round((float) $weeklyFinalSummaryCollection->sum('doordash_sales'), 2),
+            'UberEats_Sales'                 => round((float) $weeklyFinalSummaryCollection->sum('ubereats_sales'), 2),
+            'GrubHub_Sales'                  => round((float) $weeklyFinalSummaryCollection->sum('grubhub_sales'), 2),
+            'Phone'                          => round((float) $weeklyFinalSummaryCollection->sum('phone_sales'), 2),
+            'Call_Center_Agent'              => round((float) $weeklyFinalSummaryCollection->sum('call_center_sales'), 2),
+            'Website'                        => round((float) $weeklyFinalSummaryCollection->sum('website_sales'), 2),
+            'Mobile'                         => round((float) $weeklyFinalSummaryCollection->sum('mobile_sales'), 2),
+            'Digital_Sales_Percent'          => round($finalSummaryDaysCount ? (float) $weeklyFinalSummaryCollection->sum('digital_sales_percent') / $finalSummaryDaysCount : 0.0, 2),
+            'Total_Portal_Eligible_Transactions' => round((float) $weeklyFinalSummaryCollection->sum('portal_transactions'), 2),
+            'Put_into_Portal_Percent'        => round($finalSummaryDaysCount ? (float) $weeklyFinalSummaryCollection->sum('portal_used_percent') / $finalSummaryDaysCount : 0.0, 2),
+            'In_Portal_on_Time_Percent'      => round($finalSummaryDaysCount ? (float) $weeklyFinalSummaryCollection->sum('in_portal_on_time_percent') / $finalSummaryDaysCount : 0.0, 2),
+            'Drive_Thru_Sales'               => round((float) $weeklyFinalSummaryCollection->sum('drive_thru_sales'), 2),
             'Upselling'                      => null,
-            'Cash_Sales_Vs_Deposite_Difference' => round($finalSummaryDaysCount ? ($deposit - $cashSales) / $finalSummaryDaysCount : 0.0,2),
-            'Avrage_ticket'                  => round($customerCount > 0 ? $totalSales / $customerCount : 0.0,2),
+            'Cash_Sales_Vs_Deposite_Difference' => round($finalSummaryDaysCount ? ($deposit - $cashSales) / $finalSummaryDaysCount : 0.0, 2),
+            'Avrage_ticket'                  => round($customerCount > 0 ? $totalSales / $customerCount : 0.0, 2),
         ];
     }
 
