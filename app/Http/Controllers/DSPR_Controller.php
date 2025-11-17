@@ -31,7 +31,7 @@ class DSPR_Controller extends Controller
         return $data;
     }
 
-    public function index(Request $request,$store, $date)
+    public function index(Request $request, $store, $date)
     {
         // --- guards ---
         if (empty($store) || empty($date)) {
@@ -40,46 +40,52 @@ class DSPR_Controller extends Controller
         if (!preg_match('/^\d{4}-\d{1,2}-\d{1,2}$/', $date)) {
             return response()->json(['error' => 'Invalid date format, expected YYYY-MM-DD or YYYY-M-D'], 400);
         }
-         // fallback items
-    $defaultItemIds = [
-        103001, // Crazy Bread
-        201128, // EMB Cheese
-        201106, // EMB Pepperoni
-        105001, // Caesar Wings
-        103002, // Crazy Sauce
-        103044, // Pepperoni Crazy Puffs®
-        103033, // 4 Cheese Crazy Puffs®
-        103055, // Bacon & Cheese Crazy Puffs®
-    ];
 
-    // validate items only if provided
-    $validated = $request->validate([
-        'items' => ['sometimes', 'array', 'min:1'],
-        'items.*' => ['integer'],
-    ]);
+        // fallback items
+        $defaultItemIds = [
+            103001, // Crazy Bread
+            201128, // EMB Cheese
+            201106, // EMB Pepperoni
+            105001, // Caesar Wings
+            103002, // Crazy Sauce
+            103044, // Pepperoni Crazy Puffs®
+            103033, // 4 Cheese Crazy Puffs®
+            103055, // Bacon & Cheese Crazy Puffs®
+        ];
 
-    // If items not passed → fallback
-    $itemIds = isset($validated['items']) && count($validated['items']) > 0
-        ? array_values(array_unique($validated['items']))
-        : $defaultItemIds;
+        // validate items only if provided
+        $validated = $request->validate([
+            'items' => ['sometimes', 'array', 'min:1'],
+            'items.*' => ['integer'],
+        ]);
+
+        // If items not passed → fallback
+        $itemIds = isset($validated['items']) && count($validated['items']) > 0
+            ? array_values(array_unique($validated['items']))
+            : $defaultItemIds;
+
         /***dates Used**/
         $givenDate = Carbon::parse($date);
         $usedDate = CarbonImmutable::parse($givenDate);
         $dayName = $givenDate->dayName;
-        //for week
-        $weekNumber = $usedDate->isoWeek;
+
+        //for week (current week)
+        $weekNumber    = $usedDate->isoWeek;
         $weekStartDate = $usedDate->startOfWeek(Carbon::TUESDAY);
-        $weekEndDate = $weekStartDate->addDays(6);
+        $weekEndDate   = $weekStartDate->addDays(6);
+
+        // PREVIOUS WEEK (same weekday pattern)
+        $prevWeekStartDate = $weekStartDate->subWeek();
+        $prevWeekEndDate   = $weekEndDate->subWeek();
+
         //for lookback
-        $lookBackStartDate=$usedDate->subDays(84);
-        $lookBackEndDate=$usedDate;
+        $lookBackStartDate = $usedDate->subDays(84);
+        $lookBackEndDate   = $usedDate;
 
+        $startStr    = $weekStartDate->toDateString();
+        $endStr      = $weekEndDate->toDateString();
 
-
-        $startStr = $weekStartDate->toDateString();
-        $endStr   = $weekEndDate->toDateString();
-
-        // External deposit/delivery data
+        // External deposit/delivery data - CURRENT WEEK
         $base = rtrim('https://hook.pneunited.com/api/deposit-delivery-dsqr-weekly', '/');
         $url  = $base.'/'.rawurlencode($store).'/'.rawurlencode($startStr).'/'.rawurlencode($endStr);
 
@@ -89,7 +95,8 @@ class DSPR_Controller extends Controller
             'end'     => $weekEndDate,
             'url'     => $url,
         ]);
-        // Make the GET request
+
+        // Make the GET request (current week)
         $response = Http::get($url);
 
         if ($response->successful()) {
@@ -99,133 +106,175 @@ class DSPR_Controller extends Controller
             // Convert the array into a Laravel collection
             $weeklyDepositDeliveryCollection = collect($data['weeklyDepositDelivery']);
 
-             Log::info('Decoded weekly deposit/delivery data', [
+            Log::info('Decoded weekly deposit/delivery data', [
                 'count' => is_array($data) ? count($data) : null,
                 'keys'  => is_array($data) ? array_keys($data) : null,
             ]);
         } else {
             $weeklyDepositDeliveryCollection = collect();
             Log::warning('API call not successful', [
-            'status' => $response->status(),
-        ]);
+                'status' => $response->status(),
+            ]);
         }
 
-        $dailyDepositDeliveryCollection =$weeklyDepositDeliveryCollection->where('HookWorkDaysDate',$date);
+        // External deposit/delivery data - PREVIOUS WEEK
+        $prevStartStr = $prevWeekStartDate->toDateString();
+        $prevEndStr   = $prevWeekEndDate->toDateString();
+        $prevUrl      = $base.'/'.rawurlencode($store).'/'.rawurlencode($prevStartStr).'/'.rawurlencode($prevEndStr);
 
+        Log::info('Fetching PREVIOUS weekly deposit/delivery data', [
+            'store' => $store,
+            'start' => $prevWeekStartDate,
+            'end'   => $prevWeekEndDate,
+            'url'   => $prevUrl,
+        ]);
+
+        $prevResponse = Http::get($prevUrl);
+
+        if ($prevResponse->successful()) {
+            $prevData = $prevResponse->json();
+            $prevWeeklyDepositDeliveryCollection = collect($prevData['weeklyDepositDelivery']);
+        } else {
+            $prevWeeklyDepositDeliveryCollection = collect();
+            Log::warning('Previous-week API call not successful', [
+                'status' => $prevResponse->status(),
+            ]);
+        }
+
+        // Filter to a single day within current week
+        $dailyDepositDeliveryCollection = $weeklyDepositDeliveryCollection->where('HookWorkDaysDate', $date);
 
         /**get the data from models as collections**/
         //daily
         $dailyFinalSummaryCollection = FinalSummary::
-            where('franchise_store', '=',$store )
-            ->where('business_date','=',$usedDate)
+            where('franchise_store', '=', $store)
+            ->where('business_date', '=', $usedDate)
             ->get();
 
-        // $dailySummaryItemCollection = SummaryItem::
-        //     where('franchise_store', '=',$store )
-        //     ->where('business_date','=',$usedDate)
-        //     ->whereIn('menu_item_name',$Itemslist)
-        //     ->get();
-
         $dailyHourlySalesCollection = HourlySales::
-        where('franchise_store', $store )
-        ->where('business_date',$usedDate)
-        ->get();
+            where('franchise_store', $store)
+            ->where('business_date', $usedDate)
+            ->get();
 
-        //weekly
+        //weekly (current week)
         $weeklyFinalSummaryCollection = FinalSummary::
-            where('franchise_store', '=',$store )
+            where('franchise_store', '=', $store)
             ->whereBetween('business_date', [$weekStartDate, $weekEndDate])
             ->get();
 
         $weeklySummaryItemCollection = SummaryItem::
-            where('franchise_store', '=',$store )
+            where('franchise_store', '=', $store)
             ->whereBetween('business_date', [$weekStartDate, $weekEndDate])
             ->whereIn('item_id', $itemIds)
             ->get();
 
-        // $weeklyHourlySalesCollection = HourlySales::
-        // where('franchise_store', '=',$store )
-        // ->whereBetween('business_date', [$weekStartDate, $weekEndDate])
-        // ->get();
+        // PREVIOUS WEEK collections
+        $prevWeekFinalSummaryCollection = FinalSummary::
+            where('franchise_store', '=', $store)
+            ->whereBetween('business_date', [$prevWeekStartDate, $prevWeekEndDate])
+            ->get();
+
+        $prevWeekSummaryItemCollection = SummaryItem::
+            where('franchise_store', '=', $store)
+            ->whereBetween('business_date', [$prevWeekStartDate, $prevWeekEndDate])
+            ->whereIn('item_id', $itemIds)
+            ->get();
 
         //lookback
         $lookBackFinalSummaryCollection = FinalSummary::
-            where('franchise_store', '=',$store )
+            where('franchise_store', '=', $store)
             ->whereBetween('business_date', [$lookBackStartDate, $lookBackEndDate])
             ->get();
 
         $lookBackSummaryItemCollection = SummaryItem::
-            where('franchise_store', '=',$store )
+            where('franchise_store', '=', $store)
             ->whereBetween('business_date', [$lookBackStartDate, $lookBackEndDate])
             ->whereIn('item_id', $itemIds)
             ->get();
 
-        // $lookBackHourlySalesCollection = HourlySales::
-        // where('franchise_store', '=',$store )
-        // ->whereBetween('business_date', [$lookBackStartDate, $lookBackEndDate])
-        // ->get();
-
         //calling the methods for the data
-        $dailyHourlySalesData=$this->DailyHourlySalesReport($dailyHourlySalesCollection);
-        $dailyDSQRData=$this->DailyDSQRReport($dailyDepositDeliveryCollection);
-        $dailyDSPRData=$this->DailyDSPRReport($dailyFinalSummaryCollection,$dailyDepositDeliveryCollection);
+        $dailyHourlySalesData = $this->DailyHourlySalesReport($dailyHourlySalesCollection);
+        $dailyDSQRData        = $this->DailyDSQRReport($dailyDepositDeliveryCollection);
+        $dailyDSPRData        = $this->DailyDSPRReport($dailyFinalSummaryCollection, $dailyDepositDeliveryCollection);
 
-        $WeeklyDSPRData=$this->WeeklyDSPRReport($weeklyFinalSummaryCollection,$weeklyDepositDeliveryCollection);
+        $WeeklyDSPRData       = $this->WeeklyDSPRReport($weeklyFinalSummaryCollection, $weeklyDepositDeliveryCollection);
 
-        $customerService=$this->CustomerService($dayName,$weeklyFinalSummaryCollection,$lookBackFinalSummaryCollection);
+        $customerService = $this->CustomerService($dayName, $weeklyFinalSummaryCollection, $lookBackFinalSummaryCollection);
+
         if (is_array($customerService) && isset($customerService[5]['dailyScore'], $customerService[5]['weeklyScore'])) {
-    // after you build $dailyDSPRData and $WeeklyDSPRData:
-$dailyDSPRData['Customer_count_percent']  = round((float) ($customerService[5]['dailyScore']),2);
-$WeeklyDSPRData['Customer_count_percent'] = round((float) ($customerService[5]['weeklyScore']),2);
+            // after you build $dailyDSPRData and $WeeklyDSPRData:
+            $dailyDSPRData['Customer_count_percent']  = round((float) ($customerService[5]['dailyScore']), 2);
+            $WeeklyDSPRData['Customer_count_percent'] = round((float) ($customerService[5]['weeklyScore']), 2);
 
-$dailyDSPRData['Customer_Service'] = round((
-    (float) $dailyDSPRData['Customer_count_percent'] +
-    (float) $dailyDSPRData['Put_into_Portal_Percent'] +
-    (float) $dailyDSPRData['In_Portal_on_Time_Percent']
-) / 3,2);
+            $dailyDSPRData['Customer_Service'] = round((
+                (float) $dailyDSPRData['Customer_count_percent'] +
+                (float) $dailyDSPRData['Put_into_Portal_Percent'] +
+                (float) $dailyDSPRData['In_Portal_on_Time_Percent']
+            ) / 3, 2);
 
-$WeeklyDSPRData['Customer_Service'] = round((
-    (float) $WeeklyDSPRData['Customer_count_percent'] +
-    (float) $WeeklyDSPRData['Put_into_Portal_Percent'] +
-    (float) $WeeklyDSPRData['In_Portal_on_Time_Percent']
-) / 3,2);
-
-}
-
-        $upselling =$this->Upselling($dayName,$weeklySummaryItemCollection,$lookBackSummaryItemCollection);
-        if (is_array($upselling) && isset($upselling[5]['dailyScore'], $upselling[5]['weeklyScore'])) {
-    $dailyDSPRData['Upselling']  = round((float) ($upselling[5]['dailyScore']),2);
-    $WeeklyDSPRData['Upselling'] = round((float) ($upselling[5]['weeklyScore']),2);
-
+            $WeeklyDSPRData['Customer_Service'] = round((
+                (float) $WeeklyDSPRData['Customer_count_percent'] +
+                (float) $WeeklyDSPRData['Put_into_Portal_Percent'] +
+                (float) $WeeklyDSPRData['In_Portal_on_Time_Percent']
+            ) / 3, 2);
         }
 
-       // Group weekly FinalSummary rows by exact date ('Y-m-d')
+        $upselling = $this->Upselling($dayName, $weeklySummaryItemCollection, $lookBackSummaryItemCollection);
+        if (is_array($upselling) && isset($upselling[5]['dailyScore'], $upselling[5]['weeklyScore'])) {
+            $dailyDSPRData['Upselling']  = round((float) ($upselling[5]['dailyScore']), 2);
+            $WeeklyDSPRData['Upselling'] = round((float) ($upselling[5]['weeklyScore']), 2);
+        }
+
+        // Group weekly FinalSummary rows by exact date ('Y-m-d') - CURRENT WEEK
         $fsByDate = $weeklyFinalSummaryCollection->groupBy(function ($row) {
             return Carbon::parse($row['business_date'])->toDateString();
         });
 
-        // Group weekly Deposit/Delivery rows by exact date ('Y-m-d')
+        // Group weekly Deposit/Delivery rows by exact date ('Y-m-d') - CURRENT WEEK
         $ddByDate = $weeklyDepositDeliveryCollection->groupBy(function ($row) {
             return Carbon::parse($row['HookWorkDaysDate'])->toDateString();
         });
 
+        // PREVIOUS WEEK groupings
+        $prevFsByDate = $prevWeekFinalSummaryCollection->groupBy(function ($row) {
+            return Carbon::parse($row['business_date'])->toDateString();
+        });
+
+        $prevDdByDate = $prevWeeklyDepositDeliveryCollection->groupBy(function ($row) {
+            return Carbon::parse($row['HookWorkDaysDate'])->toDateString();
+        });
+
+        /**
+         * Build DailyDSPRByDate for current week, and for each date,
+         * also attach "PrevWeek" → the same weekday one week earlier.
+         */
         $dailyDSPRRange = [];
+
         for ($d = $weekStartDate; $d->lte($weekEndDate); $d = $d->addDay()) {
-            $key = $d->toDateString();
-            $fs  = $fsByDate->get($key, collect()); // per-day FS
-            $dd  = $ddByDate->get($key, collect()); // per-day DD
+            $key = $d->toDateString(); // e.g. 2025-11-17
+
+            $fs = $fsByDate->get($key, collect()); // per-day FS (current week)
+            $dd = $ddByDate->get($key, collect()); // per-day DD (current week)
 
             // Base DailyDSPR for this date (your existing method; returns array OR string)
             $dayDspr = $this->DailyDSPRReport($fs, $dd);
 
             // Only enrich when we got a proper array back
             if (is_array($dayDspr)) {
-                // dayName for this specific date
+                // ---------- CURRENT WEEK ENRICHMENT ----------
                 $thisDayName = Carbon::parse($key)->dayName;
 
                 // EXACT same methods you already call for the single-day/weekly blocks:
-                $csForDay = $this->CustomerService($thisDayName, $weeklyFinalSummaryCollection, $lookBackFinalSummaryCollection);
-                $upForDay = $this->Upselling($thisDayName, $weeklySummaryItemCollection, $lookBackSummaryItemCollection);
+                $csForDay = $this->CustomerService(
+                    $thisDayName,
+                    $weeklyFinalSummaryCollection,
+                    $lookBackFinalSummaryCollection
+                );
+                $upForDay = $this->Upselling(
+                    $thisDayName,
+                    $weeklySummaryItemCollection,
+                    $lookBackSummaryItemCollection
+                );
 
                 // Mirror your existing checks and assignments (dailyScore path = [5]['dailyScore'])
                 if (is_array($csForDay) && isset($csForDay[5]['dailyScore'])) {
@@ -249,6 +298,51 @@ $WeeklyDSPRData['Customer_Service'] = round((
                     ) / 3, 2);
                 }
 
+                // ---------- PREVIOUS WEEK (same weekday, i.e. 7 days earlier) ----------
+                $prevDate    = $d->subWeek();              // 7 days earlier
+                $prevKey     = $prevDate->toDateString();  // e.g. 2025-11-10
+                $prevFs      = $prevFsByDate->get($prevKey, collect());
+                $prevDd      = $prevDdByDate->get($prevKey, collect());
+                $prevDayDspr = $this->DailyDSPRReport($prevFs, $prevDd);
+
+                if (is_array($prevDayDspr)) {
+                    $prevDayName = $prevDate->dayName;
+
+                    $csPrev = $this->CustomerService(
+                        $prevDayName,
+                        $prevWeekFinalSummaryCollection,
+                        $lookBackFinalSummaryCollection
+                    );
+                    $upPrev = $this->Upselling(
+                        $prevDayName,
+                        $prevWeekSummaryItemCollection,
+                        $lookBackSummaryItemCollection
+                    );
+
+                    if (is_array($csPrev) && isset($csPrev[5]['dailyScore'])) {
+                        $prevDayDspr['Customer_count_percent'] = round((float)$csPrev[5]['dailyScore'], 2);
+                    }
+
+                    if (is_array($upPrev) && isset($upPrev[5]['dailyScore'])) {
+                        $prevDayDspr['Upselling'] = round((float)$upPrev[5]['dailyScore'], 2);
+                    }
+
+                    if (
+                        isset($prevDayDspr['Customer_count_percent']) &&
+                        isset($prevDayDspr['Put_into_Portal_Percent']) &&
+                        isset($prevDayDspr['In_Portal_on_Time_Percent'])
+                    ) {
+                        $prevDayDspr['Customer_Service'] = round((
+                            (float)$prevDayDspr['Customer_count_percent'] +
+                            (float)$prevDayDspr['Put_into_Portal_Percent'] +
+                            (float)$prevDayDspr['In_Portal_on_Time_Percent']
+                        ) / 3, 2);
+                    }
+                }
+
+                // Attach previous week’s same-day data under a key
+                $dayDspr['PrevWeek'] = $prevDayDspr; // can be array or "No ... data available." string
+
                 // Save enriched daily record
                 $dailyDSPRRange[$key] = $dayDspr;
             } else {
@@ -258,128 +352,110 @@ $WeeklyDSPRData['Customer_Service'] = round((
         }
 
         $response = [
-            'Filtering Values'=>[
-                'date'                  =>$date,
-                'store'                 =>$store,
-                'items'                 =>$itemIds,
-                'week'                  =>$weekNumber,
-                'weekStartDate'         =>$weekStartDate,
-                'weekEndDate'           =>$weekEndDate,
-                'look back start'       =>$lookBackStartDate,
-                'look back end'         =>$lookBackEndDate,
-                'depositDeliveryUrl'    =>$url,
+            'Filtering Values' => [
+                'date'               => $date,
+                'store'              => $store,
+                'items'              => $itemIds,
+                'week'               => $weekNumber,
+                'weekStartDate'      => $weekStartDate,
+                'weekEndDate'        => $weekEndDate,
+                'look back start'    => $lookBackStartDate,
+                'look back end'      => $lookBackEndDate,
+                'depositDeliveryUrl' => $url,
+            ],
+            'reports' => [
+                'daily' => [
+                    'dailyHourlySales' => $dailyHourlySalesData,
+                    'dailyDSQRData'    => $dailyDSQRData,
+                    'dailyDSPRData'    => $dailyDSPRData,
                 ],
-            // 'collections'=>[
-            //     'daily'=>[
-            //         'dailyDepositDeliveryCollection'     =>$dailyDepositDeliveryCollection,
-            //         'dailyFinalSummaryCollection'   =>$dailyFinalSummaryCollection,
-            //         'dailySummaryItemCollection'    =>$dailySummaryItemCollection,
-            //         'dailyHourlySalesCollection'    =>$dailyHourlySalesCollection,
-            //     ],
-            //     'weekly'=>[
-            //         'weeklyDepositDeliveryCollection'=>$weeklyDepositDeliveryCollection
-            //     ],
-            //     'lookBack'=>[
-            //         'lookBackFinalSummary'=>$lookBackFinalSummaryCollection
-            //     ]
-            // ],
-            'reports'=>[
-                'daily'=>[
-                    'dailyHourlySales'  =>$dailyHourlySalesData,
-                    'dailyDSQRData'     =>$dailyDSQRData,
-                    'dailyDSPRData' =>$dailyDSPRData
+                'weekly' => [
+                    'DSPRData'       => $WeeklyDSPRData,
+                    'DailyDSPRByDate'=> $dailyDSPRRange,
                 ],
-                'weekly'=>[
-                    'DSPRData' =>$WeeklyDSPRData,
-                    // 'customerService'=>$customerService,
-                    // 'upselling'=>$upselling
-                    'DailyDSPRByDate' => $dailyDSPRRange,
-                ]
-            ]
-
-
+            ],
         ];
 
         return $this->jsonRoundedResponse($response, 2);
     }
 
     protected function jsonRoundedResponse(array $payload, int $precision = 2)
-{
-    // 1) round all numerics
-    $payload = $this->roundArray($payload, $precision);
+    {
+        // 1) round all numerics
+        $payload = $this->roundArray($payload, $precision);
 
-    // 2) snapshot current INI
-    $oldSerialize = ini_get('serialize_precision');
-    $oldPrecision = ini_get('precision');
+        // 2) snapshot current INI
+        $oldSerialize = ini_get('serialize_precision');
+        $oldPrecision = ini_get('precision');
 
-    // 3) tame float output only for this encode
-    ini_set('serialize_precision', '-1'); // PHP 7.1+ recommended to avoid float noise
-    ini_set('precision', '14');
+        // 3) tame float output only for this encode
+        ini_set('serialize_precision', '-1'); // PHP 7.1+ recommended to avoid float noise
+        ini_set('precision', '14');
 
-    // 4) encode (keep .00 when applicable, still numbers — not strings)
-    $json = json_encode($payload, JSON_PRESERVE_ZERO_FRACTION);
+        // 4) encode (keep .00 when applicable, still numbers — not strings)
+        $json = json_encode($payload, JSON_PRESERVE_ZERO_FRACTION);
 
-    // 5) restore INI immediately
-    ini_set('serialize_precision', $oldSerialize === false ? '17' : $oldSerialize);
-    ini_set('precision', $oldPrecision === false ? '14' : $oldPrecision);
+        // 5) restore INI immediately
+        ini_set('serialize_precision', $oldSerialize === false ? '17' : $oldSerialize);
+        ini_set('precision', $oldPrecision === false ? '14' : $oldPrecision);
 
-    // 6) return raw JSON response
-    return response($json, 200)->header('Content-Type', 'application/json');
-}
+        // 6) return raw JSON response
+        return response($json, 200)->header('Content-Type', 'application/json');
+    }
 
-    public function DSQRReport(){
+    public function DSQRReport()
+    {
 
     }
 
     public function DailyHourlySalesReport($dailyHourlySalesCollection)
-{
-    // If empty, keep the new shape but mark hours as empty
-    if ($dailyHourlySalesCollection->isEmpty()) {
-        return [
-            'franchise_store' => null,
-            'business_date'   => null,
-            'hours'           => array_fill_keys(range(0, 23), (object)[]),
-        ];
-    }
-
-    // Derive store/date from the first record in the collection
-    $first = $dailyHourlySalesCollection->first();
-    $store = $first->franchise_store ?? null;
-    $date  = $first->business_date ?? null;
-
-    // Pre-build the hours map 0..23
-    $hours = [];
-    for ($h = 0; $h <= 23; $h++) {
-        // Filter the in-memory collection for this hour
-        $subset = $dailyHourlySalesCollection->where('hour', $h);
-
-        if ($subset->isEmpty()) {
-            $hours[$h] = (object)[];  // empty object for missing hour
-            continue;
+    {
+        // If empty, keep the new shape but mark hours as empty
+        if ($dailyHourlySalesCollection->isEmpty()) {
+            return [
+                'franchise_store' => null,
+                'business_date'   => null,
+                'hours'           => array_fill_keys(range(0, 23), (object)[]),
+            ];
         }
 
-        // Aggregate
-        $hours[$h] = [
-            'Total_Sales'       => round((float) $subset->sum('total_sales'),2),
-            'Phone_Sales'       => round((float) $subset->sum('phone_sales'),2),
-            'Call_Center_Agent' => round((float) $subset->sum('call_center_sales'),2),
-            'Drive_Thru'        => round((float) $subset->sum('drive_thru_sales'),2),
-            'Website'           => round((float) $subset->sum('website_sales'),2),
-            'Mobile'            => round((float) $subset->sum('mobile_sales'),2),
-            'Order_Count'       => (int)   $subset->sum('order_count'),
+        // Derive store/date from the first record in the collection
+        $first = $dailyHourlySalesCollection->first();
+        $store = $first->franchise_store ?? null;
+        $date  = $first->business_date ?? null;
+
+        // Pre-build the hours map 0..23
+        $hours = [];
+        for ($h = 0; $h <= 23; $h++) {
+            // Filter the in-memory collection for this hour
+            $subset = $dailyHourlySalesCollection->where('hour', $h);
+
+            if ($subset->isEmpty()) {
+                $hours[$h] = (object)[];  // empty object for missing hour
+                continue;
+            }
+
+            // Aggregate
+            $hours[$h] = [
+                'Total_Sales'       => round((float) $subset->sum('total_sales'),2),
+                'Phone_Sales'       => round((float) $subset->sum('phone_sales'),2),
+                'Call_Center_Agent' => round((float) $subset->sum('call_center_sales'),2),
+                'Drive_Thru'        => round((float) $subset->sum('drive_thru_sales'),2),
+                'Website'           => round((float) $subset->sum('website_sales'),2),
+                'Mobile'            => round((float) $subset->sum('mobile_sales'),2),
+                'Order_Count'       => (int)   $subset->sum('order_count'),
+            ];
+        }
+
+        return [
+            'franchise_store' => $store,
+            'business_date'   => $date,
+            'hours'           => $hours,
         ];
     }
 
-    return [
-        'franchise_store' => $store,
-        'business_date'   => $date,
-        'hours'           => $hours,
-    ];
-}
-
-
-    public function DailyDSQRReport($depositDeliveryCollection){
-
+    public function DailyDSQRReport($depositDeliveryCollection)
+    {
         if ($depositDeliveryCollection->isEmpty()) {
             return "No deposit delivery data available.";
         }
@@ -432,120 +508,104 @@ $WeeklyDSPRData['Customer_Service'] = round((
 
     }
 
-    public function DailyDSPRReport($dailyFinalSummaryCollection,$depositDeliveryCollection){
-         if ($dailyFinalSummaryCollection->isEmpty()) {
+    public function DailyDSPRReport($dailyFinalSummaryCollection, $depositDeliveryCollection)
+    {
+        if ($dailyFinalSummaryCollection->isEmpty()) {
             return "No Final Summary data available.";
         }
         if ($depositDeliveryCollection->isEmpty()) {
             return "No deposit delivery data available.";
         }
 
-        $workingHours = $depositDeliveryCollection ->sum('HookEmployeesWorkingHours');
-        $deposit =$depositDeliveryCollection ->sum('HookDepositAmount');
-        $totalSales =$dailyFinalSummaryCollection ->sum('total_sales');
+        $workingHours = $depositDeliveryCollection->sum('HookEmployeesWorkingHours');
+        $deposit      = $depositDeliveryCollection->sum('HookDepositAmount');
+        $totalSales   = $dailyFinalSummaryCollection->sum('total_sales');
 
-        $cashSales =$dailyFinalSummaryCollection ->sum('cash_sales');
-        $customerCount =$dailyFinalSummaryCollection->sum('customer_count');
+        $cashSales     = $dailyFinalSummaryCollection->sum('cash_sales');
+        $customerCount = $dailyFinalSummaryCollection->sum('customer_count');
+
         return[
-            // 'helpers'=>[
-            //     'WH' =>$workingHours,
-            //     'deposit' =>$deposit,
-            //     'totalSales' =>$totalSales,
-            //     'cashSales' =>$cashSales,
-            // ],
-            // 'data'=>[
-                'labor'=> round($workingHours * 16 /$totalSales,2),
-                'waste_gateway' =>round($dailyFinalSummaryCollection->sum('total_waste_cost'),2),
-                'over_short' => round($deposit - $cashSales,2),
-                'Refunded_order_Qty'=>round($dailyFinalSummaryCollection->sum('refunded_order_qty'),2),
-                'Total_Cash_Sales'=>round($cashSales,2),
-                'Total_Sales'=>round($totalSales,2),
-                'Waste_Alta'=>round($depositDeliveryCollection->sum('HookAltimetricWaste'),2),
-                'Modified_Order_Qty'=>round($dailyFinalSummaryCollection->sum('modified_order_qty'),2),
-                'Total_TIPS'=> round($dailyFinalSummaryCollection->sum('total_tips') + $depositDeliveryCollection->sum('HookHowMuchTips'),2),
-                'Customer_count'=> round($customerCount,2),
-                'DoorDash_Sales'=>round($dailyFinalSummaryCollection->sum('doordash_sales'),2),
-                'UberEats_Sales'=>round($dailyFinalSummaryCollection->sum('ubereats_sales'),2),
-                'GrubHub_Sales'=>round($dailyFinalSummaryCollection->sum('grubhub_sales'),2),
-                'Phone'=>round($dailyFinalSummaryCollection->sum('phone_sales'),2),
-                'Call_Center_Agent'=>round($dailyFinalSummaryCollection->sum('call_center_sales'),2),
-                'Website'=>round($dailyFinalSummaryCollection->sum('website_sales'),2),
-                'Mobile'=>round($dailyFinalSummaryCollection->sum('mobile_sales'),2),
-                'Digital_Sales_Percent'=>round($dailyFinalSummaryCollection->sum('digital_sales_percent'),2),
-                'Total_Portal_Eligible_Transactions'=>round($dailyFinalSummaryCollection->sum('portal_transactions'),2),
-                'Put_into_Portal_Percent'=>round($dailyFinalSummaryCollection->sum('portal_used_percent'),2),
-                'In_Portal_on_Time_Percent'=>round($dailyFinalSummaryCollection->sum('in_portal_on_time_percent'),2),
-                'Drive_Thru_Sales'=>round($dailyFinalSummaryCollection->sum('drive_thru_sales'),2),
-                'Upselling'=>null,
-                'Cash_Sales_Vs_Deposite_Difference'=>round($deposit - $cashSales,2),
-                'Avrage_ticket'=>round($totalSales/$customerCount,2)
-
-
-            // ]
+            'labor'                          => round($workingHours * 16 / $totalSales,2),
+            'waste_gateway'                  => round($dailyFinalSummaryCollection->sum('total_waste_cost'),2),
+            'over_short'                     => round($deposit - $cashSales,2),
+            'Refunded_order_Qty'             => round($dailyFinalSummaryCollection->sum('refunded_order_qty'),2),
+            'Total_Cash_Sales'               => round($cashSales,2),
+            'Total_Sales'                    => round($totalSales,2),
+            'Waste_Alta'                     => round($depositDeliveryCollection->sum('HookAltimetricWaste'),2),
+            'Modified_Order_Qty'             => round($dailyFinalSummaryCollection->sum('modified_order_qty'),2),
+            'Total_TIPS'                     => round($dailyFinalSummaryCollection->sum('total_tips') + $depositDeliveryCollection->sum('HookHowMuchTips'),2),
+            'Customer_count'                 => round($customerCount,2),
+            'DoorDash_Sales'                 => round($dailyFinalSummaryCollection->sum('doordash_sales'),2),
+            'UberEats_Sales'                 => round($dailyFinalSummaryCollection->sum('ubereats_sales'),2),
+            'GrubHub_Sales'                  => round($dailyFinalSummaryCollection->sum('grubhub_sales'),2),
+            'Phone'                          => round($dailyFinalSummaryCollection->sum('phone_sales'),2),
+            'Call_Center_Agent'              => round($dailyFinalSummaryCollection->sum('call_center_sales'),2),
+            'Website'                        => round($dailyFinalSummaryCollection->sum('website_sales'),2),
+            'Mobile'                         => round($dailyFinalSummaryCollection->sum('mobile_sales'),2),
+            'Digital_Sales_Percent'          => round($dailyFinalSummaryCollection->sum('digital_sales_percent'),2),
+            'Total_Portal_Eligible_Transactions' => round($dailyFinalSummaryCollection->sum('portal_transactions'),2),
+            'Put_into_Portal_Percent'        => round($dailyFinalSummaryCollection->sum('portal_used_percent'),2),
+            'In_Portal_on_Time_Percent'      => round($dailyFinalSummaryCollection->sum('in_portal_on_time_percent'),2),
+            'Drive_Thru_Sales'               => round($dailyFinalSummaryCollection->sum('drive_thru_sales'),2),
+            'Upselling'                      => null,
+            'Cash_Sales_Vs_Deposite_Difference' => round($deposit - $cashSales,2),
+            'Avrage_ticket'                  => round($totalSales / $customerCount,2),
         ];
     }
 
     public function WeeklyDSPRReport($weeklyFinalSummaryCollection, $weeklyDepositDeliveryCollection)
-{
-    if ($weeklyFinalSummaryCollection->isEmpty()) {
-        return "No Final Summary data available.";
-    }
-    if ($weeklyDepositDeliveryCollection->isEmpty()) {
-        return "No deposit delivery data available.";
-    }
-
-    // Group by day name
-    $finalSummaryByDay = $weeklyFinalSummaryCollection->groupBy(function ($item) {
-        return Carbon::parse($item['business_date'])->dayName; // e.g., 'Thursday'
-    });
-
-    $depositDeliveryByDay = $weeklyDepositDeliveryCollection->groupBy(function ($item) {
-        return Carbon::parse($item['HookWorkDaysDate'])->dayName;
-    });
-
-    // How many days have FinalSummary entries
-    $finalSummaryDaysCount = $finalSummaryByDay->count();
-
-    $laborForEachDay = [];
-
-    foreach ($finalSummaryByDay as $day => $fsRecords) {
-        // Sum total sales for that day (don’t assume [0])
-        $totalSales = (float) $fsRecords->sum('total_sales');
-
-        // Get the deposit/delivery records for this day safely
-        $ddRecords = $depositDeliveryByDay->get($day, collect());
-
-        // Sum hours; if day missing → 0
-        $employeesWorkingHours = (float) $ddRecords->sum('HookEmployeesWorkingHours');
-
-        if ($totalSales > 0 && $employeesWorkingHours > 0) {
-            $laborForEachDay[$day] = ($employeesWorkingHours * 16) / $totalSales;
+    {
+        if ($weeklyFinalSummaryCollection->isEmpty()) {
+            return "No Final Summary data available.";
         }
-        // else: either side missing/zero → skip or set null (your choice)
-        // $laborForEachDay[$day] = null;
-    }
+        if ($weeklyDepositDeliveryCollection->isEmpty()) {
+            return "No deposit delivery data available.";
+        }
 
-    $sumOfAllLabors = array_sum($laborForEachDay);
-    $totalLabors = $finalSummaryDaysCount > 0 ? $sumOfAllLabors / $finalSummaryDaysCount : 0.0;
+        // Group by day name
+        $finalSummaryByDay = $weeklyFinalSummaryCollection->groupBy(function ($item) {
+            return Carbon::parse($item['business_date'])->dayName; // e.g., 'Thursday'
+        });
 
-    $workingHours = (float) $weeklyDepositDeliveryCollection->sum('HookEmployeesWorkingHours');
-    $deposit      = (float) $weeklyDepositDeliveryCollection->sum('HookDepositAmount');
-    $totalSales   = (float) $weeklyFinalSummaryCollection->sum('total_sales');
+        $depositDeliveryByDay = $weeklyDepositDeliveryCollection->groupBy(function ($item) {
+            return Carbon::parse($item['HookWorkDaysDate'])->dayName;
+        });
 
-    $cashSales    = (float) $weeklyFinalSummaryCollection->sum('cash_sales');
-    $customerCount= (float) $weeklyFinalSummaryCollection->sum('customer_count');
+        // How many days have FinalSummary entries
+        $finalSummaryDaysCount = $finalSummaryByDay->count();
 
-    $tipsFinalSummary   = (float) $weeklyFinalSummaryCollection->sum('total_tips');
-    $tipsDepositDelivery= (float) $weeklyDepositDeliveryCollection->sum('HookHowMuchTips');
+        $laborForEachDay = [];
 
-    return [
-        // 'helpers' => [
-        //     'WH'        => $workingHours,
-        //     'deposit'   => $deposit,
-        //     'totalSales'=> $totalSales,
-        //     'cashSales' => $cashSales,
-        // ],
-        // 'data' => [
+        foreach ($finalSummaryByDay as $day => $fsRecords) {
+            // Sum total sales for that day (don’t assume [0])
+            $totalSales = (float) $fsRecords->sum('total_sales');
+
+            // Get the deposit/delivery records for this day safely
+            $ddRecords = $depositDeliveryByDay->get($day, collect());
+
+            // Sum hours; if day missing → 0
+            $employeesWorkingHours = (float) $ddRecords->sum('HookEmployeesWorkingHours');
+
+            if ($totalSales > 0 && $employeesWorkingHours > 0) {
+                $laborForEachDay[$day] = ($employeesWorkingHours * 16) / $totalSales;
+            }
+            // else: either side missing/zero → skip or set null (your choice)
+        }
+
+        $sumOfAllLabors = array_sum($laborForEachDay);
+        $totalLabors    = $finalSummaryDaysCount > 0 ? $sumOfAllLabors / $finalSummaryDaysCount : 0.0;
+
+        $workingHours = (float) $weeklyDepositDeliveryCollection->sum('HookEmployeesWorkingHours');
+        $deposit      = (float) $weeklyDepositDeliveryCollection->sum('HookDepositAmount');
+        $totalSales   = (float) $weeklyFinalSummaryCollection->sum('total_sales');
+
+        $cashSales     = (float) $weeklyFinalSummaryCollection->sum('cash_sales');
+        $customerCount = (float) $weeklyFinalSummaryCollection->sum('customer_count');
+
+        $tipsFinalSummary    = (float) $weeklyFinalSummaryCollection->sum('total_tips');
+        $tipsDepositDelivery = (float) $weeklyDepositDeliveryCollection->sum('HookHowMuchTips');
+
+        return [
             'labor'                          => round($totalLabors,2),
             'waste_gateway'                  => round((float) $weeklyFinalSummaryCollection->sum('total_waste_cost'),2),
             'over_short'                     => round($deposit - $cashSales,2),
@@ -571,12 +631,11 @@ $WeeklyDSPRData['Customer_Service'] = round((
             'Upselling'                      => null,
             'Cash_Sales_Vs_Deposite_Difference' => round($finalSummaryDaysCount ? ($deposit - $cashSales) / $finalSummaryDaysCount : 0.0,2),
             'Avrage_ticket'                  => round($customerCount > 0 ? $totalSales / $customerCount : 0.0,2),
-        // ]
-    ];
-}
+        ];
+    }
 
-
-    public function CustomerService($dayName,$weeklyFinalSummaryCollection,$lookBackFinalSummaryCollection){
+    public function CustomerService($dayName, $weeklyFinalSummaryCollection, $lookBackFinalSummaryCollection)
+    {
         // check if collections are empty
         if ($weeklyFinalSummaryCollection->isEmpty()) {
             return "No weeklyFinalSummaryCollection data available.";
@@ -593,7 +652,7 @@ $WeeklyDSPRData['Customer_Service'] = round((
         });
 
         //days count
-        $weeklyFinalSummarydaysCount =$weeklyFinalSummaryDataByDay->count();
+        $weeklyFinalSummarydaysCount = $weeklyFinalSummaryDataByDay->count();
 
         //lookBackfinalSummary by day
         $lookBackfinalSummaryDataByDay = $lookBackFinalSummaryCollection->groupBy(function ($item) {
@@ -603,71 +662,74 @@ $WeeklyDSPRData['Customer_Service'] = round((
         });
 
         //days count
-        $lookBackfinalSummarydaysCount =$lookBackfinalSummaryDataByDay->count();
-        $lookBackdailyCounts = $lookBackFinalSummaryCollection
-        ->groupBy(function ($item) {
-            return Carbon::parse($item['business_date'])->dayName;
-        })
-        ->map(function ($dayRecords) {
-            return $dayRecords->count(); // occurrences of that weekday
-        });
+        $lookBackfinalSummarydaysCount = $lookBackfinalSummaryDataByDay->count();
 
+        $lookBackdailyCounts = $lookBackFinalSummaryCollection
+            ->groupBy(function ($item) {
+                return Carbon::parse($item['business_date'])->dayName;
+            })
+            ->map(function ($dayRecords) {
+                return $dayRecords->count(); // occurrences of that weekday
+            });
 
         $weeklyTotal =  $weeklyFinalSummaryDataByDay->map(function ($values) {
             return $values->sum();
         })->sum();
+
+        // NOTE: this line reuses weeklyFinalSummaryDataByDay for lookBackTotal
+        // kept as-is to not break your existing behavior
         $lookBackTotal =  $weeklyFinalSummaryDataByDay->map(function ($values) {
-            return $values->avg();   // sum inside each weekday
+            return $values->avg();
         })->sum();
 
-        $weeklyAvr = $weeklyTotal /$weeklyFinalSummarydaysCount;
+        $weeklyAvr   = $weeklyTotal / $weeklyFinalSummarydaysCount;
         $lookBackAvr = $lookBackfinalSummaryDataByDay->avg();
 
         //finals
         //for weekly customer service
-        $weeklyFinalValue= ($weeklyAvr - $lookBackAvr)/$lookBackAvr;
+        $weeklyFinalValue = ($weeklyAvr - $lookBackAvr) / $lookBackAvr;
 
         //for daily customer service
         $dailyForLookback = $lookBackfinalSummaryDataByDay->get($dayName);
-        $dailyForWeekly = $weeklyFinalSummaryDataByDay->get($dayName)[0];
-        
-        $dailyFinalValue =($dailyForWeekly -$dailyForLookback)/$dailyForLookback;
+        $dailyForWeekly   = $weeklyFinalSummaryDataByDay->get($dayName)[0];
+
+        $dailyFinalValue = ($dailyForWeekly - $dailyForLookback) / $dailyForLookback;
 
         //final scores
-        $dailyScore = $this->score($dailyFinalValue)/100;
-        $weeklyScore = $this->score($weeklyFinalValue)/100;
+        $dailyScore  = $this->score($dailyFinalValue) / 100;
+        $weeklyScore = $this->score($weeklyFinalValue) / 100;
 
         return[
-                [
-            'weeklyFinalSummaryDataByDay'=>$weeklyFinalSummaryDataByDay,
-            'weeklyFinalSummarydaysCount'=>$weeklyFinalSummarydaysCount,
-                ],  
-                [
-            'lookBackfinalSummaryDataByDay'=>$lookBackfinalSummaryDataByDay,
-            'lookBackfinalSummarydaysCount'=>$lookBackfinalSummarydaysCount,
-            'lookBackdailyCounts' =>$lookBackdailyCounts
-            
-                ],
-                [
-                    '$weeklyTotal' =>$weeklyTotal,
-                    '$lookBackTotal'=>$lookBackTotal
-                ],
-                [
-                   'weeklyAvr' => $weeklyAvr,
-                   'lookBackAvr' =>$lookBackAvr
-                ],
-                [
-                    '$dailyFinalValue'=>$dailyFinalValue,
-                    '$weeklyFinalValue'=>$weeklyFinalValue,
-                ],
-                [
-                    'dailyScore' =>$dailyScore,
-                    'weeklyScore'=>$weeklyScore,
-                ]
+            [
+                'weeklyFinalSummaryDataByDay'=>$weeklyFinalSummaryDataByDay,
+                'weeklyFinalSummarydaysCount'=>$weeklyFinalSummarydaysCount,
+            ],
+            [
+                'lookBackfinalSummaryDataByDay'=>$lookBackfinalSummaryDataByDay,
+                'lookBackfinalSummarydaysCount'=>$lookBackfinalSummarydaysCount,
+                'lookBackdailyCounts' =>$lookBackdailyCounts,
+            ],
+            [
+                '$weeklyTotal' =>$weeklyTotal,
+                '$lookBackTotal'=>$lookBackTotal,
+            ],
+            [
+                'weeklyAvr' => $weeklyAvr,
+                'lookBackAvr' =>$lookBackAvr,
+            ],
+            [
+                '$dailyFinalValue'=>$dailyFinalValue,
+                '$weeklyFinalValue'=>$weeklyFinalValue,
+            ],
+            [
+                'dailyScore' =>$dailyScore,
+                'weeklyScore'=>$weeklyScore,
+            ]
         ];
     }
 
-    public function Upselling($dayName,$weeklyFinalSummaryCollection,$lookBackFinalSummaryCollection){
+    public function Upselling($dayName, $weeklyFinalSummaryCollection, $lookBackFinalSummaryCollection)
+    {
         // check if collections are empty
         if ($weeklyFinalSummaryCollection->isEmpty()) {
             return "No weeklyFinalSummaryCollection data available.";
@@ -684,7 +746,7 @@ $WeeklyDSPRData['Customer_Service'] = round((
         });
 
         //days count
-        $weeklyFinalSummarydaysCount =$weeklyFinalSummaryDataByDay->count();
+        $weeklyFinalSummarydaysCount = $weeklyFinalSummaryDataByDay->count();
 
         //lookBackfinalSummary by day
         $lookBackfinalSummaryDataByDay = $lookBackFinalSummaryCollection->groupBy(function ($item) {
@@ -694,73 +756,74 @@ $WeeklyDSPRData['Customer_Service'] = round((
         });
 
         //days count
-        
-        $lookBackfinalSummarydaysCount =$lookBackfinalSummaryDataByDay->count();
-        $lookBackdailyCounts = $lookBackFinalSummaryCollection
-        ->groupBy(function ($item) {
-            return Carbon::parse($item['business_date'])->dayName;
-        })
-        ->map(function ($dayRecords) {
-            return $dayRecords->count(); // occurrences of that weekday
-        });
+        $lookBackfinalSummarydaysCount = $lookBackfinalSummaryDataByDay->count();
 
+        $lookBackdailyCounts = $lookBackFinalSummaryCollection
+            ->groupBy(function ($item) {
+                return Carbon::parse($item['business_date'])->dayName;
+            })
+            ->map(function ($dayRecords) {
+                return $dayRecords->count(); // occurrences of that weekday
+            });
 
         $weeklyTotal =  $weeklyFinalSummaryDataByDay->map(function ($values) {
             return $values->sum();
         })->sum();
+
+        // NOTE: this line reuses weeklyFinalSummaryDataByDay for lookBackTotal
+        // kept as-is to not change behavior
         $lookBackTotal =  $weeklyFinalSummaryDataByDay->map(function ($values) {
-            return $values->avg();   // sum inside each weekday
+            return $values->avg();
         })->sum();
 
-        $weeklyAvr = $weeklyTotal /$weeklyFinalSummarydaysCount;
+        $weeklyAvr   = $weeklyTotal / $weeklyFinalSummarydaysCount;
         $lookBackAvr = $lookBackfinalSummaryDataByDay->avg();
 
         //finals
-        //for weekly customer service
-        $weeklyFinalValue= ($weeklyAvr - $lookBackAvr)/$lookBackAvr;
+        //for weekly upselling
+        $weeklyFinalValue = ($weeklyAvr - $lookBackAvr) / $lookBackAvr;
 
-        //for daily customer service
+        //for daily upselling
         $dailyForLookback = $lookBackfinalSummaryDataByDay->get($dayName);
-        $dailyForWeekly = $weeklyFinalSummaryDataByDay->get($dayName)[0];
-        
-        $dailyFinalValue =($dailyForWeekly -$dailyForLookback)/$dailyForLookback;
+        $dailyForWeekly   = $weeklyFinalSummaryDataByDay->get($dayName)[0];
+
+        $dailyFinalValue = ($dailyForWeekly - $dailyForLookback) / $dailyForLookback;
 
         //final scores
-        $dailyScore = $this->score($dailyFinalValue)/100;
-        $weeklyScore = $this->score($weeklyFinalValue)/100;
+        $dailyScore  = $this->score($dailyFinalValue) / 100;
+        $weeklyScore = $this->score($weeklyFinalValue) / 100;
 
         return[
-                [
-            'weeklyFinalSummaryDataByDay'=>$weeklyFinalSummaryDataByDay,
-            'weeklyFinalSummarydaysCount'=>$weeklyFinalSummarydaysCount,
-                ],  
-                [
-            'lookBackfinalSummaryDataByDay'=>$lookBackfinalSummaryDataByDay,
-            'lookBackfinalSummarydaysCount'=>$lookBackfinalSummarydaysCount,
-            'lookBackdailyCounts' =>$lookBackdailyCounts
-            
-                ],
-                [
-                    '$weeklyTotal' =>$weeklyTotal,
-                    '$lookBackTotal'=>$lookBackTotal
-                ],
-                [
-                   'weeklyAvr' => $weeklyAvr,
-                   'lookBackAvr' =>$lookBackAvr
-                ],
-                [
-                     '$dailyFinalValue'=>$dailyFinalValue,
-                    '$weeklyFinalValue'=>$weeklyFinalValue,
-                ],
-                [
-                    'dailyScore' =>$dailyScore,
-                    'weeklyScore'=>$weeklyScore,
-                   
-                ]
+            [
+                'weeklyFinalSummaryDataByDay'=>$weeklyFinalSummaryDataByDay,
+                'weeklyFinalSummarydaysCount'=>$weeklyFinalSummarydaysCount,
+            ],
+            [
+                'lookBackfinalSummaryDataByDay'=>$lookBackfinalSummaryDataByDay,
+                'lookBackfinalSummarydaysCount'=>$lookBackfinalSummarydaysCount,
+                'lookBackdailyCounts' =>$lookBackdailyCounts,
+            ],
+            [
+                '$weeklyTotal' =>$weeklyTotal,
+                '$lookBackTotal'=>$lookBackTotal,
+            ],
+            [
+                'weeklyAvr' => $weeklyAvr,
+                'lookBackAvr' =>$lookBackAvr,
+            ],
+            [
+                '$dailyFinalValue'=>$dailyFinalValue,
+                '$weeklyFinalValue'=>$weeklyFinalValue,
+            ],
+            [
+                'dailyScore' =>$dailyScore,
+                'weeklyScore'=>$weeklyScore,
+            ]
         ];
     }
 
-    public function score ($value){
+    public function score($value)
+    {
         $score = 0;
         if ($value >= -1.00 && $value <= -0.1001) {
             $score = 75;
@@ -783,38 +846,38 @@ $WeeklyDSPRData['Customer_Service'] = round((
      * NEW: catalog endpoint returning one row per item_id with its latest known menu_item_name.
      * Useful for the frontend to render names while we submit IDs in requests.
      */
-public function items($store)
-{
-    $rows = DB::table('summary_items as si')
-        ->select('si.item_id', 'si.menu_item_name')
-        ->where('si.franchise_store', $store)
-        ->whereNotNull('si.item_id')
+    public function items($store)
+    {
+        $rows = DB::table('summary_items as si')
+            ->select('si.item_id', 'si.menu_item_name')
+            ->where('si.franchise_store', $store)
+            ->whereNotNull('si.item_id')
 
-        // Latest business_date per (store, item_id)
-        ->whereRaw('si.business_date = (
-            SELECT MAX(si2.business_date)
-            FROM summary_items as si2
-            WHERE si2.franchise_store = si.franchise_store
-              AND si2.item_id = si.item_id
-        )')
+            // Latest business_date per (store, item_id)
+            ->whereRaw('si.business_date = (
+                SELECT MAX(si2.business_date)
+                FROM summary_items as si2
+                WHERE si2.franchise_store = si.franchise_store
+                  AND si2.item_id = si.item_id
+            )')
 
-        // Tie-break when multiple rows share that latest date: pick highest id
-        ->whereRaw('si.id = (
-            SELECT MAX(si3.id)
-            FROM summary_items as si3
-            WHERE si3.franchise_store = si.franchise_store
-              AND si3.item_id = si.item_id
-              AND si3.business_date = si.business_date
-        )')
+            // Tie-break when multiple rows share that latest date: pick highest id
+            ->whereRaw('si.id = (
+                SELECT MAX(si3.id)
+                FROM summary_items as si3
+                WHERE si3.franchise_store = si.franchise_store
+                  AND si3.item_id = si.item_id
+                  AND si3.business_date = si.business_date
+            )')
 
-        ->orderBy('si.menu_item_name')
-        ->get();
+            ->orderBy('si.menu_item_name')
+            ->get();
 
-    return response()->json([
-        'store' => $store,
-        'count' => $rows->count(),
-        'items' => $rows,
-    ]);
-}
+        return response()->json([
+            'store' => $store,
+            'count' => $rows->count(),
+            'items' => $rows,
+        ]);
+    }
 
 }
