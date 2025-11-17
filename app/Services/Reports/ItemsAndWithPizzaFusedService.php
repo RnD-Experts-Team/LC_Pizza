@@ -56,23 +56,36 @@ class ItemsAndWithPizzaFusedService
     /**
      * Helper: distinct item_ids where a boolean flag column = 1
      */
-    private function getIdsByFlag(?string $store, string $from, string $to, string $flagCol): array
-    {
-        $q = DB::table('order_line')
-            ->distinct()
-            ->whereBetween('business_date', [$from, $to])
-            ->where($flagCol, 1)
-            ->whereNotNull('item_id');
+    private function getIdsByFlag(
+    ?string $store,
+    string $from,
+    string $to,
+    string $flagCol,
+    bool $withoutBundle = false   // <--- NEW
+): array {
+    $q = DB::table('order_line')
+        ->distinct()
+        ->whereBetween('business_date', [$from, $to])
+        ->where($flagCol, 1)
+        ->whereNotNull('item_id');
 
-        if ($store !== null && $store !== '' && strtolower($store) !== 'all') {
-            $q->where('franchise_store', $store);
-        }
-
-        return $q->pluck('item_id')->map(fn($v) => (int)$v)->unique()->values()->all();
+    if ($store !== null && $store !== '' && strtolower($store) !== 'all') {
+        $q->where('franchise_store', $store);
     }
 
+    if ($withoutBundle) {
+        $q->where(function ($qq) {
+            $qq->whereNull('bundle_name')->orWhere('bundle_name', '');
+        })->where(function ($qq) {
+            $qq->whereNull('modification_reason')->orWhere('modification_reason', '');
+        });
+    }
+
+    return $q->pluck('item_id')->map(fn($v) => (int)$v)->unique()->values()->all();
+}
+
     // ===== Public API =====
-    public function compute(?string $franchiseStore, $fromDate, $toDate): array
+public function compute(?string $franchiseStore, $fromDate, $toDate, bool $withoutBundle = false): array
     {
         if (function_exists('set_time_limit')) { @set_time_limit(0); }
 
@@ -85,13 +98,14 @@ class ItemsAndWithPizzaFusedService
         $isAllStore = ($franchiseStore === null || $franchiseStore === '' || strtolower($franchiseStore) === 'all');
         $chunkSize  = $isAllStore ? 2000 : 5000;
 
-        // ===== Build category ID sets DIRECTLY from generated flags =====
-        $PIZZA_IDS      = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_pizza');
-        $BREAD_IDS      = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_bread');
-        $WINGS_IDS      = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_wings');
-        $BEVERAGE_IDS   = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_beverages');
-        $PUFFS_IDS      = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_crazy_puffs');
-        $DIP_IDS        = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_caesar_dip');
+// ===== Build category ID sets DIRECTLY from generated flags =====
+$PIZZA_IDS    = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_pizza',      $withoutBundle);
+$BREAD_IDS    = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_bread',      $withoutBundle);
+$WINGS_IDS    = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_wings',      $withoutBundle);
+$BEVERAGE_IDS = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_beverages',  $withoutBundle);
+$PUFFS_IDS    = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_crazy_puffs',$withoutBundle);
+$DIP_IDS      = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_caesar_dip', $withoutBundle);
+
         if (empty($DIP_IDS)) {
             // optional safety fallback if no dips appear in the window
             $DIP_IDS = self::CAESAR_DIP_IDS_FALLBACK;
@@ -172,7 +186,7 @@ class ItemsAndWithPizzaFusedService
             $unitsBev20oz = 0; $unitsBev2L = 0; $unitsICB = 0;
             $pizzaUnitsBase = 0; 
 
-            $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled'])
+$this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled'], $withoutBundle)
                 ->where(function ($q) use ($relevantIdStr) {
                     $q->whereIn('item_id', $relevantIdStr)
                       ->orWhere('is_pizza', 1);
@@ -326,30 +340,44 @@ class ItemsAndWithPizzaFusedService
     }
 
     // ====== Query Builder base (no Eloquent hydration) ======
-    private function baseQB(?string $store, string $from, string $to, ?array $placed, ?array $fulfilled)
-    {
-        // select only columns we truly use, including the generated flags
-        $q = DB::table('order_line')
-            ->select([
-                'id','order_id','item_id','menu_item_name',
-                'net_amount','quantity','business_date',
-                'is_pizza',
-                'is_bread','is_wings','is_beverages','is_crazy_puffs','is_caesar_dip',
-            ])
-            ->whereBetween('business_date', [$from, $to]);
+    private function baseQB(
+    ?string $store,
+    string $from,
+    string $to,
+    ?array $placed,
+    ?array $fulfilled,
+    bool $withoutBundle = false  // <--- NEW
+) {
+    $q = DB::table('order_line')
+        ->select([
+            'id','order_id','item_id','menu_item_name',
+            'net_amount','quantity','business_date',
+            'is_pizza',
+            'is_bread','is_wings','is_beverages','is_crazy_puffs','is_caesar_dip',
+        ])
+        ->whereBetween('business_date', [$from, $to]);
 
-        if ($store !== null && $store !== '' && strtolower($store) !== 'all') {
-            $q->where('franchise_store', $store);
-        }
-        if ($placed) {
-            $q->whereIn('order_placed_method', $placed);
-        }
-        if ($fulfilled) {
-            $q->whereIn('order_fulfilled_method', $fulfilled);
-        }
-
-        return $q;
+    if ($store !== null && $store !== '' && strtolower($store) !== 'all') {
+        $q->where('franchise_store', $store);
     }
+    if ($placed) {
+        $q->whereIn('order_placed_method', $placed);
+    }
+    if ($fulfilled) {
+        $q->whereIn('order_fulfilled_method', $fulfilled);
+    }
+
+    if ($withoutBundle) {
+        $q->where(function ($qq) {
+            $qq->whereNull('bundle_name')->orWhere('bundle_name', '');
+        })->where(function ($qq) {
+            $qq->whereNull('modification_reason')->orWhere('modification_reason', '');
+        });
+    }
+
+    return $q;
+}
+
 
     /**
      * Precompute unit prices for all relevant items once FOR A GIVEN BUCKET.

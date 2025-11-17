@@ -42,9 +42,10 @@ class StoreReportController extends Controller
         $store = $request->input('franchise_store'); // nullable
         $from  = $request->inputFrom();
         $to    = $request->inputTo();
+        $withoutBundle  = $request->boolean('without_bundle'); // <--- NEW
 
         // Build sections
-        $fused = $this->fused->compute($store, $from, $to);
+        $fused = $this->fused->compute($store, $from, $to, $withoutBundle); // <--- pass it
 
         return response()->json([
             'store' => $store,
