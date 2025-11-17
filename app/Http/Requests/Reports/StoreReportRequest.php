@@ -17,7 +17,7 @@ class StoreReportRequest extends FormRequest
             'franchise_store' => ['nullable','string','max:20'],
             'from'            => ['required','date','before_or_equal:to'],
             'to'              => ['required','date','after_or_equal:from'],
-            'without_bundle'  => ['sometimes','boolean'], // <--- NEW
+            'without_bundle'  => ['sometimes'], // <--- NEW
         ];
     }
 
