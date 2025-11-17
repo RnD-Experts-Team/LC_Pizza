@@ -50,6 +50,9 @@ class ItemsAndWithPizzaFusedService
         206101, // Caesar Dip - Buffalo Ranch
     ];
 
+    private const BEV_20OZ_ID = 204100;
+    private const BEV_2L_ID   = 204200;
+    private const ICB_ID      = 203003; // Italian Cheese Bread
     /**
      * Helper: distinct item_ids where a boolean flag column = 1
      */
@@ -166,7 +169,8 @@ class ItemsAndWithPizzaFusedService
 
             // ====== SOLD-WITH (UNITS) ======
             $unitsBread  = 0; $unitsCookie = 0; $unitsSauce = 0; $unitsWings = 0; $unitsBev = 0; $unitsPuffs = 0;
-            $pizzaUnitsBase = 0;
+            $unitsBev20oz = 0; $unitsBev2L = 0; $unitsICB = 0;
+            $pizzaUnitsBase = 0; 
 
             $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled'])
                 ->where(function ($q) use ($relevantIdStr) {
@@ -176,7 +180,7 @@ class ItemsAndWithPizzaFusedService
                 ->orderBy('id')
                 ->chunkById($chunkSize, function ($rows) use (
                     &$sumByItem, &$countByItem, &$nameByItem,
-                    &$pizzaUnitsBase, &$unitsBread, &$unitsCookie, &$unitsSauce, &$unitsWings, &$unitsBev, &$unitsPuffs,
+                    &$pizzaUnitsBase, &$unitsBread, &$unitsCookie, &$unitsSauce, &$unitsWings, &$unitsBev, &$unitsPuffs, &$unitsBev20oz, &$unitsBev2L, &$unitsICB,
                     $relevantIdFlip, &$seenAnywhere, $COOKIE_IDS
                 ) {
                     $pizzaOrders = [];
@@ -213,6 +217,10 @@ class ItemsAndWithPizzaFusedService
                             $itemId = (int)($r->item_id ?? 0);
                             $qty    = (int)($r->quantity ?? 0);
                             if ($qty <= 0) { continue; }
+
+                            if ($itemId === self::BEV_20OZ_ID) { $unitsBev20oz += $qty; }
+                            if ($itemId === self::BEV_2L_ID)   { $unitsBev2L   += $qty; }
+                            if ($itemId === self::ICB_ID)      { $unitsICB     += $qty; }
 
                             if ($r->is_bread)                         { $unitsBread  += $qty; continue; }
                             if (in_array($itemId, $COOKIE_IDS, true)) { $unitsCookie += $qty; continue; }
@@ -262,6 +270,9 @@ class ItemsAndWithPizzaFusedService
                     'wings'       => (int)$unitsWings,
                     'beverages'   => (int)$unitsBev,
                     'crazy_puffs' => (int)$unitsPuffs,
+                    'bev_20oz'             => (int)$unitsBev20oz,
+                    'bev_2l'               => (int)$unitsBev2L,
+                    'italian_cheese_bread' => (int)$unitsICB,
                     'pizza_base'  => (int)$pizzaUnitsBase,
                 ],
                 'percentages' => [
@@ -271,6 +282,9 @@ class ItemsAndWithPizzaFusedService
                     'wings'       => $pizzaUnitsBase ? $unitsWings / $den : 0.0,
                     'beverages'   => $pizzaUnitsBase ? $unitsBev   / $den : 0.0,
                     'crazy_puffs' => $pizzaUnitsBase ? $unitsPuffs / $den : 0.0,
+                    'bev_20oz'             => $pizzaUnitsBase ? $unitsBev20oz / $den : 0.0,
+                    'bev_2l'               => $pizzaUnitsBase ? $unitsBev2L   / $den : 0.0,
+                    'italian_cheese_bread' => $pizzaUnitsBase ? $unitsICB     / $den : 0.0,
                 ],
             ];
 
