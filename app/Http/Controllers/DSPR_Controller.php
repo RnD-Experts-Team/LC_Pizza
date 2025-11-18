@@ -208,6 +208,7 @@ class DSPR_Controller extends Controller
         $PrevWeeklyDSPRData   = $this->WeeklyDSPRReport($prevWeekFinalSummaryCollection, $prevWeeklyDepositDeliveryCollection);
 
         $customerService = $this->CustomerService($dayName, $weeklyFinalSummaryCollection, $lookBackFinalSummaryCollection);
+        $prevCustomerService = $this->CustomerService($dayName, $prevWeekFinalSummaryCollection, $lookBackFinalSummaryCollection);
 
         if (is_array($customerService) && isset($customerService[5]['dailyScore'], $customerService[5]['weeklyScore'])) {
             // after you build $dailyDSPRData and $WeeklyDSPRData:
@@ -227,11 +228,30 @@ class DSPR_Controller extends Controller
             ) / 3, 2);
         }
 
+        if (is_array($prevCustomerService) && isset($prevCustomerService[5]['weeklyScore'])) {
+    $PrevWeeklyDSPRData['Customer_count_percent'] = round((float) ($prevCustomerService[5]['weeklyScore']), 2);
+
+    if (
+        isset($PrevWeeklyDSPRData['Put_into_Portal_Percent']) &&
+        isset($PrevWeeklyDSPRData['In_Portal_on_Time_Percent'])
+    ) {
+        $PrevWeeklyDSPRData['Customer_Service'] = round((
+            (float) $PrevWeeklyDSPRData['Customer_count_percent'] +
+            (float) $PrevWeeklyDSPRData['Put_into_Portal_Percent'] +
+            (float) $PrevWeeklyDSPRData['In_Portal_on_Time_Percent']
+        ) / 3, 2);
+    }
+}
+
         $upselling = $this->Upselling($dayName, $weeklySummaryItemCollection, $lookBackSummaryItemCollection);
         if (is_array($upselling) && isset($upselling[5]['dailyScore'], $upselling[5]['weeklyScore'])) {
             $dailyDSPRData['Upselling']  = round((float) ($upselling[5]['dailyScore']), 2);
             $WeeklyDSPRData['Upselling'] = round((float) ($upselling[5]['weeklyScore']), 2);
         }
+        $prevUpselling = $this->Upselling($dayName, $prevWeekSummaryItemCollection, $lookBackSummaryItemCollection);
+if (is_array($prevUpselling) && isset($prevUpselling[5]['weeklyScore'])) {
+    $PrevWeeklyDSPRData['Upselling'] = round((float) ($prevUpselling[5]['weeklyScore']), 2);
+}
 
         // Group weekly FinalSummary rows by exact date ('Y-m-d') - CURRENT WEEK
         $fsByDate = $weeklyFinalSummaryCollection->groupBy(function ($row) {
