@@ -205,6 +205,7 @@ class DSPR_Controller extends Controller
         $dailyDSPRData        = $this->DailyDSPRReport($dailyFinalSummaryCollection, $dailyDepositDeliveryCollection, $dailyHnrCollection);
 
         $WeeklyDSPRData       = $this->WeeklyDSPRReport($weeklyFinalSummaryCollection, $weeklyDepositDeliveryCollection);
+        $PrevWeeklyDSPRData   = $this->WeeklyDSPRReport($prevWeekFinalSummaryCollection, $prevWeeklyDepositDeliveryCollection);
 
         $customerService = $this->CustomerService($dayName, $weeklyFinalSummaryCollection, $lookBackFinalSummaryCollection);
 
@@ -379,6 +380,7 @@ class DSPR_Controller extends Controller
                 ],
                 'weekly' => [
                     'DSPRData'        => $WeeklyDSPRData,
+                    'PrevWeekDSPRData' => $PrevWeeklyDSPRData, // NEW
                     'DailyDSPRByDate' => $dailyDSPRRange,
                 ],
             ],
