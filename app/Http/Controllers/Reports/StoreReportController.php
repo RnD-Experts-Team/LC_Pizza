@@ -7,7 +7,7 @@ use App\Http\Requests\Reports\StoreReportRequest;
 use App\Services\Reports\StoreOverviewService;
 use App\Services\Reports\ItemsAndWithPizzaFusedService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Request;
+use Illuminate\Http\Request;
 
 /**
  * StoreReportController
