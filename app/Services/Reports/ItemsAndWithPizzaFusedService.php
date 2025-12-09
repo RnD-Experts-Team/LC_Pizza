@@ -462,20 +462,6 @@ $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled']
         return $unit;
     }
 
-/**
- * Detailed sold-with-pizza (UNITS only), per store.
- *
- * Standalone rules:
- * - DOES NOT use getIdsByFlag or compute() ID sets.
- * - NO without-bundle filtering at all.
- * - Default bucket = in_store unless overridden.
- * - If $franchiseStore is null/""/"all": returns each store separately.
- * - If specific store: returns only that store payload.
- *
- * FIX:
- * - Do NOT use baseQB() for GROUP BY queries because it selects '*'/id/order_id.
- * - Build fresh builders for aggregates to satisfy only_full_group_by.
- */
 public function soldWithPizzaDetailsStandalone(
     ?string $franchiseStore,
     $fromDate,
@@ -535,7 +521,6 @@ public function soldWithPizzaDetailsStandalone(
 
     // -------------------------
     // Helper to apply filters to a naked builder
-    // (no select list inside)
     // -------------------------
     $applyFilters = function ($q) use ($franchiseStore, $from, $to, $rules) {
         $q->whereBetween('business_date', [$from, $to]);
@@ -563,7 +548,6 @@ public function soldWithPizzaDetailsStandalone(
 
     // -------------------------
     // 2) Sold-with aggregation (UNITS only)
-    // Fresh builder -> NO select *
     // -------------------------
     $soldWithRows = $applyFilters(DB::table('order_line'))
         ->whereIn('order_id', $pizzaOrdersSub)
@@ -590,7 +574,6 @@ public function soldWithPizzaDetailsStandalone(
 
     // -------------------------
     // 3) Pizza base units per store
-    // Fresh builder -> NO select *
     // -------------------------
     $pizzaBaseByStore = $applyFilters(DB::table('order_line'))
         ->where('is_pizza', 1)
@@ -599,7 +582,7 @@ public function soldWithPizzaDetailsStandalone(
         ->pluck('pizza_units', 'franchise_store');
 
     // -------------------------
-    // 4) Shape output
+    // 4) Shape output from real rows
     // -------------------------
     $byStore = [];
 
@@ -663,29 +646,91 @@ public function soldWithPizzaDetailsStandalone(
         }
     }
 
-    // specific store => single payload
+    // -------------------------
+    // 5) ZERO-FILL explicit IDs per store
+    // -------------------------
     $isSpecificStore =
         ($franchiseStore !== null && $franchiseStore !== '' && strtolower($franchiseStore) !== 'all');
 
+    // decide which stores to output
     if ($isSpecificStore) {
-        $st = (string) $franchiseStore;
-
-        return $byStore[$st] ?? [
-            'store'      => $st,
-            'bucket'     => $bucketKey,
-            'from'       => $from,
-            'to'         => $to,
-            'pizza_base' => (int)($pizzaBaseByStore[$st] ?? 0),
-            'sold_with'  => [
-                'crazy_bread' => [],
-                'cookies'     => [],
-                'crazy_sauce' => [],
-                'wings'       => [],
-                'bev_2l'      => [],
-            ],
-        ];
+        $storesToOutput = [ (string)$franchiseStore ];
+    } else {
+        $storesToOutput = array_values(array_unique(array_merge(
+            array_keys($byStore),
+            array_keys($pizzaBaseByStore->toArray())
+        )));
+        sort($storesToOutput);
     }
 
+    foreach ($storesToOutput as $st) {
+        if (!isset($byStore[$st])) {
+            // store had no sold-with rows, still create skeleton
+            $byStore[$st] = [
+                'store'      => $st,
+                'bucket'     => $bucketKey,
+                'from'       => $from,
+                'to'         => $to,
+                'pizza_base' => (int)($pizzaBaseByStore[$st] ?? 0),
+                'sold_with'  => [
+                    'crazy_bread' => [],
+                    'cookies'     => [],
+                    'crazy_sauce' => [],
+                    'wings'       => [],
+                    'bev_2l'      => [],
+                ],
+            ];
+        }
+
+        // --- crazy sauce: always one row ---
+        $byStore[$st]['sold_with']['crazy_sauce'] = [
+            [
+                'item_id' => $CRAZY_SAUCE,
+                'name'    => $byStore[$st]['sold_with']['crazy_sauce'][0]['name'] ?? '',
+                'units'   => (int)($byStore[$st]['sold_with']['crazy_sauce'][0]['units'] ?? 0),
+            ]
+        ];
+
+        // --- cookies: always both IDs ---
+        $cookieMap = [];
+        foreach ($byStore[$st]['sold_with']['cookies'] as $row) {
+            $cookieMap[(int)$row['item_id']] = $row;
+        }
+        $cookiesFilled = [];
+        foreach ($COOKIE_IDS as $cid) {
+            $cookiesFilled[] = [
+                'item_id' => $cid,
+                'name'    => $cookieMap[$cid]['name'] ?? '',
+                'units'   => (int)($cookieMap[$cid]['units'] ?? 0),
+            ];
+        }
+        $byStore[$st]['sold_with']['cookies'] = $cookiesFilled;
+
+        // --- bev 2L: always both IDs ---
+        $bevMap = [];
+        foreach ($byStore[$st]['sold_with']['bev_2l'] as $row) {
+            $bevMap[(int)$row['item_id']] = $row;
+        }
+        $bevFilled = [];
+        foreach ($BEV_2L_IDS as $bid) {
+            $bevFilled[] = [
+                'item_id' => $bid,
+                'name'    => $bevMap[$bid]['name'] ?? '',
+                'units'   => (int)($bevMap[$bid]['units'] ?? 0),
+            ];
+        }
+        $byStore[$st]['sold_with']['bev_2l'] = $bevFilled;
+    }
+
+    // -------------------------
+    // 6) Return shape
+    // -------------------------
+    if ($isSpecificStore) {
+        $st = (string) $franchiseStore;
+        return $byStore[$st];
+    }
+
+    // all stores separately
     return array_values($byStore);
 }
 
