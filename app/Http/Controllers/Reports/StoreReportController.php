@@ -7,6 +7,7 @@ use App\Http\Requests\Reports\StoreReportRequest;
 use App\Services\Reports\StoreOverviewService;
 use App\Services\Reports\ItemsAndWithPizzaFusedService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Request;
 
 /**
  * StoreReportController
@@ -58,5 +59,38 @@ class StoreReportController extends Controller
                 'all_items_union' => $fused['all_items_union'],  // IDs that appeared at least once anywhere
             ],
         ]);
+    }
+
+    /**
+     * GET /api/reports/sold-with-pizza-details
+     *
+     * Query params:
+     * - from: YYYY-MM-DD (required)
+     * - to: YYYY-MM-DD (required)
+     * - store: franchise_store code OR "all" (optional)
+     * - bucket: in_store|lc_pickup|lc_delivery|third_party|all (optional, default in_store)
+     */
+    public function soldWithPizzaDetails(Request $request)
+    {
+        $from   = $request->input('from');
+        $to     = $request->input('to');
+        $store  = $request->input('store'); // null / store-code / "all"
+        $bucket = $request->input('bucket', 'in_store');
+
+        // minimal validation (optional but smart)
+        if (!$from || !$to) {
+            return response()->json([
+                'error' => 'from and to are required (YYYY-MM-DD).'
+            ], 422);
+        }
+
+        $data = $this->fused->soldWithPizzaDetailsStandalone(
+            $store,
+            $from,
+            $to,
+            $bucket
+        );
+
+        return response()->json($data);
     }
 }
