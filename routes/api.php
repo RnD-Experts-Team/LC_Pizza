@@ -8,6 +8,8 @@ use App\Http\Controllers\Reports\StoreReportController;
 
 Route::middleware('api.key')->group(function () {
     Route::get('/reports/store', StoreReportController::class)->name('reports.store');
+    Route::get('/sold-with-alone', [StoreReportController::class, 'soldWithPizzaDetails'])->name('reports.sold_with_alone');
+
     // exporting route csv and excel
     Route::get('/export/{model}/csv/{start?}/{end?}/{hour?}/{stores?}', [ExportingController::class, 'exportCSV']);
 });
