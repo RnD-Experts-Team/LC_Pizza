@@ -462,7 +462,7 @@ $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled']
         return $unit;
     }
 
-    /**
+/**
  * Detailed sold-with-pizza (UNITS only), per store.
  *
  * Standalone rules:
@@ -471,6 +471,11 @@ $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled']
  * - Default bucket = in_store unless overridden.
  * - If $franchiseStore is null/""/"all": returns each store separately.
  * - If specific store: returns only that store payload.
+ *
+ * IMPORTANT:
+ * - baseQB() preselects columns including id/order_id/etc.
+ * - We MUST reset selects (->select()) before aggregate GROUP BY queries
+ *   to avoid only_full_group_by errors.
  */
 public function soldWithPizzaDetailsStandalone(
     ?string $franchiseStore,
@@ -480,11 +485,16 @@ public function soldWithPizzaDetailsStandalone(
 ): array {
     if (function_exists('set_time_limit')) { @set_time_limit(0); }
 
-    $from = $fromDate instanceof Carbon ? $fromDate->toDateString() : Carbon::parse($fromDate)->toDateString();
-    $to   = $toDate   instanceof Carbon ? $toDate->toDateString()   : Carbon::parse($toDate)->toDateString();
+    $from = $fromDate instanceof Carbon
+        ? $fromDate->toDateString()
+        : Carbon::parse($fromDate)->toDateString();
+
+    $to = $toDate instanceof Carbon
+        ? $toDate->toDateString()
+        : Carbon::parse($toDate)->toDateString();
 
     // -------------------------
-    // Standalone bucket rules (local, no dependency)
+    // Standalone bucket rules (local)
     // -------------------------
     $BUCKETS_LOCAL = [
         'in_store' => [
@@ -518,7 +528,7 @@ public function soldWithPizzaDetailsStandalone(
     $rules = $BUCKETS_LOCAL[$bucketKey] ?? $BUCKETS_LOCAL['in_store'];
 
     // -------------------------
-    // Explicit IDs ONLY (local to this function)
+    // Explicit IDs ONLY (local)
     // -------------------------
     $COOKIE_IDS  = [101288, 101289];  // each output separately
     $CRAZY_SAUCE = 206117;           // only this sauce id
@@ -539,7 +549,8 @@ public function soldWithPizzaDetailsStandalone(
         ->distinct();
 
     // -------------------------
-    // 2) Sold-with aggregation in ONE SQL pass (units only)
+    // 2) Sold-with aggregation (units only)
+    //    RESET select() before selectRaw() to avoid full_group_by issue
     // -------------------------
     $soldWithRows = $this->baseQB(
             $franchiseStore,
@@ -551,12 +562,13 @@ public function soldWithPizzaDetailsStandalone(
         ->whereIn('order_id', $pizzaOrdersSub)
         ->where(function ($q) use ($COOKIE_IDS, $CRAZY_SAUCE, $BEV_2L_IDS) {
             $q
-              ->where('is_bread', 1)              // crazy bread via flag
-              ->orWhereIn('item_id', $COOKIE_IDS) // cookies via explicit IDs
-              ->orWhere('item_id', $CRAZY_SAUCE)  // crazy sauce explicit
-              ->orWhere('is_wings', 1)            // wings via flag
-              ->orWhereIn('item_id', $BEV_2L_IDS);// bev 2L explicit
+              ->where('is_bread', 1)                // crazy bread via flag
+              ->orWhereIn('item_id', $COOKIE_IDS)  // cookies explicit
+              ->orWhere('item_id', $CRAZY_SAUCE)   // crazy sauce explicit
+              ->orWhere('is_wings', 1)             // wings via flag
+              ->orWhereIn('item_id', $BEV_2L_IDS); // bev 2L explicit
         })
+        ->select() // ✅ RESET baseQB select list
         ->selectRaw('
             franchise_store,
             item_id,
@@ -572,6 +584,7 @@ public function soldWithPizzaDetailsStandalone(
 
     // -------------------------
     // 3) Pizza base units per store (denominator)
+    //    RESET select() before selectRaw()
     // -------------------------
     $pizzaBaseByStore = $this->baseQB(
             $franchiseStore,
@@ -581,6 +594,7 @@ public function soldWithPizzaDetailsStandalone(
             $rules['fulfilled']
         )
         ->where('is_pizza', 1)
+        ->select() // ✅ RESET baseQB select list
         ->selectRaw('franchise_store, SUM(quantity) as pizza_units')
         ->groupBy('franchise_store')
         ->pluck('pizza_units', 'franchise_store');
@@ -651,7 +665,9 @@ public function soldWithPizzaDetailsStandalone(
     }
 
     // specific store => single payload even if empty
-    $isSpecificStore = ($franchiseStore !== null && $franchiseStore !== '' && strtolower($franchiseStore) !== 'all');
+    $isSpecificStore =
+        ($franchiseStore !== null && $franchiseStore !== '' && strtolower($franchiseStore) !== 'all');
+
     if ($isSpecificStore) {
         $st = (string) $franchiseStore;
 
