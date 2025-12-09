@@ -472,10 +472,9 @@ $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled']
  * - If $franchiseStore is null/""/"all": returns each store separately.
  * - If specific store: returns only that store payload.
  *
- * IMPORTANT:
- * - baseQB() preselects columns including id/order_id/etc.
- * - We MUST reset selects (->select()) before aggregate GROUP BY queries
- *   to avoid only_full_group_by errors.
+ * FIX:
+ * - Do NOT use baseQB() for GROUP BY queries because it selects '*'/id/order_id.
+ * - Build fresh builders for aggregates to satisfy only_full_group_by.
  */
 public function soldWithPizzaDetailsStandalone(
     ?string $franchiseStore,
@@ -494,7 +493,7 @@ public function soldWithPizzaDetailsStandalone(
         : Carbon::parse($toDate)->toDateString();
 
     // -------------------------
-    // Standalone bucket rules (local)
+    // Local buckets (standalone)
     // -------------------------
     $BUCKETS_LOCAL = [
         'in_store' => [
@@ -528,47 +527,54 @@ public function soldWithPizzaDetailsStandalone(
     $rules = $BUCKETS_LOCAL[$bucketKey] ?? $BUCKETS_LOCAL['in_store'];
 
     // -------------------------
-    // Explicit IDs ONLY (local)
+    // Explicit IDs ONLY
     // -------------------------
-    $COOKIE_IDS  = [101288, 101289];  // each output separately
-    $CRAZY_SAUCE = 206117;           // only this sauce id
-    $BEV_2L_IDS  = [204200, 204234]; // each output separately
+    $COOKIE_IDS  = [101288, 101289];
+    $CRAZY_SAUCE = 206117;
+    $BEV_2L_IDS  = [204200, 204234];
 
     // -------------------------
-    // 1) Pizza orders subquery (bucket/store/date filtered)
+    // Helper to apply filters to a naked builder
+    // (no select list inside)
     // -------------------------
-    $pizzaOrdersSub = $this->baseQB(
-            $franchiseStore,
-            $from,
-            $to,
-            $rules['placed'],
-            $rules['fulfilled']
-        )
+    $applyFilters = function ($q) use ($franchiseStore, $from, $to, $rules) {
+        $q->whereBetween('business_date', [$from, $to]);
+
+        if ($franchiseStore !== null && $franchiseStore !== '' && strtolower($franchiseStore) !== 'all') {
+            $q->where('franchise_store', $franchiseStore);
+        }
+        if (!empty($rules['placed'])) {
+            $q->whereIn('order_placed_method', $rules['placed']);
+        }
+        if (!empty($rules['fulfilled'])) {
+            $q->whereIn('order_fulfilled_method', $rules['fulfilled']);
+        }
+
+        return $q;
+    };
+
+    // -------------------------
+    // 1) Pizza orders subquery
+    // -------------------------
+    $pizzaOrdersSub = $applyFilters(DB::table('order_line'))
         ->where('is_pizza', 1)
         ->select('order_id')
         ->distinct();
 
     // -------------------------
-    // 2) Sold-with aggregation (units only)
-    //    RESET select() before selectRaw() to avoid full_group_by issue
+    // 2) Sold-with aggregation (UNITS only)
+    // Fresh builder -> NO select *
     // -------------------------
-    $soldWithRows = $this->baseQB(
-            $franchiseStore,
-            $from,
-            $to,
-            $rules['placed'],
-            $rules['fulfilled']
-        )
+    $soldWithRows = $applyFilters(DB::table('order_line'))
         ->whereIn('order_id', $pizzaOrdersSub)
         ->where(function ($q) use ($COOKIE_IDS, $CRAZY_SAUCE, $BEV_2L_IDS) {
             $q
-              ->where('is_bread', 1)                // crazy bread via flag
-              ->orWhereIn('item_id', $COOKIE_IDS)  // cookies explicit
-              ->orWhere('item_id', $CRAZY_SAUCE)   // crazy sauce explicit
-              ->orWhere('is_wings', 1)             // wings via flag
-              ->orWhereIn('item_id', $BEV_2L_IDS); // bev 2L explicit
+              ->where('is_bread', 1)
+              ->orWhereIn('item_id', $COOKIE_IDS)
+              ->orWhere('item_id', $CRAZY_SAUCE)
+              ->orWhere('is_wings', 1)
+              ->orWhereIn('item_id', $BEV_2L_IDS);
         })
-        ->select() // ✅ RESET baseQB select list
         ->selectRaw('
             franchise_store,
             item_id,
@@ -583,24 +589,17 @@ public function soldWithPizzaDetailsStandalone(
         ->get();
 
     // -------------------------
-    // 3) Pizza base units per store (denominator)
-    //    RESET select() before selectRaw()
+    // 3) Pizza base units per store
+    // Fresh builder -> NO select *
     // -------------------------
-    $pizzaBaseByStore = $this->baseQB(
-            $franchiseStore,
-            $from,
-            $to,
-            $rules['placed'],
-            $rules['fulfilled']
-        )
+    $pizzaBaseByStore = $applyFilters(DB::table('order_line'))
         ->where('is_pizza', 1)
-        ->select() // ✅ RESET baseQB select list
         ->selectRaw('franchise_store, SUM(quantity) as pizza_units')
         ->groupBy('franchise_store')
         ->pluck('pizza_units', 'franchise_store');
 
     // -------------------------
-    // 4) Shape per-store output
+    // 4) Shape output
     // -------------------------
     $byStore = [];
 
@@ -664,7 +663,7 @@ public function soldWithPizzaDetailsStandalone(
         }
     }
 
-    // specific store => single payload even if empty
+    // specific store => single payload
     $isSpecificStore =
         ($franchiseStore !== null && $franchiseStore !== '' && strtolower($franchiseStore) !== 'all');
 
@@ -687,7 +686,7 @@ public function soldWithPizzaDetailsStandalone(
         ];
     }
 
-    // all stores separately
     return array_values($byStore);
 }
+
 }
