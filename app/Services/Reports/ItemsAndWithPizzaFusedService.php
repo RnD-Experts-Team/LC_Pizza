@@ -515,9 +515,9 @@ public function soldWithPizzaDetailsStandalone(
     // -------------------------
     // Explicit IDs ONLY
     // -------------------------
-    $COOKIE_IDS  = [101288, 101289];
-    $CRAZY_SAUCE = 206117;
-    $BEV_2L_IDS  = [204200, 204234];
+    $COOKIE_IDS       = [101288, 101289];
+    $CRAZY_SAUCE_IDS  = [206117, 103002];   // <-- TWO sauce IDs
+    $BEV_2L_IDS       = [204200, 204234];
 
     // -------------------------
     // Helper to apply filters to a naked builder
@@ -551,11 +551,11 @@ public function soldWithPizzaDetailsStandalone(
     // -------------------------
     $soldWithRows = $applyFilters(DB::table('order_line'))
         ->whereIn('order_id', $pizzaOrdersSub)
-        ->where(function ($q) use ($COOKIE_IDS, $CRAZY_SAUCE, $BEV_2L_IDS) {
+        ->where(function ($q) use ($COOKIE_IDS, $CRAZY_SAUCE_IDS, $BEV_2L_IDS) {
             $q
               ->where('is_bread', 1)
               ->orWhereIn('item_id', $COOKIE_IDS)
-              ->orWhere('item_id', $CRAZY_SAUCE)
+              ->orWhereIn('item_id', $CRAZY_SAUCE_IDS)
               ->orWhere('is_wings', 1)
               ->orWhereIn('item_id', $BEV_2L_IDS);
         })
@@ -610,13 +610,15 @@ public function soldWithPizzaDetailsStandalone(
         $units  = (int) $r->units_sold;
         $name   = (string) $r->menu_item_name;
 
-        if ($itemId === $CRAZY_SAUCE) {
+        // sauces (two IDs)
+        if (in_array($itemId, $CRAZY_SAUCE_IDS, true)) {
             $byStore[$st]['sold_with']['crazy_sauce'][] = [
                 'item_id' => $itemId, 'name' => $name, 'units' => $units
             ];
             continue;
         }
 
+        // cookies
         if (in_array($itemId, $COOKIE_IDS, true)) {
             $byStore[$st]['sold_with']['cookies'][] = [
                 'item_id' => $itemId, 'name' => $name, 'units' => $units
@@ -624,6 +626,7 @@ public function soldWithPizzaDetailsStandalone(
             continue;
         }
 
+        // bev 2L
         if (in_array($itemId, $BEV_2L_IDS, true)) {
             $byStore[$st]['sold_with']['bev_2l'][] = [
                 'item_id' => $itemId, 'name' => $name, 'units' => $units
@@ -631,6 +634,7 @@ public function soldWithPizzaDetailsStandalone(
             continue;
         }
 
+        // bread / wings flags
         if ((int)$r->is_bread === 1) {
             $byStore[$st]['sold_with']['crazy_bread'][] = [
                 'item_id' => $itemId, 'name' => $name, 'units' => $units
@@ -652,7 +656,7 @@ public function soldWithPizzaDetailsStandalone(
     $isSpecificStore =
         ($franchiseStore !== null && $franchiseStore !== '' && strtolower($franchiseStore) !== 'all');
 
-    // decide which stores to output
+    // Decide which stores to output
     if ($isSpecificStore) {
         $storesToOutput = [ (string)$franchiseStore ];
     } else {
@@ -682,16 +686,22 @@ public function soldWithPizzaDetailsStandalone(
             ];
         }
 
-        // --- crazy sauce: always one row ---
-        $byStore[$st]['sold_with']['crazy_sauce'] = [
-            [
-                'item_id' => $CRAZY_SAUCE,
-                'name'    => $byStore[$st]['sold_with']['crazy_sauce'][0]['name'] ?? '',
-                'units'   => (int)($byStore[$st]['sold_with']['crazy_sauce'][0]['units'] ?? 0),
-            ]
-        ];
+        // --- crazy sauce: always BOTH IDs ---
+        $sauceMap = [];
+        foreach ($byStore[$st]['sold_with']['crazy_sauce'] as $row) {
+            $sauceMap[(int)$row['item_id']] = $row;
+        }
+        $saucesFilled = [];
+        foreach ($CRAZY_SAUCE_IDS as $sid) {
+            $saucesFilled[] = [
+                'item_id' => $sid,
+                'name'    => $sauceMap[$sid]['name'] ?? '',
+                'units'   => (int)($sauceMap[$sid]['units'] ?? 0),
+            ];
+        }
+        $byStore[$st]['sold_with']['crazy_sauce'] = $saucesFilled;
 
-        // --- cookies: always both IDs ---
+        // --- cookies: always BOTH IDs ---
         $cookieMap = [];
         foreach ($byStore[$st]['sold_with']['cookies'] as $row) {
             $cookieMap[(int)$row['item_id']] = $row;
@@ -706,7 +716,7 @@ public function soldWithPizzaDetailsStandalone(
         }
         $byStore[$st]['sold_with']['cookies'] = $cookiesFilled;
 
-        // --- bev 2L: always both IDs ---
+        // --- bev 2L: always BOTH IDs ---
         $bevMap = [];
         foreach ($byStore[$st]['sold_with']['bev_2l'] as $row) {
             $bevMap[(int)$row['item_id']] = $row;
@@ -733,5 +743,6 @@ public function soldWithPizzaDetailsStandalone(
     // all stores separately
     return array_values($byStore);
 }
+
 
 }
