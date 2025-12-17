@@ -10,12 +10,12 @@ use DateTime;
 class SingleCsvImporter extends Command
 {
     protected $signature = 'csv:one-time-import
-        {--model= : Target table. One of: order_line, detail_orders}
-        {--path= : Path to CSV (default: public/onetimecsv.csv)}
-        {--delimiter= : Force delimiter: comma|tab (auto-detect if omitted)}
-        {--skip-header=0 : Use 1 if CSV has no header row}
-        {--encoding=auto : Source encoding: auto|utf8|cp1252|latin1}
-        {--chunk=1000 : Insert chunk size per partition}';
+    {--model= : Target table. One of: order_line, detail_orders, alta_cogs, alta_waste, alta_usage, alta_purchase}
+    {--path= : Path to CSV (default: public/onetimecsv.csv)}
+    {--delimiter= : Force delimiter: comma|tab (auto-detect if omitted)}
+    {--skip-header=0 : Use 1 if CSV has no header row}
+    {--encoding=auto : Source encoding: auto|utf8|cp1252|latin1}
+    {--chunk=1000 : Insert chunk size per partition}';
 
     protected $description = 'ONE-TIME loader for huge CSVs. Streams -> partitions by (store|date) -> per-partition delete+insert.';
 
@@ -145,6 +145,124 @@ class SingleCsvImporter extends Command
                 ],
                 'strictField' => null,
             ],
+
+            // ===== alta_cogs =====
+'alta_cogs' => [
+    'table'       => 'alta_inventory_cogs',
+    'required'    => ['franchise_store', 'business_date'],
+    'partitionBy' => ['franchise_store', 'business_date'],
+    'allowed'     => [
+        'franchise_store','business_date','count_period','inventory_category',
+        'starting_value','received_value','net_transfer_value','ending_value',
+        'used_value','theoretical_usage_value','variance_value',
+    ],
+    'dateCols'    => ['business_date' => true],
+    'datetimeCols'=> [],
+    'headerMap'   => [
+        'FranchiseStore'        => 'franchise_store',
+        'BusinessDate'          => 'business_date',
+        'CountPeriod'           => 'count_period',
+        'InventoryCategory'     => 'inventory_category',
+        'StartingValue'         => 'starting_value',
+        'ReceivedValue'         => 'received_value',
+        'NetTransferValue'      => 'net_transfer_value',
+        'EndingValue'           => 'ending_value',
+        'UsedValue'             => 'used_value',
+        'TheoreticalUsageValue' => 'theoretical_usage_value',
+        'VarianceValue'         => 'variance_value',
+    ],
+    'strictField' => null,
+],
+
+// ===== alta_waste =====
+'alta_waste' => [
+    'table'       => 'alta_inventory_waste',
+    'required'    => ['franchise_store', 'business_date'],
+    'partitionBy' => ['franchise_store', 'business_date'],
+    'allowed'     => [
+        'franchise_store','business_date','item_id','item_description',
+        'waste_reason','unit_food_cost','qty',
+    ],
+    'dateCols'    => ['business_date' => true],
+    'datetimeCols'=> [],
+    'headerMap'   => [
+        'FranchiseStore'   => 'franchise_store',
+        'BusinessDate'     => 'business_date',
+        'ItemId'           => 'item_id',
+        'ItemDescription'  => 'item_description',
+        'WasteReason'      => 'waste_reason',
+        'UnitFoodCost'     => 'unit_food_cost',
+        'Qty'              => 'qty',
+    ],
+    'strictField' => null,
+],
+
+// ===== alta_usage =====
+'alta_usage' => [
+    'table'       => 'alta_inventory_ingredient_usage',
+    'required'    => ['franchise_store', 'business_date'],
+    'partitionBy' => ['franchise_store', 'business_date'],
+    'allowed'     => [
+        'franchise_store','business_date','count_period','ingredient_id',
+        'ingredient_description','ingredient_category','ingredient_unit',
+        'ingredient_unit_cost','starting_inventory_qty','received_qty',
+        'net_transferred_qty','ending_inventory_qty','actual_usage',
+        'theoretical_usage','variance_qty','waste_qty',
+    ],
+    'dateCols'    => ['business_date' => true],
+    'datetimeCols'=> [],
+    'headerMap'   => [
+        'FranchiseStore'        => 'franchise_store',
+        'BusinessDate'          => 'business_date',
+        'CountPeriod'           => 'count_period',
+        'IngredientId'          => 'ingredient_id',
+        'IngredientDescription' => 'ingredient_description',
+        'IngredientCategory'    => 'ingredient_category',
+        'IngredientUnit'        => 'ingredient_unit',
+        'IngredientUnitCost'    => 'ingredient_unit_cost',
+        'StartingInventoryQty'  => 'starting_inventory_qty',
+        'ReceivedQty'           => 'received_qty',
+        'NetTransferredQty'     => 'net_transferred_qty',
+        'EndingInventoryQty'    => 'ending_inventory_qty',
+        'ActualUsage'           => 'actual_usage',
+        'TheoreticalUsage'      => 'theoretical_usage',
+        'VarianceQty'           => 'variance_qty',
+        'WasteQty'              => 'waste_qty',
+    ],
+    'strictField' => null,
+],
+
+// ===== alta_purchase =====
+'alta_purchase' => [
+    'table'       => 'alta_inventory_ingredient_order',
+    'required'    => ['franchise_store', 'business_date'],
+    'partitionBy' => ['franchise_store', 'business_date'],
+    'allowed'     => [
+        'franchise_store','business_date','supplier','invoice_number',
+        'purchase_order_number','ingredient_id','ingredient_description',
+        'ingredient_category','ingredient_unit','unit_price','order_qty',
+        'sent_qty','received_qty','total_cost',
+    ],
+    'dateCols'    => ['business_date' => true],
+    'datetimeCols'=> [],
+    'headerMap'   => [
+        'FranchiseStore'        => 'franchise_store',
+        'BusinessDate'          => 'business_date',
+        'Supplier'              => 'supplier',
+        'InvoiceNumber'         => 'invoice_number',
+        'PurchaseOrderNumber'   => 'purchase_order_number',
+        'IngredientId'          => 'ingredient_id',
+        'IngredientDescription' => 'ingredient_description',
+        'IngredientCategory'    => 'ingredient_category',
+        'IngredientUnit'        => 'ingredient_unit',
+        'UnitPrice'             => 'unit_price',
+        'OrderQty'              => 'order_qty',
+        'SentQty'               => 'sent_qty',
+        'ReceivedQty'           => 'received_qty',
+        'TotalCost'             => 'total_cost',
+    ],
+    'strictField' => null,
+],
         ];
     }
 
