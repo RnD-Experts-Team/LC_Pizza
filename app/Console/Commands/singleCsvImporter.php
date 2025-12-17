@@ -234,7 +234,7 @@ class SingleCsvImporter extends Command
 
 // ===== alta_purchase =====
 'alta_purchase' => [
-    'table'       => 'alta_inventory_ingredient_order',
+    'table'       => 'alta_inventory_ingredient_orders',
     'required'    => ['franchise_store', 'business_date'],
     'partitionBy' => ['franchise_store', 'business_date'],
     'allowed'     => [
