@@ -957,7 +957,7 @@ class LogicsAndQueriesServices
             'hour'              => $hour,
             'total_sales'       => $hourOrders->sum('royalty_obligation'),
             'phone_sales'       => $hourOrders->where('order_placed_method', 'Phone')->sum('royalty_obligation'),
-            'call_center_sales' => $hourOrders->where('order_placed_method', 'SoundHoundAgent')->sum('royalty_obligation'),
+            'call_center_sales' => $hourOrders->whereIn('order_placed_method', ['SoundHoundAgent', 'CallCenterAgent'])->sum('royalty_obligation'),
             'drive_thru_sales'  => $hourOrders->where('order_placed_method', 'Drive Thru')->sum('royalty_obligation'),
             'website_sales'     => $hourOrders
                 ->where('order_placed_method', 'Website')
