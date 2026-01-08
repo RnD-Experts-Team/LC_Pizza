@@ -1,9 +1,11 @@
 <?php
+
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Data\ExportingController;
 
 use App\Http\Controllers\DSPR_Controller;
 use App\Http\Controllers\Reports\StoreReportController;
+use App\Http\Controllers\Reports\StoreItemsMatrixController;
 
 
 Route::middleware('api.key')->group(function () {
@@ -12,20 +14,18 @@ Route::middleware('api.key')->group(function () {
 
     // exporting route csv and excel
     Route::get('/export/{model}/csv/{start?}/{end?}/{hour?}/{stores?}', [ExportingController::class, 'exportCSV']);
+    Route::get('/reports/store-items-matrix', StoreItemsMatrixController::class);
 });
 
 Route::middleware('auth.verify')->group(function () {
     // exporting route json
     Route::get('/export/{model}/json/{start?}/{end?}/{hour?}/{stores?}', [ExportingController::class, 'exportJson'])
-    ->name('export.json');
+        ->name('export.json');
 
     Route::post('/dspr-report/{store}/{date}', [DSPR_Controller::class, 'index'])
-    ->name('dspr-report');
+        ->name('dspr-report');
 
-// New: catalog of unique items (for populating the UI selector)
+    // New: catalog of unique items (for populating the UI selector)
     Route::get('/dspr-items/{store}', [DSPR_Controller::class, 'items'])
-    ->name('dspr-items');
+        ->name('dspr-items');
 });
-
-
-
