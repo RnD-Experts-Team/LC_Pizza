@@ -26,22 +26,22 @@ class StoreOverviewService
     private const BUCKETS = [
         'in_store' => [
             'label'     => 'In Store',
-            'placed'    => ['Register','Drive Thru','SoundHoundAgent','Phone','CallCenterAgent'],
-            'fulfilled' => ['Register','Drive-Thru'],
+            'placed'    => ['Register', 'Drive Thru', 'SoundHoundAgent', 'Phone', 'CallCenterAgent'],
+            'fulfilled' => ['Register', 'Drive-Thru'],
         ],
         'lc_pickup' => [
             'label'     => 'LC Pickup',
-            'placed'    => ['Website','Mobile'],
-            'fulfilled' => ['Register','Drive-Thru','In Store Only'],
+            'placed'    => ['Website', 'Mobile'],
+            'fulfilled' => ['Register', 'Drive-Thru', 'In Store Only'],
         ],
         'lc_delivery' => [
             'label'     => 'LC Delivery',
-            'placed'    => ['Website','Mobile','SoundHoundAgent','CallCenterAgent'],
+            'placed'    => ['Website', 'Mobile', 'SoundHoundAgent', 'CallCenterAgent'],
             'fulfilled' => ['Delivery'],
         ],
         'third_party' => [
             'label'     => '3rd Party',
-            'placed'    => ['UberEats','Grubhub','DoorDash'],
+            'placed'    => ['UberEats', 'Grubhub', 'DoorDash'],
             'fulfilled' => ['Delivery'],
         ],
     ];
@@ -107,6 +107,8 @@ class StoreOverviewService
     ): array {
         // (1) Sales by method — scalar sum per method
         $salesByMethod = [];
+        $orderCountByMethod = [];  // New array to hold order counts per placed method
+
         foreach ($placed as $method) {
             $q = ChannelData::query()
                 ->whereBetween('business_date', [$from, $to])
@@ -117,6 +119,17 @@ class StoreOverviewService
             $this->applyStore($q, $franchiseStore);
 
             $salesByMethod[$method] = (float) $q->sum('amount');
+
+            // Get the order count for this placed method
+            $qCount = ChannelData::query()
+                ->whereBetween('business_date', [$from, $to])
+                ->where('category', 'Order_Count')
+                ->where('order_placed_method', $method)
+                ->whereIn('order_fulfilled_method', $fulfilled);
+
+            $this->applyStore($qCount, $franchiseStore);
+
+            $orderCountByMethod[$method] = (float) $qCount->sum('amount'); // Store the order count
         }
 
         // (2) Order count total for the bucket
@@ -144,12 +157,14 @@ class StoreOverviewService
 
         return [
             'sales_by_method'   => $salesByMethod,
+            'order_count_by_method' => $orderCountByMethod,  // Add this new key to return the method counts
             'order_count_total' => (float) $orderCountTotal,
             'total_sales'       => (float) $totalSales,
             'avg_ticket'        => (float) $avgTicket,
             'method_share'      => $methodShare,
         ];
     }
+
 
     /** Apply store filter only when a specific store is provided (null/""/"All" => no filter). */
     private function applyStore(Builder $q, ?string $store): void
