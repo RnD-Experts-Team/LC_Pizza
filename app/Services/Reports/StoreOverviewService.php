@@ -107,29 +107,29 @@ class StoreOverviewService
     ): array {
         // (1) Sales by method — scalar sum per method
         $salesByMethod = [];
-        $orderCountByMethod = [];  // New array to hold order counts per placed method
-
+        $countByMethod = []; // New array to hold count by method
         foreach ($placed as $method) {
-            $q = ChannelData::query()
+            // Sales query
+            $salesQuery = ChannelData::query()
                 ->whereBetween('business_date', [$from, $to])
                 ->where('category', 'Sales')
                 ->where('order_placed_method', $method)
                 ->whereIn('order_fulfilled_method', $fulfilled);
 
-            $this->applyStore($q, $franchiseStore);
+            $this->applyStore($salesQuery, $franchiseStore);
 
-            $salesByMethod[$method] = (float) $q->sum('amount');
+            $salesByMethod[$method] = (float) $salesQuery->sum('amount');
 
-            // Get the order count for this placed method
-            $qCount = ChannelData::query()
+            // Count (customer count) query
+            $countQuery = ChannelData::query()
                 ->whereBetween('business_date', [$from, $to])
                 ->where('category', 'Order_Count')
                 ->where('order_placed_method', $method)
                 ->whereIn('order_fulfilled_method', $fulfilled);
 
-            $this->applyStore($qCount, $franchiseStore);
+            $this->applyStore($countQuery, $franchiseStore);
 
-            $orderCountByMethod[$method] = (float) $qCount->sum('amount'); // Store the order count
+            $countByMethod[$method] = (int) $countQuery->sum('amount'); // Store the order count per method
         }
 
         // (2) Order count total for the bucket
@@ -157,7 +157,7 @@ class StoreOverviewService
 
         return [
             'sales_by_method'   => $salesByMethod,
-            'order_count_by_method' => $orderCountByMethod,  // Add this new key to return the method counts
+            'count_by_method'   => $countByMethod, // Add count by method
             'order_count_total' => (float) $orderCountTotal,
             'total_sales'       => (float) $totalSales,
             'avg_ticket'        => (float) $avgTicket,
