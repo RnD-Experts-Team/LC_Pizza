@@ -289,7 +289,7 @@ class ItemsAndWithPizzaFusedService
                                 $unitsCookie += $qty;
                                 continue;
                             }
-                            if ($r->is_caesar_dip) {
+                            if ($itemId === 103002) {
                                 $unitsSauce  += $qty;
                                 continue;
                             }
