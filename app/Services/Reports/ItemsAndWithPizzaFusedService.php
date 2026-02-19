@@ -10,22 +10,22 @@ class ItemsAndWithPizzaFusedService
     private const BUCKETS = [
         'in_store' => [
             'label'     => 'In Store',
-            'placed'    => ['Register','Drive Thru','SoundHoundAgent','Phone','CallCenterAgent'],
-            'fulfilled' => ['Register','Drive-Thru'],
+            'placed'    => ['Register', 'Drive Thru', 'SoundHoundAgent', 'Phone', 'CallCenterAgent'],
+            'fulfilled' => ['Register', 'Drive-Thru'],
         ],
         'lc_pickup' => [
             'label'     => 'LC Pickup',
-            'placed'    => ['Website','Mobile'],
-            'fulfilled' => ['Register','Drive-Thru','In Store Only'],
+            'placed'    => ['Website', 'Mobile'],
+            'fulfilled' => ['Register', 'Drive-Thru', 'In Store Only'],
         ],
         'lc_delivery' => [
             'label'     => 'LC Delivery',
-            'placed'    => ['Website','Mobile','CallCenterAgent','SoundHoundAgent'],
+            'placed'    => ['Website', 'Mobile', 'CallCenterAgent', 'SoundHoundAgent'],
             'fulfilled' => ['Delivery'],
         ],
         'third_party' => [
             'label'     => '3rd Party',
-            'placed'    => ['UberEats','Grubhub','DoorDash'],
+            'placed'    => ['UberEats', 'Grubhub', 'DoorDash'],
             'fulfilled' => ['Delivery'],
         ],
         'all' => [
@@ -53,41 +53,44 @@ class ItemsAndWithPizzaFusedService
     private const BEV_20OZ_ID = 204100;
     private const BEV_2L_ID   = 204200;
     private const ICB_ID      = 203003; // Italian Cheese Bread
+
     /**
      * Helper: distinct item_ids where a boolean flag column = 1
      */
     private function getIdsByFlag(
-    ?string $store,
-    string $from,
-    string $to,
-    string $flagCol,
-    bool $withoutBundle = false   // <--- NEW
-): array {
-    $q = DB::table('order_line')
-        ->distinct()
-        ->whereBetween('business_date', [$from, $to])
-        ->where($flagCol, 1)
-        ->whereNotNull('item_id');
+        ?string $store,
+        string $from,
+        string $to,
+        string $flagCol,
+        bool $withoutBundle = false   // <--- NEW
+    ): array {
+        $q = DB::table('order_line')
+            ->distinct()
+            ->whereBetween('business_date', [$from, $to])
+            ->where($flagCol, 1)
+            ->whereNotNull('item_id');
 
-    if ($store !== null && $store !== '' && strtolower($store) !== 'all') {
-        $q->where('franchise_store', $store);
+        if ($store !== null && $store !== '' && strtolower($store) !== 'all') {
+            $q->where('franchise_store', $store);
+        }
+
+        if ($withoutBundle) {
+            $q->where(function ($qq) {
+                $qq->whereNull('bundle_name')->orWhere('bundle_name', '');
+            })->where(function ($qq) {
+                $qq->whereNull('modification_reason')->orWhere('modification_reason', '');
+            });
+        }
+
+        return $q->pluck('item_id')->map(fn($v) => (int)$v)->unique()->values()->all();
     }
-
-    if ($withoutBundle) {
-        $q->where(function ($qq) {
-            $qq->whereNull('bundle_name')->orWhere('bundle_name', '');
-        })->where(function ($qq) {
-            $qq->whereNull('modification_reason')->orWhere('modification_reason', '');
-        });
-    }
-
-    return $q->pluck('item_id')->map(fn($v) => (int)$v)->unique()->values()->all();
-}
 
     // ===== Public API =====
-public function compute(?string $franchiseStore, $fromDate, $toDate, bool $withoutBundle = false): array
+    public function compute(?string $franchiseStore, $fromDate, $toDate, bool $withoutBundle = false): array
     {
-        if (function_exists('set_time_limit')) { @set_time_limit(0); }
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(0);
+        }
 
         $from = $fromDate instanceof Carbon ? $fromDate->toDateString() : Carbon::parse($fromDate)->toDateString();
         $to   = $toDate   instanceof Carbon ? $toDate->toDateString()   : Carbon::parse($toDate)->toDateString();
@@ -98,13 +101,13 @@ public function compute(?string $franchiseStore, $fromDate, $toDate, bool $witho
         $isAllStore = ($franchiseStore === null || $franchiseStore === '' || strtolower($franchiseStore) === 'all');
         $chunkSize  = $isAllStore ? 2000 : 5000;
 
-// ===== Build category ID sets DIRECTLY from generated flags =====
-$PIZZA_IDS    = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_pizza',      $withoutBundle);
-$BREAD_IDS    = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_bread',      $withoutBundle);
-$WINGS_IDS    = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_wings',      $withoutBundle);
-$BEVERAGE_IDS = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_beverages',  $withoutBundle);
-$PUFFS_IDS    = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_crazy_puffs',$withoutBundle);
-$DIP_IDS      = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_caesar_dip', $withoutBundle);
+        // ===== Build category ID sets DIRECTLY from generated flags =====
+        $PIZZA_IDS    = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_pizza',      $withoutBundle);
+        $BREAD_IDS    = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_bread',      $withoutBundle);
+        $WINGS_IDS    = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_wings',      $withoutBundle);
+        $BEVERAGE_IDS = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_beverages',  $withoutBundle);
+        $PUFFS_IDS    = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_crazy_puffs', $withoutBundle);
+        $DIP_IDS      = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_caesar_dip', $withoutBundle);
 
         if (empty($DIP_IDS)) {
             // optional safety fallback if no dips appear in the window
@@ -116,7 +119,14 @@ $DIP_IDS      = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_caesar_dip'
 
         // Everything we care about (filtering + unit prices)
         $relevantIds = array_values(array_unique(array_merge(
-            $PIZZA_IDS, $BREAD_IDS, $WINGS_IDS, $PUFFS_IDS, $COOKIE_IDS, $BEVERAGE_IDS, $SIDES_IDS, $DIP_IDS
+            $PIZZA_IDS,
+            $BREAD_IDS,
+            $WINGS_IDS,
+            $PUFFS_IDS,
+            $COOKIE_IDS,
+            $BEVERAGE_IDS,
+            $SIDES_IDS,
+            $DIP_IDS
         )));
         $relevantIdStr  = array_map('strval', $relevantIds);
         $relevantIdFlip = array_fill_keys($relevantIdStr, true);
@@ -137,7 +147,9 @@ $DIP_IDS      = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_caesar_dip'
             foreach ($ids as $intId) {
                 $id    = (string)$intId;
                 $units = (int)($countByItem[$id] ?? 0);
-                if ($filterAppeared && $units === 0) { continue; }
+                if ($filterAppeared && $units === 0) {
+                    continue;
+                }
 
                 $rows[] = [
                     'item_id'        => (int)$intId,
@@ -156,8 +168,8 @@ $DIP_IDS      = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_caesar_dip'
 
         $priceFiltersByBucket = [
             'in_store'     => [['Register'],         ['Register']],
-            'lc_pickup'    => [['Website','Mobile'], ['Register']],
-            'lc_delivery'  => [['Website','Mobile'], ['Delivery']],
+            'lc_pickup'    => [['Website', 'Mobile'], ['Register']],
+            'lc_delivery'  => [['Website', 'Mobile'], ['Delivery']],
             'third_party'  => [['DoorDash'],         ['Delivery']],
             'all'          => [['Register'],         ['Register']],
         ];
@@ -182,20 +194,40 @@ $DIP_IDS      = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_caesar_dip'
             $nameByItem  = [];
 
             // ====== SOLD-WITH (UNITS) ======
-            $unitsBread  = 0; $unitsCookie = 0; $unitsSauce = 0; $unitsWings = 0; $unitsBev = 0; $unitsPuffs = 0;
-            $unitsBev20oz = 0; $unitsBev2L = 0; $unitsICB = 0;
-            $pizzaUnitsBase = 0; 
+            $unitsBread  = 0;
+            $unitsCookie = 0;
+            $unitsSauce = 0;
+            $unitsWings = 0;
+            $unitsBev = 0;
+            $unitsPuffs = 0;
+            $unitsBev20oz = 0;
+            $unitsBev2L = 0;
+            $unitsICB = 0;
+            $pizzaUnitsBase = 0;
 
-$this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled'], $withoutBundle)
+            $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled'], $withoutBundle)
                 ->where(function ($q) use ($relevantIdStr) {
                     $q->whereIn('item_id', $relevantIdStr)
-                      ->orWhere('is_pizza', 1);
+                        ->orWhere('is_pizza', 1);
                 })
                 ->orderBy('id')
                 ->chunkById($chunkSize, function ($rows) use (
-                    &$sumByItem, &$countByItem, &$nameByItem,
-                    &$pizzaUnitsBase, &$unitsBread, &$unitsCookie, &$unitsSauce, &$unitsWings, &$unitsBev, &$unitsPuffs, &$unitsBev20oz, &$unitsBev2L, &$unitsICB,
-                    $relevantIdFlip, &$seenAnywhere, $COOKIE_IDS
+                    &$sumByItem,
+                    &$countByItem,
+                    &$nameByItem,
+                    &$pizzaUnitsBase,
+                    &$unitsBread,
+                    &$unitsCookie,
+                    &$unitsSauce,
+                    &$unitsWings,
+                    &$unitsBev,
+                    &$unitsPuffs,
+                    &$unitsBev20oz,
+                    &$unitsBev2L,
+                    &$unitsICB,
+                    $relevantIdFlip,
+                    &$seenAnywhere,
+                    $COOKIE_IDS
                 ) {
                     $pizzaOrders = [];
 
@@ -218,7 +250,9 @@ $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled']
                         // pizza base by UNITS
                         if ($r->is_pizza) {
                             $pizzaUnitsBase += $qty;
-                            if ($orderId !== '') { $pizzaOrders[$orderId] = true; }
+                            if ($orderId !== '') {
+                                $pizzaOrders[$orderId] = true;
+                            }
                         }
                     }
 
@@ -226,22 +260,51 @@ $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled']
                     if (!empty($pizzaOrders)) {
                         foreach ($rows as $r) {
                             $oid = (string)($r->order_id ?? '');
-                            if ($oid === '' || !isset($pizzaOrders[$oid])) { continue; }
+                            if ($oid === '' || !isset($pizzaOrders[$oid])) {
+                                continue;
+                            }
 
                             $itemId = (int)($r->item_id ?? 0);
                             $qty    = (int)($r->quantity ?? 0);
-                            if ($qty <= 0) { continue; }
+                            if ($qty <= 0) {
+                                continue;
+                            }
 
-                            if ($itemId === self::BEV_20OZ_ID) { $unitsBev20oz += $qty; }
-                            if ($itemId === self::BEV_2L_ID)   { $unitsBev2L   += $qty; }
-                            if ($itemId === self::ICB_ID)      { $unitsICB     += $qty; }
+                            if ($itemId === self::BEV_20OZ_ID) {
+                                $unitsBev20oz += $qty;
+                            }
+                            if ($itemId === self::BEV_2L_ID) {
+                                $unitsBev2L   += $qty;
+                            }
+                            if ($itemId === self::ICB_ID) {
+                                $unitsICB     += $qty;
+                            }
 
-                            if ($r->is_bread)                         { $unitsBread  += $qty; continue; }
-                            if (in_array($itemId, $COOKIE_IDS, true)) { $unitsCookie += $qty; continue; }
-                            if ($r->is_caesar_dip)                    { $unitsSauce  += $qty; continue; }
-                            if ($r->is_wings)                         { $unitsWings  += $qty; continue; }
-                            if ($r->is_beverages)                     { $unitsBev    += $qty; continue; }
-                            if ($r->is_crazy_puffs)                   { $unitsPuffs  += $qty; continue; }
+                            // Here we make sure "bread" is only item ID 103001
+                            if ($itemId === 103001) {
+                                $unitsBread += $qty;
+                                continue;
+                            }
+                            if (in_array($itemId, $COOKIE_IDS, true)) {
+                                $unitsCookie += $qty;
+                                continue;
+                            }
+                            if ($r->is_caesar_dip) {
+                                $unitsSauce  += $qty;
+                                continue;
+                            }
+                            if ($r->is_wings) {
+                                $unitsWings  += $qty;
+                                continue;
+                            }
+                            if ($r->is_beverages) {
+                                $unitsBev    += $qty;
+                                continue;
+                            }
+                            if ($r->is_crazy_puffs) {
+                                $unitsPuffs  += $qty;
+                                continue;
+                            }
                         }
                     }
                 }, 'id', 'id');
@@ -270,7 +333,7 @@ $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled']
                 'sides'         => $sideRows,
                 'caesar_dips'   => $dipRows,
                 'top15_overall' => $top15,
-                'all_items_seen'=> [],
+                'all_items_seen' => [],
             ];
 
             // ===== SOLD-WITH OUTPUT (UNITS ONLY) =====
@@ -323,7 +386,6 @@ $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled']
                     'units_sold'     => (int)  ($countBy[$id] ?? 0),
                 ];
             }
-
             \usort($rows, static function ($a, $b) {
                 $cmp = $b['units_sold'] <=> $a['units_sold'];
                 return $cmp !== 0 ? $cmp : ($b['total_sales'] <=> $a['total_sales']);
@@ -341,42 +403,51 @@ $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled']
 
     // ====== Query Builder base (no Eloquent hydration) ======
     private function baseQB(
-    ?string $store,
-    string $from,
-    string $to,
-    ?array $placed,
-    ?array $fulfilled,
-    bool $withoutBundle = false  // <--- NEW
-) {
-    $q = DB::table('order_line')
-        ->select([
-            'id','order_id','item_id','menu_item_name',
-            'net_amount','quantity','business_date',
-            'is_pizza',
-            'is_bread','is_wings','is_beverages','is_crazy_puffs','is_caesar_dip',
-        ])
-        ->whereBetween('business_date', [$from, $to]);
+        ?string $store,
+        string $from,
+        string $to,
+        ?array $placed,
+        ?array $fulfilled,
+        bool $withoutBundle = false  // <--- NEW
+    ) {
+        $q = DB::table('order_line')
+            ->select([
+                'id',
+                'order_id',
+                'item_id',
+                'menu_item_name',
+                'net_amount',
+                'quantity',
+                'business_date',
+                'is_pizza',
+                'is_bread',
+                'is_wings',
+                'is_beverages',
+                'is_crazy_puffs',
+                'is_caesar_dip',
+            ])
+            ->whereBetween('business_date', [$from, $to]);
 
-    if ($store !== null && $store !== '' && strtolower($store) !== 'all') {
-        $q->where('franchise_store', $store);
-    }
-    if ($placed) {
-        $q->whereIn('order_placed_method', $placed);
-    }
-    if ($fulfilled) {
-        $q->whereIn('order_fulfilled_method', $fulfilled);
-    }
+        if ($store !== null && $store !== '' && strtolower($store) !== 'all') {
+            $q->where('franchise_store', $store);
+        }
+        if ($placed) {
+            $q->whereIn('order_placed_method', $placed);
+        }
+        if ($fulfilled) {
+            $q->whereIn('order_fulfilled_method', $fulfilled);
+        }
 
-    if ($withoutBundle) {
-        $q->where(function ($qq) {
-            $qq->whereNull('bundle_name')->orWhere('bundle_name', '');
-        })->where(function ($qq) {
-            $qq->whereNull('modification_reason')->orWhere('modification_reason', '');
-        });
-    }
+        if ($withoutBundle) {
+            $q->where(function ($qq) {
+                $qq->whereNull('bundle_name')->orWhere('bundle_name', '');
+            })->where(function ($qq) {
+                $qq->whereNull('modification_reason')->orWhere('modification_reason', '');
+            });
+        }
 
-    return $q;
-}
+        return $q;
+    }
 
 
     /**
@@ -399,13 +470,13 @@ $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled']
 
         // Primary: first qualifying row per item
         $q = DB::table('order_line')
-            ->select(['id','item_id','net_amount','quantity','business_date'])
+            ->select(['id', 'item_id', 'net_amount', 'quantity', 'business_date'])
             ->whereBetween('business_date', [$from, $to])
             ->where('franchise_store', $storeForPrice)
             ->whereIn('item_id', $relevantIdStr)
             ->where('quantity', '>', 0)
-            ->when($placedForPrice, fn ($qq) => $qq->whereIn('order_placed_method', $placedForPrice))
-            ->when($fulfilledForPrice, fn ($qq) => $qq->whereIn('order_fulfilled_method', $fulfilledForPrice))
+            ->when($placedForPrice, fn($qq) => $qq->whereIn('order_placed_method', $placedForPrice))
+            ->when($fulfilledForPrice, fn($qq) => $qq->whereIn('order_fulfilled_method', $fulfilledForPrice))
             ->where(function ($qq) {
                 $qq->whereNull('bundle_name')->orWhere('bundle_name', '');
             })
@@ -414,29 +485,29 @@ $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled']
             });
 
         $q->orderBy('business_date', 'asc')->orderBy('id', 'asc')
-          ->chunk(5000, function ($rows) use (&$unit) {
-              foreach ($rows as $r) {
-                  $id = (string) $r->item_id;
-                  if (!isset($unit[$id])) {
-                      $qty = (float) ($r->quantity ?? 0);
-                      if ($qty !== 0.0) {
-                          $unit[$id] = (float) $r->net_amount / $qty;
-                      }
-                  }
-              }
-          });
+            ->chunk(5000, function ($rows) use (&$unit) {
+                foreach ($rows as $r) {
+                    $id = (string) $r->item_id;
+                    if (!isset($unit[$id])) {
+                        $qty = (float) ($r->quantity ?? 0);
+                        if ($qty !== 0.0) {
+                            $unit[$id] = (float) $r->net_amount / $qty;
+                        }
+                    }
+                }
+            });
 
         // Fallback: latest row with same filters if still missing
         $missing = array_values(array_diff($relevantIdStr, array_keys($unit)));
         if (!empty($missing)) {
             $fq = DB::table('order_line')
-                ->select(['id','item_id','net_amount','quantity','business_date'])
+                ->select(['id', 'item_id', 'net_amount', 'quantity', 'business_date'])
                 ->whereBetween('business_date', [$from, $to])
                 ->where('franchise_store', $storeForPrice)
                 ->whereIn('item_id', $missing)
                 ->where('quantity', '>', 0)
-                ->when($placedForPrice, fn ($qq) => $qq->whereIn('order_placed_method', $placedForPrice))
-                ->when($fulfilledForPrice, fn ($qq) => $qq->whereIn('order_fulfilled_method', $fulfilledForPrice))
+                ->when($placedForPrice, fn($qq) => $qq->whereIn('order_placed_method', $placedForPrice))
+                ->when($fulfilledForPrice, fn($qq) => $qq->whereIn('order_fulfilled_method', $fulfilledForPrice))
                 ->where(function ($qq) {
                     $qq->whereNull('bundle_name')->orWhere('bundle_name', '');
                 })
@@ -446,120 +517,124 @@ $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled']
 
             $seen = [];
             $fq->orderBy('business_date', 'desc')->orderBy('id', 'desc')
-               ->chunk(5000, function ($rows) use (&$unit, &$seen) {
-                   foreach ($rows as $r) {
-                       $id = (string) $r->item_id;
-                       if (isset($seen[$id])) { continue; }
-                       $qty = (float) ($r->quantity ?? 0);
-                       if ($qty !== 0.0) {
-                           $unit[$id] = (float) $r->net_amount / $qty;
-                           $seen[$id] = true;
-                       }
-                   }
-               });
+                ->chunk(5000, function ($rows) use (&$unit, &$seen) {
+                    foreach ($rows as $r) {
+                        $id = (string) $r->item_id;
+                        if (isset($seen[$id])) {
+                            continue;
+                        }
+                        $qty = (float) ($r->quantity ?? 0);
+                        if ($qty !== 0.0) {
+                            $unit[$id] = (float) $r->net_amount / $qty;
+                            $seen[$id] = true;
+                        }
+                    }
+                });
         }
 
         return $unit;
     }
 
-public function soldWithPizzaDetailsStandalone(
-    ?string $franchiseStore,
-    $fromDate,
-    $toDate,
-    string $bucketKey = 'in_store'
-): array {
-    if (function_exists('set_time_limit')) { @set_time_limit(0); }
-
-    $from = $fromDate instanceof Carbon
-        ? $fromDate->toDateString()
-        : Carbon::parse($fromDate)->toDateString();
-
-    $to = $toDate instanceof Carbon
-        ? $toDate->toDateString()
-        : Carbon::parse($toDate)->toDateString();
-
-    // -------------------------
-    // Local buckets (standalone)
-    // -------------------------
-    $BUCKETS_LOCAL = [
-        'in_store' => [
-            'label'     => 'In Store',
-            'placed'    => ['Register','Drive Thru','SoundHoundAgent','Phone','CallCenterAgent'],
-            'fulfilled' => ['Register','Drive-Thru'],
-        ],
-        'lc_pickup' => [
-            'label'     => 'LC Pickup',
-            'placed'    => ['Website','Mobile'],
-            'fulfilled' => ['Register','Drive-Thru','In Store Only'],
-        ],
-        'lc_delivery' => [
-            'label'     => 'LC Delivery',
-            'placed'    => ['Website','Mobile','CallCenterAgent','SoundHoundAgent'],
-            'fulfilled' => ['Delivery'],
-        ],
-        'third_party' => [
-            'label'     => '3rd Party',
-            'placed'    => ['UberEats','Grubhub','DoorDash'],
-            'fulfilled' => ['Delivery'],
-        ],
-        'all' => [
-            'label'     => 'All Buckets',
-            'placed'    => null,
-            'fulfilled' => null,
-        ],
-    ];
-
-    $bucketKey = strtolower($bucketKey);
-    $rules = $BUCKETS_LOCAL[$bucketKey] ?? $BUCKETS_LOCAL['in_store'];
-
-    // -------------------------
-    // Explicit IDs ONLY
-    // -------------------------
-    $COOKIE_IDS       = [101288, 101289];
-    $CRAZY_SAUCE_IDS  = [206117, 103002];   // <-- TWO sauce IDs
-    $BEV_2L_IDS       = [204200, 204234];
-
-    // -------------------------
-    // Helper to apply filters to a naked builder
-    // -------------------------
-    $applyFilters = function ($q) use ($franchiseStore, $from, $to, $rules) {
-        $q->whereBetween('business_date', [$from, $to]);
-
-        if ($franchiseStore !== null && $franchiseStore !== '' && strtolower($franchiseStore) !== 'all') {
-            $q->where('franchise_store', $franchiseStore);
-        }
-        if (!empty($rules['placed'])) {
-            $q->whereIn('order_placed_method', $rules['placed']);
-        }
-        if (!empty($rules['fulfilled'])) {
-            $q->whereIn('order_fulfilled_method', $rules['fulfilled']);
+    public function soldWithPizzaDetailsStandalone(
+        ?string $franchiseStore,
+        $fromDate,
+        $toDate,
+        string $bucketKey = 'in_store'
+    ): array {
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(0);
         }
 
-        return $q;
-    };
+        $from = $fromDate instanceof Carbon
+            ? $fromDate->toDateString()
+            : Carbon::parse($fromDate)->toDateString();
 
-    // -------------------------
-    // 1) Pizza orders subquery
-    // -------------------------
-    $pizzaOrdersSub = $applyFilters(DB::table('order_line'))
-        ->where('is_pizza', 1)
-        ->select('order_id')
-        ->distinct();
+        $to = $toDate instanceof Carbon
+            ? $toDate->toDateString()
+            : Carbon::parse($toDate)->toDateString();
 
-    // -------------------------
-    // 2) Sold-with aggregation (UNITS only)
-    // -------------------------
-    $soldWithRows = $applyFilters(DB::table('order_line'))
-        ->whereIn('order_id', $pizzaOrdersSub)
-        ->where(function ($q) use ($COOKIE_IDS, $CRAZY_SAUCE_IDS, $BEV_2L_IDS) {
-            $q
-              ->where('is_bread', 1)
-              ->orWhereIn('item_id', $COOKIE_IDS)
-              ->orWhereIn('item_id', $CRAZY_SAUCE_IDS)
-              ->orWhere('is_wings', 1)
-              ->orWhereIn('item_id', $BEV_2L_IDS);
-        })
-        ->selectRaw('
+        // -------------------------
+        // Local buckets (standalone)
+        // -------------------------
+        $BUCKETS_LOCAL = [
+            'in_store' => [
+                'label'     => 'In Store',
+                'placed'    => ['Register', 'Drive Thru', 'SoundHoundAgent', 'Phone', 'CallCenterAgent'],
+                'fulfilled' => ['Register', 'Drive-Thru'],
+            ],
+            'lc_pickup' => [
+                'label'     => 'LC Pickup',
+                'placed'    => ['Website', 'Mobile'],
+                'fulfilled' => ['Register', 'Drive-Thru', 'In Store Only'],
+            ],
+            'lc_delivery' => [
+                'label'     => 'LC Delivery',
+                'placed'    => ['Website', 'Mobile', 'CallCenterAgent', 'SoundHoundAgent'],
+                'fulfilled' => ['Delivery'],
+            ],
+            'third_party' => [
+                'label'     => '3rd Party',
+                'placed'    => ['UberEats', 'Grubhub', 'DoorDash'],
+                'fulfilled' => ['Delivery'],
+            ],
+            'all' => [
+                'label'     => 'All Buckets',
+                'placed'    => null,
+                'fulfilled' => null,
+            ],
+        ];
+
+        $bucketKey = strtolower($bucketKey);
+        $rules = $BUCKETS_LOCAL[$bucketKey] ?? $BUCKETS_LOCAL['in_store'];
+
+        // -------------------------
+        // Explicit IDs ONLY
+        // -------------------------
+        $COOKIE_IDS       = [101288, 101289];
+        $CRAZY_SAUCE_IDS  = [206117, 103002];   // <-- TWO sauce IDs
+        $BEV_2L_IDS       = [204200, 204234];
+
+        // -------------------------
+        // Helper to apply filters to a naked builder
+        // -------------------------
+        $applyFilters = function ($q) use ($franchiseStore, $from, $to, $rules) {
+            $q->whereBetween('business_date', [$from, $to]);
+
+            if ($franchiseStore !== null && $franchiseStore !== '' && strtolower($franchiseStore) !== 'all') {
+                $q->where('franchise_store', $franchiseStore);
+            }
+            if (!empty($rules['placed'])) {
+                $q->whereIn('order_placed_method', $rules['placed']);
+            }
+            if (!empty($rules['fulfilled'])) {
+                $q->whereIn('order_fulfilled_method', $rules['fulfilled']);
+            }
+
+            return $q;
+        };
+
+        // -------------------------
+        // 1) Pizza orders subquery
+        // -------------------------
+        $pizzaOrdersSub = $applyFilters(DB::table('order_line'))
+            ->where('is_pizza', 1)
+            ->select('order_id')
+            ->distinct();
+
+        // -------------------------
+        // 2) Sold-with aggregation (UNITS only)
+        // -------------------------
+        $soldWithRows = $applyFilters(DB::table('order_line'))
+            ->whereIn('order_id', $pizzaOrdersSub)
+            ->where(function ($q) use ($COOKIE_IDS, $CRAZY_SAUCE_IDS, $BEV_2L_IDS) {
+                $q
+                    ->where('is_bread', 1)
+                    ->orWhereIn('item_id', $COOKIE_IDS)
+                    ->orWhereIn('item_id', $CRAZY_SAUCE_IDS)
+                    ->orWhere('is_wings', 1)
+                    ->orWhereIn('item_id', $BEV_2L_IDS);
+            })
+            ->selectRaw('
             franchise_store,
             item_id,
             COALESCE(menu_item_name, "") as menu_item_name,
@@ -567,182 +642,190 @@ public function soldWithPizzaDetailsStandalone(
             MAX(is_bread) as is_bread,
             MAX(is_wings) as is_wings
         ')
-        ->groupBy('franchise_store', 'item_id', 'menu_item_name')
-        ->orderBy('franchise_store')
-        ->orderByDesc('units_sold')
-        ->get();
+            ->groupBy('franchise_store', 'item_id', 'menu_item_name')
+            ->orderBy('franchise_store')
+            ->orderByDesc('units_sold')
+            ->get();
 
-    // -------------------------
-    // 3) Pizza base units per store
-    // -------------------------
-    $pizzaBaseByStore = $applyFilters(DB::table('order_line'))
-        ->where('is_pizza', 1)
-        ->selectRaw('franchise_store, SUM(quantity) as pizza_units')
-        ->groupBy('franchise_store')
-        ->pluck('pizza_units', 'franchise_store');
+        // -------------------------
+        // 3) Pizza base units per store
+        // -------------------------
+        $pizzaBaseByStore = $applyFilters(DB::table('order_line'))
+            ->where('is_pizza', 1)
+            ->selectRaw('franchise_store, SUM(quantity) as pizza_units')
+            ->groupBy('franchise_store')
+            ->pluck('pizza_units', 'franchise_store');
 
-    // -------------------------
-    // 4) Shape output from real rows
-    // -------------------------
-    $byStore = [];
+        // -------------------------
+        // 4) Shape output from real rows
+        // -------------------------
+        $byStore = [];
 
-    foreach ($soldWithRows as $r) {
-        $st = (string) $r->franchise_store;
+        foreach ($soldWithRows as $r) {
+            $st = (string) $r->franchise_store;
 
-        if (!isset($byStore[$st])) {
-            $byStore[$st] = [
-                'store'      => $st,
-                'bucket'     => $bucketKey,
-                'from'       => $from,
-                'to'         => $to,
-                'pizza_base' => (int)($pizzaBaseByStore[$st] ?? 0),
-                'sold_with'  => [
-                    'crazy_bread' => [],
-                    'cookies'     => [],
-                    'crazy_sauce' => [],
-                    'wings'       => [],
-                    'bev_2l'      => [],
-                ],
-            ];
+            if (!isset($byStore[$st])) {
+                $byStore[$st] = [
+                    'store'      => $st,
+                    'bucket'     => $bucketKey,
+                    'from'       => $from,
+                    'to'         => $to,
+                    'pizza_base' => (int)($pizzaBaseByStore[$st] ?? 0),
+                    'sold_with'  => [
+                        'crazy_bread' => [],
+                        'cookies'     => [],
+                        'crazy_sauce' => [],
+                        'wings'       => [],
+                        'bev_2l'      => [],
+                    ],
+                ];
+            }
+
+            $itemId = (int) $r->item_id;
+            $units  = (int) $r->units_sold;
+            $name   = (string) $r->menu_item_name;
+
+            // sauces (two IDs)
+            if (in_array($itemId, $CRAZY_SAUCE_IDS, true)) {
+                $byStore[$st]['sold_with']['crazy_sauce'][] = [
+                    'item_id' => $itemId,
+                    'name' => $name,
+                    'units' => $units
+                ];
+                continue;
+            }
+
+            // cookies
+            if (in_array($itemId, $COOKIE_IDS, true)) {
+                $byStore[$st]['sold_with']['cookies'][] = [
+                    'item_id' => $itemId,
+                    'name' => $name,
+                    'units' => $units
+                ];
+                continue;
+            }
+
+            // bev 2L
+            if (in_array($itemId, $BEV_2L_IDS, true)) {
+                $byStore[$st]['sold_with']['bev_2l'][] = [
+                    'item_id' => $itemId,
+                    'name' => $name,
+                    'units' => $units
+                ];
+                continue;
+            }
+
+            // bread / wings flags
+            if ((int)$r->is_bread === 1) {
+                $byStore[$st]['sold_with']['crazy_bread'][] = [
+                    'item_id' => $itemId,
+                    'name' => $name,
+                    'units' => $units
+                ];
+                continue;
+            }
+
+            if ((int)$r->is_wings === 1) {
+                $byStore[$st]['sold_with']['wings'][] = [
+                    'item_id' => $itemId,
+                    'name' => $name,
+                    'units' => $units
+                ];
+                continue;
+            }
         }
 
-        $itemId = (int) $r->item_id;
-        $units  = (int) $r->units_sold;
-        $name   = (string) $r->menu_item_name;
+        // -------------------------
+        // 5) ZERO-FILL explicit IDs per store
+        // -------------------------
+        $isSpecificStore =
+            ($franchiseStore !== null && $franchiseStore !== '' && strtolower($franchiseStore) !== 'all');
 
-        // sauces (two IDs)
-        if (in_array($itemId, $CRAZY_SAUCE_IDS, true)) {
-            $byStore[$st]['sold_with']['crazy_sauce'][] = [
-                'item_id' => $itemId, 'name' => $name, 'units' => $units
-            ];
-            continue;
+        // Decide which stores to output
+        if ($isSpecificStore) {
+            $storesToOutput = [(string)$franchiseStore];
+        } else {
+            $storesToOutput = array_values(array_unique(array_merge(
+                array_keys($byStore),
+                array_keys($pizzaBaseByStore->toArray())
+            )));
+            sort($storesToOutput);
         }
 
-        // cookies
-        if (in_array($itemId, $COOKIE_IDS, true)) {
-            $byStore[$st]['sold_with']['cookies'][] = [
-                'item_id' => $itemId, 'name' => $name, 'units' => $units
-            ];
-            continue;
+        foreach ($storesToOutput as $st) {
+            if (!isset($byStore[$st])) {
+                // store had no sold-with rows, still create skeleton
+                $byStore[$st] = [
+                    'store'      => $st,
+                    'bucket'     => $bucketKey,
+                    'from'       => $from,
+                    'to'         => $to,
+                    'pizza_base' => (int)($pizzaBaseByStore[$st] ?? 0),
+                    'sold_with'  => [
+                        'crazy_bread' => [],
+                        'cookies'     => [],
+                        'crazy_sauce' => [],
+                        'wings'       => [],
+                        'bev_2l'      => [],
+                    ],
+                ];
+            }
+
+            // --- crazy sauce: always BOTH IDs ---
+            $sauceMap = [];
+            foreach ($byStore[$st]['sold_with']['crazy_sauce'] as $row) {
+                $sauceMap[(int)$row['item_id']] = $row;
+            }
+            $saucesFilled = [];
+            foreach ($CRAZY_SAUCE_IDS as $sid) {
+                $saucesFilled[] = [
+                    'item_id' => $sid,
+                    'name'    => $sauceMap[$sid]['name'] ?? '',
+                    'units'   => (int)($sauceMap[$sid]['units'] ?? 0),
+                ];
+            }
+            $byStore[$st]['sold_with']['crazy_sauce'] = $saucesFilled;
+
+            // --- cookies: always BOTH IDs ---
+            $cookieMap = [];
+            foreach ($byStore[$st]['sold_with']['cookies'] as $row) {
+                $cookieMap[(int)$row['item_id']] = $row;
+            }
+            $cookiesFilled = [];
+            foreach ($COOKIE_IDS as $cid) {
+                $cookiesFilled[] = [
+                    'item_id' => $cid,
+                    'name'    => $cookieMap[$cid]['name'] ?? '',
+                    'units'   => (int)($cookieMap[$cid]['units'] ?? 0),
+                ];
+            }
+            $byStore[$st]['sold_with']['cookies'] = $cookiesFilled;
+
+            // --- bev 2L: always BOTH IDs ---
+            $bevMap = [];
+            foreach ($byStore[$st]['sold_with']['bev_2l'] as $row) {
+                $bevMap[(int)$row['item_id']] = $row;
+            }
+            $bevFilled = [];
+            foreach ($BEV_2L_IDS as $bid) {
+                $bevFilled[] = [
+                    'item_id' => $bid,
+                    'name'    => $bevMap[$bid]['name'] ?? '',
+                    'units'   => (int)($bevMap[$bid]['units'] ?? 0),
+                ];
+            }
+            $byStore[$st]['sold_with']['bev_2l'] = $bevFilled;
         }
 
-        // bev 2L
-        if (in_array($itemId, $BEV_2L_IDS, true)) {
-            $byStore[$st]['sold_with']['bev_2l'][] = [
-                'item_id' => $itemId, 'name' => $name, 'units' => $units
-            ];
-            continue;
+        // -------------------------
+        // 6) Return shape
+        // -------------------------
+        if ($isSpecificStore) {
+            $st = (string) $franchiseStore;
+            return $byStore[$st];
         }
 
-        // bread / wings flags
-        if ((int)$r->is_bread === 1) {
-            $byStore[$st]['sold_with']['crazy_bread'][] = [
-                'item_id' => $itemId, 'name' => $name, 'units' => $units
-            ];
-            continue;
-        }
-
-        if ((int)$r->is_wings === 1) {
-            $byStore[$st]['sold_with']['wings'][] = [
-                'item_id' => $itemId, 'name' => $name, 'units' => $units
-            ];
-            continue;
-        }
+        // all stores separately
+        return array_values($byStore);
     }
-
-    // -------------------------
-    // 5) ZERO-FILL explicit IDs per store
-    // -------------------------
-    $isSpecificStore =
-        ($franchiseStore !== null && $franchiseStore !== '' && strtolower($franchiseStore) !== 'all');
-
-    // Decide which stores to output
-    if ($isSpecificStore) {
-        $storesToOutput = [ (string)$franchiseStore ];
-    } else {
-        $storesToOutput = array_values(array_unique(array_merge(
-            array_keys($byStore),
-            array_keys($pizzaBaseByStore->toArray())
-        )));
-        sort($storesToOutput);
-    }
-
-    foreach ($storesToOutput as $st) {
-        if (!isset($byStore[$st])) {
-            // store had no sold-with rows, still create skeleton
-            $byStore[$st] = [
-                'store'      => $st,
-                'bucket'     => $bucketKey,
-                'from'       => $from,
-                'to'         => $to,
-                'pizza_base' => (int)($pizzaBaseByStore[$st] ?? 0),
-                'sold_with'  => [
-                    'crazy_bread' => [],
-                    'cookies'     => [],
-                    'crazy_sauce' => [],
-                    'wings'       => [],
-                    'bev_2l'      => [],
-                ],
-            ];
-        }
-
-        // --- crazy sauce: always BOTH IDs ---
-        $sauceMap = [];
-        foreach ($byStore[$st]['sold_with']['crazy_sauce'] as $row) {
-            $sauceMap[(int)$row['item_id']] = $row;
-        }
-        $saucesFilled = [];
-        foreach ($CRAZY_SAUCE_IDS as $sid) {
-            $saucesFilled[] = [
-                'item_id' => $sid,
-                'name'    => $sauceMap[$sid]['name'] ?? '',
-                'units'   => (int)($sauceMap[$sid]['units'] ?? 0),
-            ];
-        }
-        $byStore[$st]['sold_with']['crazy_sauce'] = $saucesFilled;
-
-        // --- cookies: always BOTH IDs ---
-        $cookieMap = [];
-        foreach ($byStore[$st]['sold_with']['cookies'] as $row) {
-            $cookieMap[(int)$row['item_id']] = $row;
-        }
-        $cookiesFilled = [];
-        foreach ($COOKIE_IDS as $cid) {
-            $cookiesFilled[] = [
-                'item_id' => $cid,
-                'name'    => $cookieMap[$cid]['name'] ?? '',
-                'units'   => (int)($cookieMap[$cid]['units'] ?? 0),
-            ];
-        }
-        $byStore[$st]['sold_with']['cookies'] = $cookiesFilled;
-
-        // --- bev 2L: always BOTH IDs ---
-        $bevMap = [];
-        foreach ($byStore[$st]['sold_with']['bev_2l'] as $row) {
-            $bevMap[(int)$row['item_id']] = $row;
-        }
-        $bevFilled = [];
-        foreach ($BEV_2L_IDS as $bid) {
-            $bevFilled[] = [
-                'item_id' => $bid,
-                'name'    => $bevMap[$bid]['name'] ?? '',
-                'units'   => (int)($bevMap[$bid]['units'] ?? 0),
-            ];
-        }
-        $byStore[$st]['sold_with']['bev_2l'] = $bevFilled;
-    }
-
-    // -------------------------
-    // 6) Return shape
-    // -------------------------
-    if ($isSpecificStore) {
-        $st = (string) $franchiseStore;
-        return $byStore[$st];
-    }
-
-    // all stores separately
-    return array_values($byStore);
-}
-
-
 }
