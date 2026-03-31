@@ -298,17 +298,35 @@ class StoreItemsMatrixService
             'overall' => [
                 'units_sold' => 0,
                 'total_sales' => 0.0,
+                'customer_count' => 0,
             ],
             'buckets' => []
         ];
 
+        // Base buckets
         foreach (self::BUCKETS as $key => $meta) {
             $totals['buckets'][$key] = [
                 'label' => $meta['label'],
                 'units_sold' => 0,
                 'total_sales' => 0.0,
+                'customer_count' => 0,
             ];
         }
+
+        // Add new explicit buckets
+        $totals['buckets']['ubereats'] = [
+            'label' => 'UberEats',
+            'units_sold' => 0,
+            'total_sales' => 0.0,
+            'customer_count' => 0,
+        ];
+
+        $totals['buckets']['doordash'] = [
+            'label' => 'DoorDash',
+            'units_sold' => 0,
+            'total_sales' => 0.0,
+            'customer_count' => 0,
+        ];
 
         DB::table('order_line')
             ->select([
@@ -336,10 +354,11 @@ class StoreItemsMatrixService
 
                     $qty = (int) ($r->quantity ?? 0);
                     $amt = (float) ($r->net_amount ?? 0);
+                    $placed = (string) ($r->order_placed_method ?? '');
 
                     $bucket = $this->resolveBucket(
-                        (string) ($r->order_placed_method ?? ''),
-                        (string) ($r->order_fulfilled_method ?? ''),
+                        $placed,
+                        (string) $r->order_fulfilled_method,
                         $placedToBucket,
                         $fulfilledToBucket
                     );
@@ -348,13 +367,34 @@ class StoreItemsMatrixService
                         continue;
                     }
 
-                    // Overall totals
+                    // -------------------------
+                    // OVERALL
+                    // -------------------------
                     $totals['overall']['units_sold'] += max(0, $qty);
                     $totals['overall']['total_sales'] += $amt;
+                    $totals['overall']['customer_count']++;
 
-                    // Bucket totals
+                    // -------------------------
+                    // MAIN BUCKET
+                    // -------------------------
                     $totals['buckets'][$bucket]['units_sold'] += max(0, $qty);
                     $totals['buckets'][$bucket]['total_sales'] += $amt;
+                    $totals['buckets'][$bucket]['customer_count']++;
+
+                    // -------------------------
+                    // SUB-BUCKETS (NEW)
+                    // -------------------------
+                    if ($placed === 'UberEats') {
+                        $totals['buckets']['ubereats']['units_sold'] += max(0, $qty);
+                        $totals['buckets']['ubereats']['total_sales'] += $amt;
+                        $totals['buckets']['ubereats']['customer_count']++;
+                    }
+
+                    if ($placed === 'DoorDash') {
+                        $totals['buckets']['doordash']['units_sold'] += max(0, $qty);
+                        $totals['buckets']['doordash']['total_sales'] += $amt;
+                        $totals['buckets']['doordash']['customer_count']++;
+                    }
                 }
             }, 'id', 'id');
 
