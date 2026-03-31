@@ -8,23 +8,23 @@ class StoreItemsMatrixService
 {
     private const BUCKETS = [
         'in_store' => [
-            'label'     => 'In Store',
-            'placed'    => ['Register', 'Drive Thru', 'SoundHoundAgent', 'Phone', 'CallCenterAgent'],
+            'label' => 'In Store',
+            'placed' => ['Register', 'Drive Thru', 'SoundHoundAgent', 'Phone', 'CallCenterAgent'],
             'fulfilled' => ['Register', 'Drive-Thru'],
         ],
         'lc_pickup' => [
-            'label'     => 'LC Pickup',
-            'placed'    => ['Website', 'Mobile'],
+            'label' => 'LC Pickup',
+            'placed' => ['Website', 'Mobile'],
             'fulfilled' => ['Register', 'Drive-Thru', 'In Store Only'],
         ],
         'lc_delivery' => [
-            'label'     => 'LC Delivery',
-            'placed'    => ['Website', 'Mobile', 'CallCenterAgent', 'SoundHoundAgent'],
+            'label' => 'LC Delivery',
+            'placed' => ['Website', 'Mobile', 'CallCenterAgent', 'SoundHoundAgent'],
             'fulfilled' => ['Delivery'],
         ],
         'third_party' => [
-            'label'     => '3rd Party',
-            'placed'    => ['UberEats', 'Grubhub', 'DoorDash'],
+            'label' => '3rd Party',
+            'placed' => ['UberEats', 'Grubhub', 'DoorDash'],
             'fulfilled' => ['Delivery'],
         ],
     ];
@@ -87,29 +87,24 @@ class StoreItemsMatrixService
         // Tune chunk size: all-stores can be heavier
         $chunkSize = ($stores === null) ? 2000 : 5000;
 
-        $q->chunkById($chunkSize, function ($rows) use (
-            &$storeBucketItem,
-            &$storesSeen,
-            &$itemsSeen,
-            &$totalsByBucket,
-            $placedToBucket,
-            $fulfilledToBucket
-        ) {
+        $q->chunkById($chunkSize, function ($rows) use (&$storeBucketItem, &$storesSeen, &$itemsSeen, &$totalsByBucket, $placedToBucket, $fulfilledToBucket) {
             foreach ($rows as $r) {
-                $store = (string)($r->franchise_store ?? '');
-                if ($store === '') continue;
+                $store = (string) ($r->franchise_store ?? '');
+                if ($store === '')
+                    continue;
 
-                $itemId = (int)($r->item_id ?? 0);
-                if ($itemId <= 0) continue;
+                $itemId = (int) ($r->item_id ?? 0);
+                if ($itemId <= 0)
+                    continue;
 
-                $qty  = (int)($r->quantity ?? 0);
-                $amt  = (float)($r->net_amount ?? 0);
-                $name = (string)($r->menu_item_name ?? '');
-                $acct = (string)($r->menu_item_account ?? '');
+                $qty = (int) ($r->quantity ?? 0);
+                $amt = (float) ($r->net_amount ?? 0);
+                $name = (string) ($r->menu_item_name ?? '');
+                $acct = (string) ($r->menu_item_account ?? '');
 
                 $bucket = $this->resolveBucket(
-                    (string)($r->order_placed_method ?? ''),
-                    (string)($r->order_fulfilled_method ?? ''),
+                    (string) ($r->order_placed_method ?? ''),
+                    (string) ($r->order_fulfilled_method ?? ''),
                     $placedToBucket,
                     $fulfilledToBucket
                 );
@@ -120,7 +115,7 @@ class StoreItemsMatrixService
                 }
 
                 $storesSeen[$store] = true;
-                $itemsSeen[(string)$itemId] = true;
+                $itemsSeen[(string) $itemId] = true;
 
                 // Store+Bucket
                 $this->accumulate($storeBucketItem, $store, $bucket, $itemId, $qty, $amt, $name, $acct);
@@ -159,7 +154,7 @@ class StoreItemsMatrixService
             }
 
             $storesOut[] = [
-                'store'   => $store,
+                'store' => $store,
                 'buckets' => $bucketsOut,
             ];
         }
@@ -182,9 +177,9 @@ class StoreItemsMatrixService
 
         return [
             'bucket_labels' => array_merge($bucketLabels, ['all' => 'All Buckets']),
-            'items_union'   => $union,
-            'stores'        => $storesOut,
-            'overall'       => [
+            'items_union' => $union,
+            'stores' => $storesOut,
+            'overall' => [
                 'buckets' => $overallBucketsOut,
             ],
         ];
@@ -200,10 +195,12 @@ class StoreItemsMatrixService
         string $name,
         string $acct
     ): void {
-        $id = (string)$itemId;
+        $id = (string) $itemId;
 
-        if (!isset($root[$store])) $root[$store] = [];
-        if (!isset($root[$store][$bucket])) $root[$store][$bucket] = [];
+        if (!isset($root[$store]))
+            $root[$store] = [];
+        if (!isset($root[$store][$bucket]))
+            $root[$store][$bucket] = [];
         if (!isset($root[$store][$bucket][$id])) {
             $root[$store][$bucket][$id] = [
                 'item_id' => $itemId,
@@ -214,7 +211,7 @@ class StoreItemsMatrixService
             ];
         }
 
-        $root[$store][$bucket][$id]['units_sold']  += max(0, $qty);
+        $root[$store][$bucket][$id]['units_sold'] += max(0, $qty);
         $root[$store][$bucket][$id]['total_sales'] += $amt;
 
         // fill missing meta if first rows lacked it
@@ -242,11 +239,13 @@ class StoreItemsMatrixService
         array $placedToBucket,
         array $fulfilledToBucket
     ): ?string {
-        if ($placed === '' || $fulfilled === '') return null;
+        if ($placed === '' || $fulfilled === '')
+            return null;
 
         // candidate buckets by placed method
         $candidates = $placedToBucket[$placed] ?? null;
-        if (!$candidates) return null;
+        if (!$candidates)
+            return null;
 
         // bucket is valid only if fulfilled method is allowed for that bucket
         foreach ($candidates as $bucketKey) {
@@ -279,5 +278,71 @@ class StoreItemsMatrixService
             }
         }
         return $idx;
+    }
+
+    public function getItemSummary(
+        int $storeId,
+        int $itemId,
+        string $from,
+        string $to
+    ): array {
+        $placedToBucket = $this->buildPlacedToBucketIndex();
+        $fulfilledToBucket = $this->buildFulfilledToBucketIndex();
+
+        $totals = [
+            'overall' => [
+                'units_sold' => 0,
+                'total_sales' => 0.0,
+            ],
+            'buckets' => []
+        ];
+
+        // initialize buckets
+        foreach (self::BUCKETS as $key => $meta) {
+            $totals['buckets'][$key] = [
+                'label' => $meta['label'],
+                'units_sold' => 0,
+                'total_sales' => 0.0,
+            ];
+        }
+
+        DB::table('order_line')
+            ->select([
+                'order_placed_method',
+                'order_fulfilled_method',
+                'quantity',
+                'net_amount',
+            ])
+            ->where('franchise_store', $storeId)
+            ->where('item_id', $itemId)
+            ->whereBetween('business_date', [$from, $to])
+            ->orderBy('id')
+            ->chunkById(5000, function ($rows) use (&$totals, $placedToBucket, $fulfilledToBucket) {
+                foreach ($rows as $r) {
+                    $qty = (int) ($r->quantity ?? 0);
+                    $amt = (float) ($r->net_amount ?? 0);
+
+                    $bucket = $this->resolveBucket(
+                        (string) $r->order_placed_method,
+                        (string) $r->order_fulfilled_method,
+                        $placedToBucket,
+                        $fulfilledToBucket
+                    );
+
+                    if (!$bucket) {
+                        continue;
+                    }
+
+                    // overall
+                    $totals['overall']['units_sold'] += $qty;
+                    $totals['overall']['total_sales'] += $amt;
+
+                    // bucket
+                    $totals['buckets'][$bucket]['units_sold'] += $qty;
+                    $totals['buckets'][$bucket]['total_sales'] += $amt;
+                }
+            });
+
+        return $totals;
     }
 }

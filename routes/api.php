@@ -15,6 +15,7 @@ Route::middleware('api.key')->group(function () {
     // exporting route csv and excel
     Route::get('/export/{model}/csv/{start?}/{end?}/{hour?}/{stores?}', [ExportingController::class, 'exportCSV']);
     Route::get('/reports/store-items-matrix', StoreItemsMatrixController::class);
+    Route::get('/reports/store-items-matrix/item-summary', [StoreItemsMatrixController::class, 'itemSummary']);
 });
 
 Route::middleware('auth.verify')->group(function () {

@@ -6,10 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Reports\StoreItemsMatrixRequest;
 use App\Services\Reports\StoreItemsMatrixService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class StoreItemsMatrixController extends Controller
 {
-    public function __construct(private readonly StoreItemsMatrixService $svc) {}
+    public function __construct(private readonly StoreItemsMatrixService $svc)
+    {
+    }
 
     public function __invoke(StoreItemsMatrixRequest $request): JsonResponse
     {
@@ -23,13 +26,25 @@ class StoreItemsMatrixController extends Controller
 
         return response()->json([
             'from' => $request->from(),
-            'to'   => $request->to(),
+            'to' => $request->to(),
             'filters' => [
                 'stores' => $request->storeFilter(),
-                'items'  => $request->itemFilter(),
+                'items' => $request->itemFilter(),
                 'without_bundle' => $request->withoutBundle(),
             ],
             'data' => $data,
         ]);
+    }
+
+    public function itemSummary(Request $request)
+    {
+        $data = $this->svc->getItemSummary(
+            $request->store_id,
+            $request->item_id,
+            $request->start_date,
+            $request->end_date
+        );
+
+        return response()->json($data);
     }
 }
