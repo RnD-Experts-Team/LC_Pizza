@@ -281,14 +281,19 @@ class StoreItemsMatrixService
     }
 
     public function getItemSummary(
-        int $storeId,
-        int $itemId,
+        string $storeId,
+        string $itemId,
         string $from,
         string $to
     ): array {
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(0);
+        }
+
         $placedToBucket = $this->buildPlacedToBucketIndex();
         $fulfilledToBucket = $this->buildFulfilledToBucketIndex();
 
+        // Initialize totals
         $totals = [
             'overall' => [
                 'units_sold' => 0,
@@ -297,7 +302,6 @@ class StoreItemsMatrixService
             'buckets' => []
         ];
 
-        // initialize buckets
         foreach (self::BUCKETS as $key => $meta) {
             $totals['buckets'][$key] = [
                 'label' => $meta['label'],
@@ -312,36 +316,46 @@ class StoreItemsMatrixService
                 'order_fulfilled_method',
                 'quantity',
                 'net_amount',
+                'item_id',
+                'franchise_store'
             ])
-            ->where('franchise_store', $storeId)
-            ->where('item_id', $itemId)
+            ->where('franchise_store', (string) $storeId)
+            ->where('item_id', (string) $itemId)
             ->whereBetween('business_date', [$from, $to])
             ->orderBy('id')
             ->chunkById(5000, function ($rows) use (&$totals, $placedToBucket, $fulfilledToBucket) {
                 foreach ($rows as $r) {
+
+                    $store = (string) ($r->franchise_store ?? '');
+                    $item = (string) ($r->item_id ?? '');
+
+                    if ($store === '' || $item === '') {
+                        continue;
+                    }
+
                     $qty = (int) ($r->quantity ?? 0);
                     $amt = (float) ($r->net_amount ?? 0);
 
                     $bucket = $this->resolveBucket(
-                        (string) $r->order_placed_method,
-                        (string) $r->order_fulfilled_method,
+                        (string) ($r->order_placed_method ?? ''),
+                        (string) ($r->order_fulfilled_method ?? ''),
                         $placedToBucket,
                         $fulfilledToBucket
                     );
 
-                    if (!$bucket) {
+                    if ($bucket === null) {
                         continue;
                     }
 
-                    // overall
-                    $totals['overall']['units_sold'] += $qty;
+                    // Overall totals
+                    $totals['overall']['units_sold'] += max(0, $qty);
                     $totals['overall']['total_sales'] += $amt;
 
-                    // bucket
-                    $totals['buckets'][$bucket]['units_sold'] += $qty;
+                    // Bucket totals
+                    $totals['buckets'][$bucket]['units_sold'] += max(0, $qty);
                     $totals['buckets'][$bucket]['total_sales'] += $amt;
                 }
-            });
+            }, 'id', 'id');
 
         return $totals;
     }

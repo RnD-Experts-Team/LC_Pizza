@@ -38,13 +38,46 @@ class StoreItemsMatrixController extends Controller
 
     public function itemSummary(Request $request)
     {
-        $data = $this->svc->getItemSummary(
-            $request->store_id,
-            $request->item_id,
-            $request->start_date,
-            $request->end_date
-        );
+        // Validate inputs
+        $validated = $request->validate([
+            'store_id' => 'required|string',
+            'item_id' => 'required|string',
+            'start_date' => 'required|date',
+            'end_date' => 'required|date',
+        ]);
 
-        return response()->json($data);
+        // Normalize inputs explicitly
+        $storeId = (string) $validated['store_id'];
+        $itemId = (string) $validated['item_id'];
+        $start = (string) $validated['start_date'];
+        $end = (string) $validated['end_date'];
+
+        try {
+            $data = $this->svc->getItemSummary(
+                $storeId,
+                $itemId,
+                $start,
+                $end
+            );
+
+            return response()->json([
+                'success' => true,
+                'data' => $data,
+            ]);
+
+        } catch (\Throwable $e) {
+
+            // Log full error for debugging (important)
+            \Log::error('Item Summary Error', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'input' => $validated,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch item summary',
+            ], 500);
+        }
     }
 }
