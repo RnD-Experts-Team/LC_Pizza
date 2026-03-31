@@ -312,6 +312,7 @@ class StoreItemsMatrixService
 
         DB::table('order_line')
             ->select([
+                'id',
                 'order_placed_method',
                 'order_fulfilled_method',
                 'quantity',
