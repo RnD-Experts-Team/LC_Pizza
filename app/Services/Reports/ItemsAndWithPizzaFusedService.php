@@ -9,28 +9,28 @@ class ItemsAndWithPizzaFusedService
 {
     private const BUCKETS = [
         'in_store' => [
-            'label'     => 'In Store',
-            'placed'    => ['Register', 'Drive Thru', 'SoundHoundAgent', 'Phone', 'CallCenterAgent'],
+            'label' => 'In Store',
+            'placed' => ['Register', 'Drive Thru', 'SoundHoundAgent', 'Phone', 'CallCenterAgent'],
             'fulfilled' => ['Register', 'Drive-Thru'],
         ],
         'lc_pickup' => [
-            'label'     => 'LC Pickup',
-            'placed'    => ['Website', 'Mobile'],
+            'label' => 'LC Pickup',
+            'placed' => ['Website', 'Mobile'],
             'fulfilled' => ['Register', 'Drive-Thru', 'In Store Only'],
         ],
         'lc_delivery' => [
-            'label'     => 'LC Delivery',
-            'placed'    => ['Website', 'Mobile', 'CallCenterAgent', 'SoundHoundAgent'],
+            'label' => 'LC Delivery',
+            'placed' => ['Website', 'Mobile', 'CallCenterAgent', 'SoundHoundAgent'],
             'fulfilled' => ['Delivery'],
         ],
         'third_party' => [
-            'label'     => '3rd Party',
-            'placed'    => ['UberEats', 'Grubhub', 'DoorDash'],
+            'label' => '3rd Party',
+            'placed' => ['UberEats', 'Grubhub', 'DoorDash'],
             'fulfilled' => ['Delivery'],
         ],
         'all' => [
-            'label'     => 'All Buckets',
-            'placed'    => null,
+            'label' => 'All Buckets',
+            'placed' => null,
             'fulfilled' => null,
         ],
     ];
@@ -51,8 +51,8 @@ class ItemsAndWithPizzaFusedService
     ];
 
     private const BEV_20OZ_ID = 204100;
-    private const BEV_2L_ID   = 204200;
-    private const ICB_ID      = 203003; // Italian Cheese Bread
+    private const BEV_2L_ID = 204200;
+    private const ICB_ID = 203003; // Italian Cheese Bread
 
     /**
      * Helper: distinct item_ids where a boolean flag column = 1
@@ -82,7 +82,7 @@ class ItemsAndWithPizzaFusedService
             });
         }
 
-        return $q->pluck('item_id')->map(fn($v) => (int)$v)->unique()->values()->all();
+        return $q->pluck('item_id')->map(fn($v) => (int) $v)->unique()->values()->all();
     }
 
     // ===== Public API =====
@@ -93,29 +93,29 @@ class ItemsAndWithPizzaFusedService
         }
 
         $from = $fromDate instanceof Carbon ? $fromDate->toDateString() : Carbon::parse($fromDate)->toDateString();
-        $to   = $toDate   instanceof Carbon ? $toDate->toDateString()   : Carbon::parse($toDate)->toDateString();
+        $to = $toDate instanceof Carbon ? $toDate->toDateString() : Carbon::parse($toDate)->toDateString();
 
         $itemRes = ['buckets' => []];
         $soldRes = ['buckets' => []];
 
         $isAllStore = ($franchiseStore === null || $franchiseStore === '' || strtolower($franchiseStore) === 'all');
-        $chunkSize  = $isAllStore ? 2000 : 5000;
+        $chunkSize = $isAllStore ? 2000 : 5000;
 
         // ===== Build category ID sets DIRECTLY from generated flags =====
-        $PIZZA_IDS    = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_pizza',      $withoutBundle);
-        $BREAD_IDS    = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_bread',      $withoutBundle);
-        $WINGS_IDS    = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_wings',      $withoutBundle);
-        $BEVERAGE_IDS = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_beverages',  $withoutBundle);
-        $PUFFS_IDS    = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_crazy_puffs', $withoutBundle);
-        $DIP_IDS      = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_caesar_dip', $withoutBundle);
+        $PIZZA_IDS = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_pizza', $withoutBundle);
+        $BREAD_IDS = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_bread', $withoutBundle);
+        $WINGS_IDS = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_wings', $withoutBundle);
+        $BEVERAGE_IDS = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_beverages', $withoutBundle);
+        $PUFFS_IDS = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_crazy_puffs', $withoutBundle);
+        $DIP_IDS = $this->getIdsByFlag($franchiseStore, $from, $to, 'is_caesar_dip', $withoutBundle);
 
         if (empty($DIP_IDS)) {
             // optional safety fallback if no dips appear in the window
             $DIP_IDS = self::CAESAR_DIP_IDS_FALLBACK;
         }
 
-        $COOKIE_IDS     = self::COOKIE_IDS;
-        $SIDES_IDS      = self::SIDES_IDS;
+        $COOKIE_IDS = self::COOKIE_IDS;
+        $SIDES_IDS = self::SIDES_IDS;
 
         // Everything we care about (filtering + unit prices)
         $relevantIds = array_values(array_unique(array_merge(
@@ -128,35 +128,28 @@ class ItemsAndWithPizzaFusedService
             $SIDES_IDS,
             $DIP_IDS
         )));
-        $relevantIdStr  = array_map('strval', $relevantIds);
+        $relevantIdStr = array_map('strval', $relevantIds);
         $relevantIdFlip = array_fill_keys($relevantIdStr, true);
 
         // collect union across buckets
         $seenAnywhere = [];
 
         // ===== rows builder using UNITS (quantities) =====
-        $buildRows = static function (
-            array $ids,
-            array $sumByItem,
-            array $countByItem,
-            array $nameByItem,
-            array $unitPriceByItem,
-            bool $filterAppeared = true
-        ): array {
+        $buildRows = static function (array $ids, array $sumByItem, array $countByItem, array $nameByItem, array $unitPriceByItem, bool $filterAppeared = true): array {
             $rows = [];
             foreach ($ids as $intId) {
-                $id    = (string)$intId;
-                $units = (int)($countByItem[$id] ?? 0);
+                $id = (string) $intId;
+                $units = (int) ($countByItem[$id] ?? 0);
                 if ($filterAppeared && $units === 0) {
                     continue;
                 }
 
                 $rows[] = [
-                    'item_id'        => (int)$intId,
-                    'menu_item_name' => $nameByItem[$id]  ?? '',
-                    'unit_price'     => (float)($unitPriceByItem[$id] ?? 0.0),
-                    'total_sales'    => (float)($sumByItem[$id]   ?? 0.0),
-                    'units_sold'     => $units,
+                    'item_id' => (int) $intId,
+                    'menu_item_name' => $nameByItem[$id] ?? '',
+                    'unit_price' => (float) ($unitPriceByItem[$id] ?? 0.0),
+                    'total_sales' => (float) ($sumByItem[$id] ?? 0.0),
+                    'units_sold' => $units,
                 ];
             }
             usort($rows, static function ($a, $b) {
@@ -167,11 +160,11 @@ class ItemsAndWithPizzaFusedService
         };
 
         $priceFiltersByBucket = [
-            'in_store'     => [['Register'],         ['Register']],
-            'lc_pickup'    => [['Website', 'Mobile'], ['Register']],
-            'lc_delivery'  => [['Website', 'Mobile'], ['Delivery']],
-            'third_party'  => [['DoorDash'],         ['Delivery']],
-            'all'          => [['Register'],         ['Register']],
+            'in_store' => [['Register'], ['Register']],
+            'lc_pickup' => [['Website', 'Mobile'], ['Register']],
+            'lc_delivery' => [['Website', 'Mobile'], ['Delivery']],
+            'third_party' => [['DoorDash'], ['Delivery']],
+            'all' => [['Register'], ['Register']],
         ];
 
         $_bucketRaw = [];
@@ -189,12 +182,12 @@ class ItemsAndWithPizzaFusedService
                 $fulfilledForPrice
             );
 
-            $sumByItem   = [];
+            $sumByItem = [];
             $countByItem = []; // stores UNITS (sum of quantities)
-            $nameByItem  = [];
+            $nameByItem = [];
 
             // ====== SOLD-WITH (UNITS) ======
-            $unitsBread  = 0;
+            $unitsBread = 0;
             $unitsCookie = 0;
             $unitsSauce = 0;
             $unitsWings = 0;
@@ -211,36 +204,19 @@ class ItemsAndWithPizzaFusedService
                         ->orWhere('is_pizza', 1);
                 })
                 ->orderBy('id')
-                ->chunkById($chunkSize, function ($rows) use (
-                    &$sumByItem,
-                    &$countByItem,
-                    &$nameByItem,
-                    &$pizzaUnitsBase,
-                    &$unitsBread,
-                    &$unitsCookie,
-                    &$unitsSauce,
-                    &$unitsWings,
-                    &$unitsBev,
-                    &$unitsPuffs,
-                    &$unitsBev20oz,
-                    &$unitsBev2L,
-                    &$unitsICB,
-                    $relevantIdFlip,
-                    &$seenAnywhere,
-                    $COOKIE_IDS
-                ) {
+                ->chunkById($chunkSize, function ($rows) use (&$sumByItem, &$countByItem, &$nameByItem, &$pizzaUnitsBase, &$unitsBread, &$unitsCookie, &$unitsSauce, &$unitsWings, &$unitsBev, &$unitsPuffs, &$unitsBev20oz, &$unitsBev2L, &$unitsICB, $relevantIdFlip, &$seenAnywhere, $COOKIE_IDS) {
                     $pizzaOrders = [];
 
                     foreach ($rows as $r) {
-                        $orderId = (string)($r->order_id ?? '');
-                        $itemIdS = (string)($r->item_id ?? '');
-                        $amt     = (float) ($r->net_amount ?? 0);
-                        $name    = (string)($r->menu_item_name ?? '');
-                        $qty     = (int)   ($r->quantity ?? 0);
+                        $orderId = (string) ($r->order_id ?? '');
+                        $itemIdS = (string) ($r->item_id ?? '');
+                        $amt = (float) ($r->net_amount ?? 0);
+                        $name = (string) ($r->menu_item_name ?? '');
+                        $qty = (int) ($r->quantity ?? 0);
 
                         if (isset($relevantIdFlip[$itemIdS])) {
-                            $sumByItem[$itemIdS]   = ($sumByItem[$itemIdS]   ?? 0.0) + $amt;
-                            $countByItem[$itemIdS] = ($countByItem[$itemIdS] ?? 0)   + $qty;
+                            $sumByItem[$itemIdS] = ($sumByItem[$itemIdS] ?? 0.0) + $amt;
+                            $countByItem[$itemIdS] = ($countByItem[$itemIdS] ?? 0) + $qty;
                             if (!isset($nameByItem[$itemIdS]) && $name !== '') {
                                 $nameByItem[$itemIdS] = $name;
                             }
@@ -259,13 +235,13 @@ class ItemsAndWithPizzaFusedService
                     // sold-with-pizza using generated flags; sum UNITS
                     if (!empty($pizzaOrders)) {
                         foreach ($rows as $r) {
-                            $oid = (string)($r->order_id ?? '');
+                            $oid = (string) ($r->order_id ?? '');
                             if ($oid === '' || !isset($pizzaOrders[$oid])) {
                                 continue;
                             }
 
-                            $itemId = (int)($r->item_id ?? 0);
-                            $qty    = (int)($r->quantity ?? 0);
+                            $itemId = (int) ($r->item_id ?? 0);
+                            $qty = (int) ($r->quantity ?? 0);
                             if ($qty <= 0) {
                                 continue;
                             }
@@ -274,10 +250,10 @@ class ItemsAndWithPizzaFusedService
                                 $unitsBev20oz += $qty;
                             }
                             if ($itemId === self::BEV_2L_ID) {
-                                $unitsBev2L   += $qty;
+                                $unitsBev2L += $qty;
                             }
                             if ($itemId === self::ICB_ID) {
-                                $unitsICB     += $qty;
+                                $unitsICB += $qty;
                             }
 
                             // Here we make sure "bread" is only item ID 103001
@@ -290,19 +266,19 @@ class ItemsAndWithPizzaFusedService
                                 continue;
                             }
                             if ($itemId === 103002) {
-                                $unitsSauce  += $qty;
+                                $unitsSauce += $qty;
                                 continue;
                             }
                             if ($r->is_wings) {
-                                $unitsWings  += $qty;
+                                $unitsWings += $qty;
                                 continue;
                             }
                             if ($r->is_beverages) {
-                                $unitsBev    += $qty;
+                                $unitsBev += $qty;
                                 continue;
                             }
                             if ($r->is_crazy_puffs) {
-                                $unitsPuffs  += $qty;
+                                $unitsPuffs += $qty;
                                 continue;
                             }
                         }
@@ -310,28 +286,28 @@ class ItemsAndWithPizzaFusedService
                 }, 'id', 'id');
 
             // Build groups from flags
-            $pizzaRows = $buildRows($PIZZA_IDS,    $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
-            $breadRows = $buildRows($BREAD_IDS,    $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
-            $wingRows  = $buildRows($WINGS_IDS,    $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
-            $puffRows  = $buildRows($PUFFS_IDS,    $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
-            $cookRows  = $buildRows($COOKIE_IDS,   $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
-            $bevRows   = $buildRows($BEVERAGE_IDS, $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
-            $sideRows  = $buildRows($SIDES_IDS,    $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
-            $dipRows   = $buildRows($DIP_IDS,      $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $pizzaRows = $buildRows($PIZZA_IDS, $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $breadRows = $buildRows($BREAD_IDS, $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $wingRows = $buildRows($WINGS_IDS, $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $puffRows = $buildRows($PUFFS_IDS, $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $cookRows = $buildRows($COOKIE_IDS, $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $bevRows = $buildRows($BEVERAGE_IDS, $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $sideRows = $buildRows($SIDES_IDS, $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
+            $dipRows = $buildRows($DIP_IDS, $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
 
             $overallRows = $buildRows(array_values(array_unique($relevantIds)), $sumByItem, $countByItem, $nameByItem, $unitPriceByItem, true);
             $top15 = \array_slice($overallRows, 0, 15);
 
             $itemRes['buckets'][$key] = [
-                'label'         => $label,
-                'pizza_top10'   => \array_slice($pizzaRows, 0, 10),
-                'bread_top3'    => \array_slice($breadRows, 0, 3),
-                'wings'         => $wingRows,
-                'crazy_puffs'   => $puffRows,
-                'cookies'       => $cookRows,
-                'beverages'     => $bevRows,
-                'sides'         => $sideRows,
-                'caesar_dips'   => $dipRows,
+                'label' => $label,
+                'pizza_top10' => \array_slice($pizzaRows, 0, 10),
+                'bread_top3' => \array_slice($breadRows, 0, 3),
+                'wings' => $wingRows,
+                'crazy_puffs' => $puffRows,
+                'cookies' => $cookRows,
+                'beverages' => $bevRows,
+                'sides' => $sideRows,
+                'caesar_dips' => $dipRows,
                 'top15_overall' => $top15,
                 'all_items_seen' => [],
             ];
@@ -339,29 +315,29 @@ class ItemsAndWithPizzaFusedService
             // ===== SOLD-WITH OUTPUT (UNITS ONLY) =====
             $den = $pizzaUnitsBase ?: 1;
             $soldRes['buckets'][$key] = [
-                'label'  => $label,
-                'units'  => [
-                    'crazy_bread' => (int)$unitsBread,
-                    'cookies'     => (int)$unitsCookie,
-                    'sauce'       => (int)$unitsSauce,
-                    'wings'       => (int)$unitsWings,
-                    'beverages'   => (int)$unitsBev,
-                    'crazy_puffs' => (int)$unitsPuffs,
-                    'bev_20oz'             => (int)$unitsBev20oz,
-                    'bev_2l'               => (int)$unitsBev2L,
-                    'italian_cheese_bread' => (int)$unitsICB,
-                    'pizza_base'  => (int)$pizzaUnitsBase,
+                'label' => $label,
+                'units' => [
+                    'crazy_bread' => (int) $unitsBread,
+                    'cookies' => (int) $unitsCookie,
+                    'sauce' => (int) $unitsSauce,
+                    'wings' => (int) $unitsWings,
+                    'beverages' => (int) $unitsBev,
+                    'crazy_puffs' => (int) $unitsPuffs,
+                    'bev_20oz' => (int) $unitsBev20oz,
+                    'bev_2l' => (int) $unitsBev2L,
+                    'italian_cheese_bread' => (int) $unitsICB,
+                    'pizza_base' => (int) $pizzaUnitsBase,
                 ],
                 'percentages' => [
                     'crazy_bread' => $pizzaUnitsBase ? $unitsBread / $den : 0.0,
-                    'cookies'     => $pizzaUnitsBase ? $unitsCookie / $den : 0.0,
-                    'sauce'       => $pizzaUnitsBase ? $unitsSauce / $den : 0.0,
-                    'wings'       => $pizzaUnitsBase ? $unitsWings / $den : 0.0,
-                    'beverages'   => $pizzaUnitsBase ? $unitsBev   / $den : 0.0,
+                    'cookies' => $pizzaUnitsBase ? $unitsCookie / $den : 0.0,
+                    'sauce' => $pizzaUnitsBase ? $unitsSauce / $den : 0.0,
+                    'wings' => $pizzaUnitsBase ? $unitsWings / $den : 0.0,
+                    'beverages' => $pizzaUnitsBase ? $unitsBev / $den : 0.0,
                     'crazy_puffs' => $pizzaUnitsBase ? $unitsPuffs / $den : 0.0,
-                    'bev_20oz'             => $pizzaUnitsBase ? $unitsBev20oz / $den : 0.0,
-                    'bev_2l'               => $pizzaUnitsBase ? $unitsBev2L   / $den : 0.0,
-                    'italian_cheese_bread' => $pizzaUnitsBase ? $unitsICB     / $den : 0.0,
+                    'bev_20oz' => $pizzaUnitsBase ? $unitsBev20oz / $den : 0.0,
+                    'bev_2l' => $pizzaUnitsBase ? $unitsBev2L / $den : 0.0,
+                    'italian_cheese_bread' => $pizzaUnitsBase ? $unitsICB / $den : 0.0,
                 ],
             ];
 
@@ -379,11 +355,11 @@ class ItemsAndWithPizzaFusedService
             $rows = [];
             foreach ($unionIds as $id) {
                 $rows[] = [
-                    'item_id'        => (int)$id,
+                    'item_id' => (int) $id,
                     'menu_item_name' => $nameBy[$id] ?? '',
-                    'unit_price'     => (float)($unitPriceByItem[$id] ?? 0.0),
-                    'total_sales'    => (float)($sumBy[$id]   ?? 0.0),
-                    'units_sold'     => (int)  ($countBy[$id] ?? 0),
+                    'unit_price' => (float) ($unitPriceByItem[$id] ?? 0.0),
+                    'total_sales' => (float) ($sumBy[$id] ?? 0.0),
+                    'units_sold' => (int) ($countBy[$id] ?? 0),
                 ];
             }
             \usort($rows, static function ($a, $b) {
@@ -395,9 +371,9 @@ class ItemsAndWithPizzaFusedService
         }
 
         return [
-            'item_breakdown'   => $itemRes,
-            'sold_with_pizza'  => $soldRes,
-            'all_items_union'  => $allItemsUnion,
+            'item_breakdown' => $itemRes,
+            'sold_with_pizza' => $soldRes,
+            'all_items_union' => $allItemsUnion,
         ];
     }
 
@@ -558,28 +534,28 @@ class ItemsAndWithPizzaFusedService
         // -------------------------
         $BUCKETS_LOCAL = [
             'in_store' => [
-                'label'     => 'In Store',
-                'placed'    => ['Register', 'Drive Thru', 'SoundHoundAgent', 'Phone', 'CallCenterAgent'],
+                'label' => 'In Store',
+                'placed' => ['Register', 'Drive Thru', 'SoundHoundAgent', 'Phone', 'CallCenterAgent'],
                 'fulfilled' => ['Register', 'Drive-Thru'],
             ],
             'lc_pickup' => [
-                'label'     => 'LC Pickup',
-                'placed'    => ['Website', 'Mobile'],
+                'label' => 'LC Pickup',
+                'placed' => ['Website', 'Mobile'],
                 'fulfilled' => ['Register', 'Drive-Thru', 'In Store Only'],
             ],
             'lc_delivery' => [
-                'label'     => 'LC Delivery',
-                'placed'    => ['Website', 'Mobile', 'CallCenterAgent', 'SoundHoundAgent'],
+                'label' => 'LC Delivery',
+                'placed' => ['Website', 'Mobile', 'CallCenterAgent', 'SoundHoundAgent'],
                 'fulfilled' => ['Delivery'],
             ],
             'third_party' => [
-                'label'     => '3rd Party',
-                'placed'    => ['UberEats', 'Grubhub', 'DoorDash'],
+                'label' => '3rd Party',
+                'placed' => ['UberEats', 'Grubhub', 'DoorDash'],
                 'fulfilled' => ['Delivery'],
             ],
             'all' => [
-                'label'     => 'All Buckets',
-                'placed'    => null,
+                'label' => 'All Buckets',
+                'placed' => null,
                 'fulfilled' => null,
             ],
         ];
@@ -590,9 +566,9 @@ class ItemsAndWithPizzaFusedService
         // -------------------------
         // Explicit IDs ONLY
         // -------------------------
-        $COOKIE_IDS       = [101288, 101289];
-        $CRAZY_SAUCE_IDS  = [206117, 103002];   // <-- TWO sauce IDs
-        $BEV_2L_IDS       = [204200, 204234];
+        $COOKIE_IDS = [101288, 101289];
+        $CRAZY_SAUCE_IDS = [206117, 103002];   // <-- TWO sauce IDs
+        $BEV_2L_IDS = [204200, 204234];
 
         // -------------------------
         // Helper to apply filters to a naked builder
@@ -640,7 +616,8 @@ class ItemsAndWithPizzaFusedService
             COALESCE(menu_item_name, "") as menu_item_name,
             SUM(quantity) as units_sold,
             MAX(is_bread) as is_bread,
-            MAX(is_wings) as is_wings
+            MAX(is_wings) as is_wings,
+            GROUP_CONCAT(DISTINCT order_id) as order_ids
         ')
             ->groupBy('franchise_store', 'item_id', 'menu_item_name')
             ->orderBy('franchise_store')
@@ -666,24 +643,24 @@ class ItemsAndWithPizzaFusedService
 
             if (!isset($byStore[$st])) {
                 $byStore[$st] = [
-                    'store'      => $st,
-                    'bucket'     => $bucketKey,
-                    'from'       => $from,
-                    'to'         => $to,
-                    'pizza_base' => (int)($pizzaBaseByStore[$st] ?? 0),
-                    'sold_with'  => [
+                    'store' => $st,
+                    'bucket' => $bucketKey,
+                    'from' => $from,
+                    'to' => $to,
+                    'pizza_base' => (int) ($pizzaBaseByStore[$st] ?? 0),
+                    'sold_with' => [
                         'crazy_bread' => [],
-                        'cookies'     => [],
+                        'cookies' => [],
                         'crazy_sauce' => [],
-                        'wings'       => [],
-                        'bev_2l'      => [],
+                        'wings' => [],
+                        'bev_2l' => [],
                     ],
                 ];
             }
 
             $itemId = (int) $r->item_id;
-            $units  = (int) $r->units_sold;
-            $name   = (string) $r->menu_item_name;
+            $units = (int) $r->units_sold;
+            $name = (string) $r->menu_item_name;
 
             // sauces (two IDs)
             if (in_array($itemId, $CRAZY_SAUCE_IDS, true)) {
@@ -716,7 +693,7 @@ class ItemsAndWithPizzaFusedService
             }
 
             // bread / wings flags
-            if ((int)$r->is_bread === 1) {
+            if ((int) $r->is_bread === 1) {
                 $byStore[$st]['sold_with']['crazy_bread'][] = [
                     'item_id' => $itemId,
                     'name' => $name,
@@ -725,7 +702,7 @@ class ItemsAndWithPizzaFusedService
                 continue;
             }
 
-            if ((int)$r->is_wings === 1) {
+            if ((int) $r->is_wings === 1) {
                 $byStore[$st]['sold_with']['wings'][] = [
                     'item_id' => $itemId,
                     'name' => $name,
@@ -743,7 +720,7 @@ class ItemsAndWithPizzaFusedService
 
         // Decide which stores to output
         if ($isSpecificStore) {
-            $storesToOutput = [(string)$franchiseStore];
+            $storesToOutput = [(string) $franchiseStore];
         } else {
             $storesToOutput = array_values(array_unique(array_merge(
                 array_keys($byStore),
@@ -756,17 +733,17 @@ class ItemsAndWithPizzaFusedService
             if (!isset($byStore[$st])) {
                 // store had no sold-with rows, still create skeleton
                 $byStore[$st] = [
-                    'store'      => $st,
-                    'bucket'     => $bucketKey,
-                    'from'       => $from,
-                    'to'         => $to,
-                    'pizza_base' => (int)($pizzaBaseByStore[$st] ?? 0),
-                    'sold_with'  => [
+                    'store' => $st,
+                    'bucket' => $bucketKey,
+                    'from' => $from,
+                    'to' => $to,
+                    'pizza_base' => (int) ($pizzaBaseByStore[$st] ?? 0),
+                    'sold_with' => [
                         'crazy_bread' => [],
-                        'cookies'     => [],
+                        'cookies' => [],
                         'crazy_sauce' => [],
-                        'wings'       => [],
-                        'bev_2l'      => [],
+                        'wings' => [],
+                        'bev_2l' => [],
                     ],
                 ];
             }
@@ -774,14 +751,14 @@ class ItemsAndWithPizzaFusedService
             // --- crazy sauce: always BOTH IDs ---
             $sauceMap = [];
             foreach ($byStore[$st]['sold_with']['crazy_sauce'] as $row) {
-                $sauceMap[(int)$row['item_id']] = $row;
+                $sauceMap[(int) $row['item_id']] = $row;
             }
             $saucesFilled = [];
             foreach ($CRAZY_SAUCE_IDS as $sid) {
                 $saucesFilled[] = [
                     'item_id' => $sid,
-                    'name'    => $sauceMap[$sid]['name'] ?? '',
-                    'units'   => (int)($sauceMap[$sid]['units'] ?? 0),
+                    'name' => $sauceMap[$sid]['name'] ?? '',
+                    'units' => (int) ($sauceMap[$sid]['units'] ?? 0),
                 ];
             }
             $byStore[$st]['sold_with']['crazy_sauce'] = $saucesFilled;
@@ -789,14 +766,14 @@ class ItemsAndWithPizzaFusedService
             // --- cookies: always BOTH IDs ---
             $cookieMap = [];
             foreach ($byStore[$st]['sold_with']['cookies'] as $row) {
-                $cookieMap[(int)$row['item_id']] = $row;
+                $cookieMap[(int) $row['item_id']] = $row;
             }
             $cookiesFilled = [];
             foreach ($COOKIE_IDS as $cid) {
                 $cookiesFilled[] = [
                     'item_id' => $cid,
-                    'name'    => $cookieMap[$cid]['name'] ?? '',
-                    'units'   => (int)($cookieMap[$cid]['units'] ?? 0),
+                    'name' => $cookieMap[$cid]['name'] ?? '',
+                    'units' => (int) ($cookieMap[$cid]['units'] ?? 0),
                 ];
             }
             $byStore[$st]['sold_with']['cookies'] = $cookiesFilled;
@@ -804,14 +781,14 @@ class ItemsAndWithPizzaFusedService
             // --- bev 2L: always BOTH IDs ---
             $bevMap = [];
             foreach ($byStore[$st]['sold_with']['bev_2l'] as $row) {
-                $bevMap[(int)$row['item_id']] = $row;
+                $bevMap[(int) $row['item_id']] = $row;
             }
             $bevFilled = [];
             foreach ($BEV_2L_IDS as $bid) {
                 $bevFilled[] = [
                     'item_id' => $bid,
-                    'name'    => $bevMap[$bid]['name'] ?? '',
-                    'units'   => (int)($bevMap[$bid]['units'] ?? 0),
+                    'name' => $bevMap[$bid]['name'] ?? '',
+                    'units' => (int) ($bevMap[$bid]['units'] ?? 0),
                 ];
             }
             $byStore[$st]['sold_with']['bev_2l'] = $bevFilled;
