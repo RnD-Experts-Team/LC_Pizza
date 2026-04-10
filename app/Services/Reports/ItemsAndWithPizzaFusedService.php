@@ -667,7 +667,8 @@ class ItemsAndWithPizzaFusedService
                 $byStore[$st]['sold_with']['crazy_sauce'][] = [
                     'item_id' => $itemId,
                     'name' => $name,
-                    'units' => $units
+                    'units' => $units,
+                    'orders' => explode(',', $r->order_ids),
                 ];
                 continue;
             }
@@ -677,7 +678,8 @@ class ItemsAndWithPizzaFusedService
                 $byStore[$st]['sold_with']['cookies'][] = [
                     'item_id' => $itemId,
                     'name' => $name,
-                    'units' => $units
+                    'units' => $units,
+                    'orders' => explode(',', $r->order_ids),
                 ];
                 continue;
             }
@@ -687,7 +689,8 @@ class ItemsAndWithPizzaFusedService
                 $byStore[$st]['sold_with']['bev_2l'][] = [
                     'item_id' => $itemId,
                     'name' => $name,
-                    'units' => $units
+                    'units' => $units,
+                    'orders' => explode(',', $r->order_ids),
                 ];
                 continue;
             }
@@ -697,7 +700,8 @@ class ItemsAndWithPizzaFusedService
                 $byStore[$st]['sold_with']['crazy_bread'][] = [
                     'item_id' => $itemId,
                     'name' => $name,
-                    'units' => $units
+                    'units' => $units,
+                    'orders' => explode(',', $r->order_ids),
                 ];
                 continue;
             }
@@ -706,7 +710,8 @@ class ItemsAndWithPizzaFusedService
                 $byStore[$st]['sold_with']['wings'][] = [
                     'item_id' => $itemId,
                     'name' => $name,
-                    'units' => $units
+                    'units' => $units,
+                    'orders' => explode(',', $r->order_ids),
                 ];
                 continue;
             }
