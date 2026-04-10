@@ -662,46 +662,47 @@ class ItemsAndWithPizzaFusedService
             $units = (int) $r->units_sold;
             $name = (string) $r->menu_item_name;
 
-            // sauces (two IDs)
+            // Ensure 'orders' is included properly in the data being returned
+            $orders = explode(',', $r->order_ids); // Split the string of order IDs
+
+            // Assign orders to the sold-with categories
             if (in_array($itemId, $CRAZY_SAUCE_IDS, true)) {
                 $byStore[$st]['sold_with']['crazy_sauce'][] = [
                     'item_id' => $itemId,
                     'name' => $name,
                     'units' => $units,
-                    'orders' => explode(',', $r->order_ids),
+                    'orders' => $orders,  // Add the order IDs here
                 ];
                 continue;
             }
 
-            // cookies
             if (in_array($itemId, $COOKIE_IDS, true)) {
                 $byStore[$st]['sold_with']['cookies'][] = [
                     'item_id' => $itemId,
                     'name' => $name,
                     'units' => $units,
-                    'orders' => explode(',', $r->order_ids),
+                    'orders' => $orders,  // Add the order IDs here
                 ];
                 continue;
             }
 
-            // bev 2L
             if (in_array($itemId, $BEV_2L_IDS, true)) {
                 $byStore[$st]['sold_with']['bev_2l'][] = [
                     'item_id' => $itemId,
                     'name' => $name,
                     'units' => $units,
-                    'orders' => explode(',', $r->order_ids),
+                    'orders' => $orders,  // Add the order IDs here
                 ];
                 continue;
             }
 
-            // bread / wings flags
+            // Process other items (bread, wings, etc.)
             if ((int) $r->is_bread === 1) {
                 $byStore[$st]['sold_with']['crazy_bread'][] = [
                     'item_id' => $itemId,
                     'name' => $name,
                     'units' => $units,
-                    'orders' => explode(',', $r->order_ids),
+                    'orders' => $orders,  // Add the order IDs here
                 ];
                 continue;
             }
@@ -711,7 +712,7 @@ class ItemsAndWithPizzaFusedService
                     'item_id' => $itemId,
                     'name' => $name,
                     'units' => $units,
-                    'orders' => explode(',', $r->order_ids),
+                    'orders' => $orders,  // Add the order IDs here
                 ];
                 continue;
             }
