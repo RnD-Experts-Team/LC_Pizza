@@ -52,7 +52,7 @@ class ItemsAndWithPizzaFusedService
 
     private const BEV_20OZ_ID = 204100;
     private const BEV_2L_ID = 204200;
-    private const ICB_ID = 203003; // Italian Cheese Bread
+    private const ICB_IDS = [203003, 103003]; // Italian Cheese Bread IDs
 
     /**
      * Helper: distinct item_ids where a boolean flag column = 1
@@ -126,7 +126,8 @@ class ItemsAndWithPizzaFusedService
             $COOKIE_IDS,
             $BEVERAGE_IDS,
             $SIDES_IDS,
-            $DIP_IDS
+            $DIP_IDS,
+            self::ICB_IDS
         )));
         $relevantIdStr = array_map('strval', $relevantIds);
         $relevantIdFlip = array_fill_keys($relevantIdStr, true);
@@ -198,16 +199,13 @@ class ItemsAndWithPizzaFusedService
             $unitsICB = 0;
             $pizzaUnitsBase = 0;
 
-            $orderUnitsByItem = [];
-            $orderItemNameByItem = [];
-
             $this->baseQB($franchiseStore, $from, $to, $rules['placed'], $rules['fulfilled'], $withoutBundle)
                 ->where(function ($q) use ($relevantIdStr) {
                     $q->whereIn('item_id', $relevantIdStr)
                         ->orWhere('is_pizza', 1);
                 })
                 ->orderBy('id')
-                ->chunkById($chunkSize, function ($rows) use (&$sumByItem, &$countByItem, &$nameByItem, &$pizzaUnitsBase, &$unitsBread, &$unitsCookie, &$unitsSauce, &$unitsWings, &$unitsBev, &$unitsPuffs, &$unitsBev20oz, &$unitsBev2L, &$unitsICB, &$orderUnitsByItem, &$orderItemNameByItem, $relevantIdFlip, &$seenAnywhere, $COOKIE_IDS) {
+                ->chunkById($chunkSize, function ($rows) use (&$sumByItem, &$countByItem, &$nameByItem, &$pizzaUnitsBase, &$unitsBread, &$unitsCookie, &$unitsSauce, &$unitsWings, &$unitsBev, &$unitsPuffs, &$unitsBev20oz, &$unitsBev2L, &$unitsICB, $relevantIdFlip, &$seenAnywhere, $COOKIE_IDS) {
                     $pizzaOrders = [];
 
                     foreach ($rows as $r) {
@@ -244,31 +242,9 @@ class ItemsAndWithPizzaFusedService
                             }
 
                             $itemId = (int) ($r->item_id ?? 0);
-                            $itemName = (string) ($r->menu_item_name ?? '');
                             $qty = (int) ($r->quantity ?? 0);
                             if ($qty <= 0) {
                                 continue;
-                            }
-
-                            $isSoldWithItem = ($itemId === 103001)
-                                || in_array($itemId, $COOKIE_IDS, true)
-                                || ($itemId === 103002)
-                                || ($itemId === self::BEV_20OZ_ID)
-                                || ($itemId === self::BEV_2L_ID)
-                                || ($itemId === self::ICB_ID)
-                                || (bool) $r->is_wings
-                                || (bool) $r->is_beverages
-                                || (bool) $r->is_crazy_puffs;
-
-                            if ($isSoldWithItem) {
-                                $itemKey = (string) $itemId;
-                                if (!isset($orderUnitsByItem[$itemKey])) {
-                                    $orderUnitsByItem[$itemKey] = [];
-                                }
-                                $orderUnitsByItem[$itemKey][$oid] = ($orderUnitsByItem[$itemKey][$oid] ?? 0) + $qty;
-                                if (!isset($orderItemNameByItem[$itemKey]) && $itemName !== '') {
-                                    $orderItemNameByItem[$itemKey] = $itemName;
-                                }
                             }
 
                             if ($itemId === self::BEV_20OZ_ID) {
@@ -277,7 +253,7 @@ class ItemsAndWithPizzaFusedService
                             if ($itemId === self::BEV_2L_ID) {
                                 $unitsBev2L += $qty;
                             }
-                            if ($itemId === self::ICB_ID) {
+                            if (in_array($itemId, self::ICB_IDS, true)) {
                                 $unitsICB += $qty;
                             }
 
@@ -339,41 +315,6 @@ class ItemsAndWithPizzaFusedService
 
             // ===== SOLD-WITH OUTPUT (UNITS ONLY) =====
             $den = $pizzaUnitsBase ?: 1;
-            $shapeOrderUnitsByItem = static function (array $orderUnitsByItem, array $orderItemNameByItem): array {
-                if (empty($orderUnitsByItem)) {
-                    return [];
-                }
-
-                ksort($orderUnitsByItem, SORT_STRING);
-
-                $items = [];
-                foreach ($orderUnitsByItem as $itemId => $orders) {
-                    ksort($orders, SORT_STRING);
-
-                    $orderRows = [];
-                    $itemUnits = 0;
-                    foreach ($orders as $orderId => $units) {
-                        $u = (int) $units;
-                        $itemUnits += $u;
-                        $orderRows[] = [
-                            'order_id' => (string) $orderId,
-                            'units' => $u,
-                        ];
-                    }
-
-                    $items[] = [
-                        'item_id' => (int) $itemId,
-                        'menu_item_name' => $orderItemNameByItem[$itemId] ?? '',
-                        'units' => $itemUnits,
-                        'orders' => $orderRows,
-                    ];
-                }
-
-                return $items;
-            };
-
-            $ordersByItem = $shapeOrderUnitsByItem($orderUnitsByItem, $orderItemNameByItem);
-
             $soldRes['buckets'][$key] = [
                 'label' => $label,
                 'units' => [
@@ -399,7 +340,6 @@ class ItemsAndWithPizzaFusedService
                     'bev_2l' => $pizzaUnitsBase ? $unitsBev2L / $den : 0.0,
                     'italian_cheese_bread' => $pizzaUnitsBase ? $unitsICB / $den : 0.0,
                 ],
-                'orders_by_item' => $ordersByItem,
             ];
 
             $_bucketRaw[$key] = [$sumByItem, $countByItem, $nameByItem, $unitPriceByItem];
