@@ -866,6 +866,7 @@ class ItemsAndWithPizzaFusedService
         $COOKIE_IDS = [101288, 101289];
         $CRAZY_SAUCE_IDS = [206117, 103002];
         $BEV_2L_IDS = [204200, 204234];
+        $BEV_20OZ_IDS = [204100];
 
         foreach ($weeks as $week) {
             $weekStart = $week['start'];
@@ -913,11 +914,13 @@ class ItemsAndWithPizzaFusedService
                     'crazy_sauce' => [],
                     'wings' => [],
                     'bev_2l' => [],
+                    'bev_20oz' => [],
                 ];
 
                 $sold['crazy_sauce'] = $this->zeroFillByIds($sold['crazy_sauce'], $CRAZY_SAUCE_IDS);
                 $sold['cookies'] = $this->zeroFillByIds($sold['cookies'], $COOKIE_IDS);
                 $sold['bev_2l'] = $this->zeroFillByIds($sold['bev_2l'], $BEV_2L_IDS);
+                $sold['bev_20oz'] = $this->zeroFillByIds($sold['bev_20oz'], $BEV_20OZ_IDS);
 
                 $pizzaBase = (int) ($pizzaBaseByStore[$storeKey] ?? 0);
                 $counts = $itemCountsByStore[$storeKey] ?? [
@@ -1050,6 +1053,7 @@ class ItemsAndWithPizzaFusedService
         $COOKIE_IDS = [101288, 101289];
         $CRAZY_SAUCE_IDS = [206117, 103002];
         $BEV_2L_IDS = [204200, 204234];
+        $BEV_20OZ_IDS = [204100];
 
         $applyFilters = function ($q) use ($from, $to, $rules, $withoutBundle) {
             $q->whereBetween('business_date', [$from, $to]);
@@ -1084,7 +1088,8 @@ class ItemsAndWithPizzaFusedService
                     ->orWhereIn('item_id', $COOKIE_IDS)
                     ->orWhereIn('item_id', $CRAZY_SAUCE_IDS)
                     ->orWhere('is_wings', 1)
-                    ->orWhereIn('item_id', $BEV_2L_IDS);
+                    ->orWhereIn('item_id', $BEV_2L_IDS)
+                    ->orWhereIn('item_id', $BEV_20OZ_IDS);
             })
             ->selectRaw('
                 franchise_store,
@@ -1112,6 +1117,7 @@ class ItemsAndWithPizzaFusedService
                     'crazy_sauce' => [],
                     'wings' => [],
                     'bev_2l' => [],
+                    'bev_20oz' => [],
                 ];
             }
 
@@ -1137,6 +1143,14 @@ class ItemsAndWithPizzaFusedService
             }
             if (in_array($itemId, $BEV_2L_IDS, true)) {
                 $byStore[$storeKey]['bev_2l'][] = [
+                    'item_id' => $itemId,
+                    'name' => $name,
+                    'units' => $units,
+                ];
+                continue;
+            }
+            if (in_array($itemId, $BEV_20OZ_IDS, true)) {
+                $byStore[$storeKey]['bev_20oz'][] = [
                     'item_id' => $itemId,
                     'name' => $name,
                     'units' => $units,
