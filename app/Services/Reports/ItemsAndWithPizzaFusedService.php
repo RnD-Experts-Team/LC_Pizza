@@ -1082,7 +1082,7 @@ class ItemsAndWithPizzaFusedService
 
         $soldWithRows = $applyFilters(DB::table('order_line'))
             ->whereIn('order_id', $pizzaOrdersSub)
-            ->where(function ($q) use ($COOKIE_IDS, $CRAZY_SAUCE_IDS, $BEV_2L_IDS) {
+            ->where(function ($q) use ($COOKIE_IDS, $CRAZY_SAUCE_IDS, $BEV_2L_IDS, $BEV_20OZ_IDS) {
                 $q
                     ->where('is_bread', 1)
                     ->orWhereIn('item_id', $COOKIE_IDS)
