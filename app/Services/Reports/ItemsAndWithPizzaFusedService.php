@@ -516,7 +516,8 @@ class ItemsAndWithPizzaFusedService
         ?string $franchiseStore,
         $fromDate,
         $toDate,
-        string $bucketKey = 'in_store'
+        string $bucketKey = 'in_store',
+        bool $withoutBundle = false
     ): array {
         if (function_exists('set_time_limit')) {
             @set_time_limit(0);
@@ -574,7 +575,7 @@ class ItemsAndWithPizzaFusedService
         // -------------------------
         // Helper to apply filters to a naked builder
         // -------------------------
-        $applyFilters = function ($q) use ($franchiseStore, $from, $to, $rules) {
+        $applyFilters = function ($q) use ($franchiseStore, $from, $to, $rules, $withoutBundle) {
             $q->whereBetween('business_date', [$from, $to]);
 
             if ($franchiseStore !== null && $franchiseStore !== '' && strtolower($franchiseStore) !== 'all') {
@@ -585,6 +586,14 @@ class ItemsAndWithPizzaFusedService
             }
             if (!empty($rules['fulfilled'])) {
                 $q->whereIn('order_fulfilled_method', $rules['fulfilled']);
+            }
+
+            if ($withoutBundle) {
+                $q->where(function ($qq) {
+                    $qq->whereNull('bundle_name')->orWhere('bundle_name', '');
+                })->where(function ($qq) {
+                    $qq->whereNull('modification_reason')->orWhere('modification_reason', '');
+                });
             }
 
             return $q;
@@ -811,5 +820,333 @@ class ItemsAndWithPizzaFusedService
 
         // all stores separately
         return array_values($byStore);
+    }
+
+    public function soldWithWeeklyByStore(
+        $fromDate,
+        $toDate,
+        string $bucketKey = 'in_store',
+        bool $withoutBundle = false
+    ): array {
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(0);
+        }
+
+        $from = $fromDate instanceof Carbon
+            ? $fromDate->toDateString()
+            : Carbon::parse($fromDate)->toDateString();
+
+        $to = $toDate instanceof Carbon
+            ? $toDate->toDateString()
+            : Carbon::parse($toDate)->toDateString();
+
+        $bucketKey = strtolower($bucketKey);
+        $rules = self::BUCKETS[$bucketKey] ?? self::BUCKETS['in_store'];
+
+        $start = Carbon::parse($from)->startOfDay();
+        $end = Carbon::parse($to)->startOfDay();
+
+        $offset = ($start->dayOfWeekIso + 5) % 7; // Tuesday start
+        $weekCursor = $start->copy()->subDays($offset);
+
+        $weeks = [];
+        while ($weekCursor->lte($end)) {
+            $weekStart = $weekCursor->copy();
+            $weekEnd = $weekStart->copy()->addDays(6);
+            if ($weekEnd->gt($end)) {
+                $weekEnd = $end->copy();
+            }
+            $weeks[] = [
+                'start' => $weekStart->toDateString(),
+                'end' => $weekEnd->toDateString(),
+            ];
+            $weekCursor = $weekCursor->addDays(7);
+        }
+
+        $weekStartExpr = 'DATE_SUB(business_date, INTERVAL (DAYOFWEEK(business_date)+4) % 7 DAY)';
+
+        $applyFilters = function ($q) use ($from, $to, $rules, $withoutBundle) {
+            $q->whereBetween('business_date', [$from, $to]);
+
+            if (!empty($rules['placed'])) {
+                $q->whereIn('order_placed_method', $rules['placed']);
+            }
+            if (!empty($rules['fulfilled'])) {
+                $q->whereIn('order_fulfilled_method', $rules['fulfilled']);
+            }
+            if ($withoutBundle) {
+                $q->where(function ($qq) {
+                    $qq->whereNull('bundle_name')->orWhere('bundle_name', '');
+                })->where(function ($qq) {
+                    $qq->whereNull('modification_reason')->orWhere('modification_reason', '');
+                });
+            }
+
+            return $q;
+        };
+
+        $COOKIE_IDS = [101288, 101289];
+        $CRAZY_SAUCE_IDS = [206117, 103002];
+        $BEV_2L_IDS = [204200, 204234];
+
+        $pizzaOrdersSub = $applyFilters(DB::table('order_line'))
+            ->where('is_pizza', 1)
+            ->selectRaw('DISTINCT order_id, franchise_store, ' . $weekStartExpr . ' as week_start');
+
+        $soldWithRows = $applyFilters(DB::table('order_line as ol'))
+            ->joinSub($pizzaOrdersSub, 'po', function ($join) {
+                $join->on('ol.order_id', '=', 'po.order_id')
+                    ->on('ol.franchise_store', '=', 'po.franchise_store');
+            })
+            ->where(function ($q) use ($COOKIE_IDS, $CRAZY_SAUCE_IDS, $BEV_2L_IDS) {
+                $q
+                    ->where('ol.is_bread', 1)
+                    ->orWhereIn('ol.item_id', $COOKIE_IDS)
+                    ->orWhereIn('ol.item_id', $CRAZY_SAUCE_IDS)
+                    ->orWhere('ol.is_wings', 1)
+                    ->orWhereIn('ol.item_id', $BEV_2L_IDS);
+            })
+            ->selectRaw('
+                po.week_start as week_start,
+                ol.franchise_store,
+                ol.item_id,
+                COALESCE(ol.menu_item_name, "") as menu_item_name,
+                SUM(ol.quantity) as units_sold,
+                MAX(ol.is_bread) as is_bread,
+                MAX(ol.is_wings) as is_wings
+            ')
+            ->groupBy('po.week_start', 'ol.franchise_store', 'ol.item_id', 'ol.menu_item_name')
+            ->orderBy('ol.franchise_store')
+            ->orderBy('po.week_start')
+            ->get();
+
+        $pizzaBaseRows = $applyFilters(DB::table('order_line'))
+            ->where('is_pizza', 1)
+            ->selectRaw('franchise_store, ' . $weekStartExpr . ' as week_start, SUM(quantity) as pizza_units')
+            ->groupBy('franchise_store', 'week_start')
+            ->get();
+
+        $itemCountRows = $applyFilters(DB::table('order_line'))
+            ->whereIn('item_id', [201106, 201128])
+            ->selectRaw('franchise_store, ' . $weekStartExpr . ' as week_start, item_id, SUM(quantity) as units')
+            ->groupBy('franchise_store', 'week_start', 'item_id')
+            ->get();
+
+        $soldByStoreWeek = [];
+        foreach ($soldWithRows as $r) {
+            $storeKey = (string) $r->franchise_store;
+            $weekStart = (string) $r->week_start;
+
+            if ($storeKey === '' || $weekStart === '') {
+                continue;
+            }
+
+            if (!isset($soldByStoreWeek[$storeKey][$weekStart])) {
+                $soldByStoreWeek[$storeKey][$weekStart] = [
+                    'crazy_bread' => [],
+                    'cookies' => [],
+                    'crazy_sauce' => [],
+                    'wings' => [],
+                    'bev_2l' => [],
+                ];
+            }
+
+            $itemId = (int) $r->item_id;
+            $units = (int) $r->units_sold;
+            $name = (string) $r->menu_item_name;
+
+            if (in_array($itemId, $CRAZY_SAUCE_IDS, true)) {
+                $soldByStoreWeek[$storeKey][$weekStart]['crazy_sauce'][] = [
+                    'item_id' => $itemId,
+                    'name' => $name,
+                    'units' => $units,
+                ];
+                continue;
+            }
+            if (in_array($itemId, $COOKIE_IDS, true)) {
+                $soldByStoreWeek[$storeKey][$weekStart]['cookies'][] = [
+                    'item_id' => $itemId,
+                    'name' => $name,
+                    'units' => $units,
+                ];
+                continue;
+            }
+            if (in_array($itemId, $BEV_2L_IDS, true)) {
+                $soldByStoreWeek[$storeKey][$weekStart]['bev_2l'][] = [
+                    'item_id' => $itemId,
+                    'name' => $name,
+                    'units' => $units,
+                ];
+                continue;
+            }
+            if ((int) $r->is_bread === 1) {
+                $soldByStoreWeek[$storeKey][$weekStart]['crazy_bread'][] = [
+                    'item_id' => $itemId,
+                    'name' => $name,
+                    'units' => $units,
+                ];
+                continue;
+            }
+            if ((int) $r->is_wings === 1) {
+                $soldByStoreWeek[$storeKey][$weekStart]['wings'][] = [
+                    'item_id' => $itemId,
+                    'name' => $name,
+                    'units' => $units,
+                ];
+            }
+        }
+
+        $pizzaBaseByStoreWeek = [];
+        foreach ($pizzaBaseRows as $r) {
+            $storeKey = (string) $r->franchise_store;
+            $weekStart = (string) $r->week_start;
+            if ($storeKey === '' || $weekStart === '') {
+                continue;
+            }
+            $pizzaBaseByStoreWeek[$storeKey][$weekStart] = (int) ($r->pizza_units ?? 0);
+        }
+
+        $itemCountsByStoreWeek = [];
+        foreach ($itemCountRows as $r) {
+            $storeKey = (string) $r->franchise_store;
+            $weekStart = (string) $r->week_start;
+            if ($storeKey === '' || $weekStart === '') {
+                continue;
+            }
+            if (!isset($itemCountsByStoreWeek[$storeKey][$weekStart])) {
+                $itemCountsByStoreWeek[$storeKey][$weekStart] = [
+                    '201106' => 0,
+                    '201128' => 0,
+                ];
+            }
+            $itemId = (string) $r->item_id;
+            $itemCountsByStoreWeek[$storeKey][$weekStart][$itemId] = (int) ($r->units ?? 0);
+        }
+
+        $storeKeys = array_values(array_unique(array_merge(
+            array_keys($soldByStoreWeek),
+            array_keys($pizzaBaseByStoreWeek),
+            array_keys($itemCountsByStoreWeek)
+        )));
+        sort($storeKeys);
+
+        $stores = [];
+        foreach ($storeKeys as $storeKey) {
+            $stores[$storeKey] = [
+                'store' => $storeKey,
+                'weeks' => [],
+            ];
+
+            foreach ($weeks as $week) {
+                $weekStart = $week['start'];
+                $weekEnd = $week['end'];
+
+                $sold = $soldByStoreWeek[$storeKey][$weekStart] ?? [
+                    'crazy_bread' => [],
+                    'cookies' => [],
+                    'crazy_sauce' => [],
+                    'wings' => [],
+                    'bev_2l' => [],
+                ];
+
+                $pizzaBase = (int) ($pizzaBaseByStoreWeek[$storeKey][$weekStart] ?? 0);
+                $counts = $itemCountsByStoreWeek[$storeKey][$weekStart] ?? [
+                    '201106' => 0,
+                    '201128' => 0,
+                ];
+
+                $sold['crazy_sauce'] = $this->zeroFillByIds($sold['crazy_sauce'], $CRAZY_SAUCE_IDS);
+                $sold['cookies'] = $this->zeroFillByIds($sold['cookies'], $COOKIE_IDS);
+                $sold['bev_2l'] = $this->zeroFillByIds($sold['bev_2l'], $BEV_2L_IDS);
+
+                $stores[$storeKey]['weeks'][] = [
+                    'week_start' => $weekStart,
+                    'week_end' => $weekEnd,
+                    'sold_with' => $sold,
+                    'pizza_base' => $pizzaBase,
+                    'item_counts' => [
+                        '201106' => (int) ($counts['201106'] ?? 0),
+                        '201128' => (int) ($counts['201128'] ?? 0),
+                    ],
+                ];
+            }
+        }
+
+        return [
+            'from' => $from,
+            'to' => $to,
+            'bucket' => $bucketKey,
+            'without_bundle' => $withoutBundle,
+            'stores' => array_values($stores),
+        ];
+    }
+
+    private function getItemCountsByStore(
+        string $from,
+        string $to,
+        string $bucketKey,
+        bool $withoutBundle
+    ): array {
+        $rules = self::BUCKETS[$bucketKey] ?? self::BUCKETS['in_store'];
+        $itemIds = [201106, 201128];
+
+        $q = DB::table('order_line')
+            ->whereBetween('business_date', [$from, $to])
+            ->whereIn('item_id', $itemIds);
+
+        if (!empty($rules['placed'])) {
+            $q->whereIn('order_placed_method', $rules['placed']);
+        }
+        if (!empty($rules['fulfilled'])) {
+            $q->whereIn('order_fulfilled_method', $rules['fulfilled']);
+        }
+        if ($withoutBundle) {
+            $q->where(function ($qq) {
+                $qq->whereNull('bundle_name')->orWhere('bundle_name', '');
+            })->where(function ($qq) {
+                $qq->whereNull('modification_reason')->orWhere('modification_reason', '');
+            });
+        }
+
+        $rows = $q->selectRaw('franchise_store, item_id, SUM(quantity) as units')
+            ->groupBy('franchise_store', 'item_id')
+            ->get();
+
+        $byStore = [];
+        foreach ($rows as $r) {
+            $storeKey = (string) $r->franchise_store;
+            if ($storeKey === '') {
+                continue;
+            }
+            if (!isset($byStore[$storeKey])) {
+                $byStore[$storeKey] = [
+                    '201106' => 0,
+                    '201128' => 0,
+                ];
+            }
+            $itemId = (string) $r->item_id;
+            $byStore[$storeKey][$itemId] = (int) ($r->units ?? 0);
+        }
+
+        return $byStore;
+    }
+
+    private function zeroFillByIds(array $rows, array $ids): array
+    {
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(int) $row['item_id']] = $row;
+        }
+
+        $filled = [];
+        foreach ($ids as $id) {
+            $filled[] = [
+                'item_id' => $id,
+                'name' => $map[$id]['name'] ?? '',
+                'units' => (int) ($map[$id]['units'] ?? 0),
+            ];
+        }
+
+        return $filled;
     }
 }

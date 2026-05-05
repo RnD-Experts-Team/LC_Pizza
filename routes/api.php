@@ -11,6 +11,8 @@ use App\Http\Controllers\Reports\StoreItemsMatrixController;
 Route::middleware('api.key')->group(function () {
     Route::get('/reports/store', StoreReportController::class)->name('reports.store');
     Route::get('/sold-with-alone', [StoreReportController::class, 'soldWithPizzaDetails'])->name('reports.sold_with_alone');
+    Route::get('/reports/sold-with-weekly-by-store', [StoreReportController::class, 'soldWithWeeklyByStore'])
+        ->name('reports.sold_with_weekly_by_store');
 
     // exporting route csv and excel
     Route::get('/export/{model}/csv/{start?}/{end?}/{hour?}/{stores?}', [ExportingController::class, 'exportCSV']);

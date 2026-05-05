@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Reports\StoreReportRequest;
 use App\Services\Reports\StoreOverviewService;
 use App\Services\Reports\ItemsAndWithPizzaFusedService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -27,7 +28,8 @@ class StoreReportController extends Controller
     public function __construct(
         private readonly StoreOverviewService $overview,
         private readonly ItemsAndWithPizzaFusedService $fused
-    ) {}
+    ) {
+    }
 
     /**
      * Handle GET /api/reports/store
@@ -41,20 +43,20 @@ class StoreReportController extends Controller
     {
         // Allow null/"All" store: we don’t force a value here.
         $store = $request->input('franchise_store'); // nullable
-        $from  = $request->inputFrom();
-        $to    = $request->inputTo();
-        $withoutBundle  = $request->boolean('without_bundle'); // <--- NEW
+        $from = $request->inputFrom();
+        $to = $request->inputTo();
+        $withoutBundle = $request->boolean('without_bundle'); // <--- NEW
 
         // Build sections
         $fused = $this->fused->compute($store, $from, $to, $withoutBundle); // <--- pass it
 
         return response()->json([
             'store' => $store,
-            'from'  => $from,
-            'to'    => $to,
-            'data'  => [
-                'overview'        => $this->overview->overview($store, $from, $to),
-                'item_breakdown'  => $fused['item_breakdown'],
+            'from' => $from,
+            'to' => $to,
+            'data' => [
+                'overview' => $this->overview->overview($store, $from, $to),
+                'item_breakdown' => $fused['item_breakdown'],
                 'sold_with_pizza' => $fused['sold_with_pizza'],
                 'all_items_union' => $fused['all_items_union'],  // IDs that appeared at least once anywhere
             ],
@@ -72,9 +74,9 @@ class StoreReportController extends Controller
      */
     public function soldWithPizzaDetails(Request $request)
     {
-        $from   = $request->input('from');
-        $to     = $request->input('to');
-        $store  = $request->input('store'); // null / store-code / "all"
+        $from = $request->input('from');
+        $to = $request->input('to');
+        $store = $request->input('store'); // null / store-code / "all"
         $bucket = $request->input('bucket', 'in_store');
 
         // minimal validation (optional but smart)
@@ -89,6 +91,42 @@ class StoreReportController extends Controller
             $from,
             $to,
             $bucket
+        );
+
+        return response()->json($data);
+    }
+
+    /**
+     * GET /api/reports/sold-with-weekly-by-store
+     *
+     * Query params:
+     * - from: YYYY-MM-DD (required)
+     * - to: YYYY-MM-DD (optional; defaults to from + 6 weeks)
+     * - bucket: in_store|lc_pickup|lc_delivery|third_party|all (optional, default in_store)
+     * - without_bundle: bool (optional)
+     */
+    public function soldWithWeeklyByStore(Request $request): JsonResponse
+    {
+        $from = $request->input('from');
+        $to = $request->input('to');
+        $bucket = $request->input('bucket', 'in_store');
+        $withoutBundle = $request->boolean('without_bundle');
+
+        if (!$from) {
+            return response()->json([
+                'error' => 'from is required (YYYY-MM-DD).'
+            ], 422);
+        }
+
+        if (!$to) {
+            $to = Carbon::parse($from)->addWeeks(6)->toDateString();
+        }
+
+        $data = $this->fused->soldWithWeeklyByStore(
+            $from,
+            $to,
+            $bucket,
+            $withoutBundle
         );
 
         return response()->json($data);
